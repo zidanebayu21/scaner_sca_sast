@@ -118,7 +118,7 @@
              @dragover.prevent="over = true" @dragleave.prevent="over = false"
              @drop.prevent="onDrop" @click="$refs.file.click()">
           <div><b>Seret &amp; lepas file di sini</b> atau klik untuk memilih</div>
-          <div class="muted" style="margin-top:6px">package-lock.json · package.json · composer.lock · packages.lock.json · *.csproj · Dockerfile</div>
+          <div class="muted" style="margin-top:6px">npm (package-lock, yarn.lock, pnpm-lock) · Composer · NuGet (*.csproj, packages.config) · Java (pom.xml, build.gradle, gradle.lockfile) · Rust (Cargo.lock) · Go (go.mod) · Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock) · Ruby (Gemfile.lock) · Dart (pubspec.lock) · Elixir (mix.lock) · Dockerfile</div>
           <input ref="file" type="file" multiple hidden @change="onPick" />
         </div>
 
@@ -441,11 +441,12 @@
     // versi perbaikan untuk versi terpasang `ver` (null = belum ada)
     function fixedFor(vuln, name, ver, eco) {
       let best = null, matched = false;
+      const cands = [];
       // utamakan entri affected dengan ekosistem yang sama (mis. Alpine:v3.16, bukan cabang lain)
       const sameEco = (vuln.affected || []).some(a => a.package && a.package.ecosystem === eco && String(a.package.name).toLowerCase() === String(name).toLowerCase());
       (vuln.affected || []).forEach(a => {
         if (a.package && String(a.package.name).toLowerCase() !== String(name).toLowerCase()) return;
-        if (sameEco && a.package.ecosystem !== eco) return;
+        if (sameEco && (!a.package || a.package.ecosystem !== eco)) return;
         (a.ranges || []).forEach(r => {
           if (r.type === 'GIT') return;
           const evs = (r.events || []).map(e => ({
@@ -457,13 +458,22 @@
           for (const e of evs) {
             if (e.k === 'i') { if (cmpVer(ver, e.v) >= 0) active = true; }
             else if (e.k === 'f') {
-              if (active && cmpVer(ver, e.v) < 0) { matched = true; if (best === null || cmpVer(e.v, best) < 0) best = e.v; active = false; break; }
+              if (active && cmpVer(ver, e.v) < 0) { matched = true; cands.push(e.v); active = false; break; }
               active = false;
             } else if (e.k === 'l') { if (active && cmpVer(ver, e.v) > 0) active = false; }
           }
           if (active) matched = true;
         });
       });
+      // utamakan versi perbaikan dengan qualifier yang sama dengan versi terpasang (mis. 30.0-jre -> 32.0.0-jre, bukan -android)
+      const sfx = parseVer(ver).pre;
+      const same = sfx ? cands.filter(c => parseVer(c).pre === sfx) : [];
+      (same.length ? same : cands).forEach(c => { if (best === null || cmpVer(c, best) < 0) best = c; });
+      // data advisory sering hanya menulis satu varian (mis. Guava 32.0.0-android); samakan dengan varian terpasang
+      if (best !== null && !same.length && (sfx === 'jre' || sfx === 'android')) {
+        const other = sfx === 'jre' ? '-android' : '-jre';
+        if (best.endsWith(other)) best = best.slice(0, best.length - other.length) + '-' + sfx;
+      }
       return matched ? best : null;
     }
     function analyzeVuln(v, name, ver, eco) {
@@ -719,8 +729,248 @@
         if (!name || !startsWithDigit(ver) || ver.indexOf('$(') >= 0) return;
         out.push({ name, version: ver, eco: 'NuGet', dev: false, direct: true });
       });
+      // packages.config (format lama)
+      doc.querySelectorAll('package').forEach(n => {
+        const id = n.getAttribute('id'), v = cleanRange(n.getAttribute('version') || '');
+        if (id && startsWithDigit(v)) out.push({ name: id, version: v, eco: 'NuGet', dev: n.getAttribute('developmentDependency') === 'true', direct: true });
+      });
       return out;
     }
+
+    // ---- Ekosistem tambahan: Java (Maven/Gradle), Rust, Go, Python, Ruby, Dart, Elixir, yarn, pnpm
+    function unq(v) { v = String(v).trim(); return (v[0] === '"' || v[0] === "'") && v.length > 1 ? v.slice(1, -1) : v; }
+    function pyName(n) { return String(n).toLowerCase().split('_').join('-').split('.').join('-'); }
+    function eachLine(text, fn) { text.replace(/\r/g, '').split('\n').forEach(fn); }
+
+    function parsePomXml(text) {
+      const doc = new DOMParser().parseFromString(text, 'application/xml');
+      if (doc.querySelector('parsererror')) throw new Error('XML tidak valid');
+      const txt = (el, tag) => { for (const c of el.children) if (c.localName === tag) return c.textContent.trim(); return ''; };
+      const props = {}, managed = {}, out = [];
+      for (const c of doc.documentElement.children) {
+        if (c.localName === 'properties') for (const p of c.children) props[p.localName] = p.textContent.trim();
+        if (c.localName === 'version') props['project.version'] = c.textContent.trim();
+        if (c.localName === 'parent') { const pv = txt(c, 'version'); if (pv) { props['parent.version'] = pv; if (!props['project.version']) props['project.version'] = pv; } }
+      }
+      const sub = v => { let o = v, n = 0; while (o.indexOf('${') >= 0 && n++ < 5) o = o.replace(/\$\{([^}]+)\}/g, (all, k) => (props[k] !== undefined ? props[k] : all)); return o; };
+      doc.querySelectorAll('dependencyManagement > dependencies > dependency').forEach(d => { managed[sub(txt(d, 'groupId')) + ':' + sub(txt(d, 'artifactId'))] = sub(txt(d, 'version')); });
+      doc.querySelectorAll('dependency').forEach(d => {
+        const g = sub(txt(d, 'groupId')), a = sub(txt(d, 'artifactId')), scope = txt(d, 'scope');
+        if (!g || !a || scope === 'import') return;
+        const v = cleanRange(sub(txt(d, 'version')) || managed[g + ':' + a] || '');
+        if (!startsWithDigit(v) || v.indexOf('${') >= 0) return;
+        out.push({ name: g + ':' + a, version: v, eco: 'Maven', dev: scope === 'test', direct: true });
+      });
+      return out;
+    }
+    function parseGradle(text) {
+      const out = [];
+      eachLine(text, line => {
+        const t = line.trim();
+        if (!t || t.startsWith('//')) return;
+        const conf = (t.split(/[\s(]/)[0] || '').toLowerCase();
+        for (const m of t.matchAll(/["']([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-+]+)["']/g)) {
+          if (startsWithDigit(m[3])) out.push({ name: m[1] + ':' + m[2], version: m[3], eco: 'Maven', dev: conf.indexOf('test') >= 0, direct: true });
+        }
+      });
+      return out;
+    }
+    function parseGradleLock(text) {
+      const out = [];
+      eachLine(text, line => {
+        const t = line.trim(), eq = t.indexOf('=');
+        if (!t || t[0] === '#' || eq < 0) return;
+        const parts = t.slice(0, eq).split(':');
+        if (parts.length !== 3 || !startsWithDigit(parts[2])) return;
+        const confs = t.slice(eq + 1).split(',');
+        out.push({ name: parts[0] + ':' + parts[1], version: parts[2], eco: 'Maven', dev: confs.every(c => c.toLowerCase().indexOf('test') >= 0), direct: null });
+      });
+      return out;
+    }
+    // Format "[[package]]" dipakai Cargo.lock, poetry.lock, dan uv.lock
+    function parseTomlPackages(text, eco, nameFn, keep) {
+      const out = [];
+      let cur = null;
+      const flush = () => { if (cur && cur.name && cur.version && keep(cur)) out.push({ name: nameFn(cur.name), version: cur.version, eco, dev: cur.category === 'dev', direct: null }); };
+      eachLine(text, line => {
+        const t = line.trim();
+        if (t === '[[package]]') { flush(); cur = {}; return; }
+        if (!cur) return;
+        if (t[0] === '[') { flush(); cur = null; return; }
+        const i = t.indexOf('=');
+        if (i <= 0) return;
+        const k = t.slice(0, i).trim();
+        if (k === 'name' || k === 'version' || k === 'source' || k === 'category') cur[k] = unq(t.slice(i + 1));
+      });
+      flush();
+      return out;
+    }
+    function parseCargoLock(text) { return parseTomlPackages(text, 'crates.io', n => n, c => !!c.source && c.source.indexOf('registry') === 0); }
+    function parsePythonTomlLock(text) { return parseTomlPackages(text, 'PyPI', pyName, c => !c.source || c.source.indexOf('registry') >= 0); }
+    function parseCargoToml(text) {
+      const out = [];
+      let sect = '';
+      eachLine(text, line => {
+        const t = line.trim();
+        if (!t || t[0] === '#') return;
+        if (t[0] === '[') { sect = t.split('[').join('').split(']').join('').trim().toLowerCase(); return; }
+        const dev = sect.indexOf('dev-dependencies') >= 0;
+        const i = t.indexOf('=');
+        if (i <= 0) return;
+        const key = t.slice(0, i).trim(), val = t.slice(i + 1).trim();
+        if (sect.endsWith('dependencies')) {
+          let v = '';
+          if (val[0] === '"') v = unq(val);
+          else if (val[0] === '{') { const m = rx1(/version\s*=\s*"([^"]+)"/g, val); if (m) v = m[1]; }
+          v = cleanRange(v);
+          if (startsWithDigit(v)) out.push({ name: key, version: v, eco: 'crates.io', dev, direct: true });
+        } else if (sect.indexOf('dependencies.') >= 0 && key === 'version') {
+          const v = cleanRange(unq(val));
+          if (startsWithDigit(v)) out.push({ name: sect.slice(sect.indexOf('dependencies.') + 13), version: v, eco: 'crates.io', dev, direct: true });
+        }
+      });
+      return out;
+    }
+    function parseGoMod(text) {
+      const out = [];
+      let block = false;
+      eachLine(text, line => {
+        let t = line.trim(), spec = '';
+        if (t.startsWith('require (') || t === 'require(') { block = true; return; }
+        if (block && t === ')') { block = false; return; }
+        if (block) spec = t; else if (t.startsWith('require ')) spec = t.slice(8).trim(); else return;
+        const indirect = spec.indexOf('// indirect') >= 0;
+        spec = spec.split('//')[0].trim();
+        const w = spec.split(/\s+/);
+        if (w.length < 2 || w[1][0] !== 'v') return;
+        out.push({ name: w[0], version: w[1].slice(1), eco: 'Go', dev: false, direct: !indirect });
+      });
+      return out;
+    }
+    function parseRequirements(text) {
+      const out = [];
+      let loose = 0;
+      eachLine(text, line => {
+        let t = line.split(' #')[0].trim();
+        if (!t || t[0] === '#' || t[0] === '-') return;
+        t = t.split(';')[0].trim();
+        const m = rx1(/^([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*===?\s*([A-Za-z0-9_.\-+!]+)/g, t);
+        if (m && startsWithDigit(m[2])) out.push({ name: pyName(m[1]), version: m[2], eco: 'PyPI', dev: false, direct: true });
+        else if (rx1(/^[A-Za-z0-9_.\-]+/g, t)) loose++;
+      });
+      out.unpinned = loose;
+      return out;
+    }
+    function parsePipfileLock(text) {
+      const j = JSON.parse(text), out = [];
+      [['default', false], ['develop', true]].forEach(pair => {
+        const d = j[pair[0]] || {};
+        Object.keys(d).forEach(name => {
+          const v = String(d[name].version || '').replace(/^==/, '');
+          if (startsWithDigit(v)) out.push({ name: pyName(name), version: v, eco: 'PyPI', dev: pair[1], direct: null });
+        });
+      });
+      return out;
+    }
+    function parseGemfileLock(text) {
+      const out = [];
+      let specs = false;
+      eachLine(text, line => {
+        if (!line.trim()) { specs = false; return; }
+        if (line.trim() === 'specs:') { specs = true; return; }
+        if (!specs) return;
+        if (line[0] !== ' ') { specs = false; return; }
+        const m = rx1(/^ {4}(\S+) \(([^)]+)\)\s*$/g, line);
+        if (!m) return;
+        const v = m[2].split('-')[0];
+        if (startsWithDigit(v)) out.push({ name: m[1], version: v, eco: 'RubyGems', dev: false, direct: null });
+      });
+      return out;
+    }
+    function parseYarnLock(text) {
+      const out = [];
+      let cur = '';
+      eachLine(text, line => {
+        if (!line.trim() || line[0] === '#') return;
+        if (line[0] !== ' ') {
+          const spec = unq(line.replace(/:\s*$/, '').split(',')[0]);
+          const at = spec.lastIndexOf('@');
+          cur = at > 0 && spec.indexOf('@workspace:') < 0 ? spec.slice(0, at) : '';
+          return;
+        }
+        const m = rx1(/^\s+version:?\s+"?([^"\s]+)"?/g, line);
+        if (m && cur) {
+          if (startsWithDigit(m[1]) && m[1].indexOf('0.0.0-use.local') < 0) out.push({ name: cur, version: m[1], eco: 'npm', dev: false, direct: null });
+          cur = '';
+        }
+      });
+      return out;
+    }
+    function parsePnpmLock(text) {
+      const out = [];
+      let sect = '';
+      eachLine(text, line => {
+        if (line && line[0] !== ' ' && line[0] !== '#') { sect = line.trim().replace(/:$/, ''); return; }
+        if (sect !== 'packages' || !line.startsWith('  ') || line[2] === ' ') return;
+        let k = line.trim();
+        if (!k.endsWith(':')) return;
+        k = unq(k.slice(0, -1));
+        if (k[0] === '/') k = k.slice(1);
+        const par = k.indexOf('(');
+        if (par > 0) k = k.slice(0, par);
+        let name, ver;
+        const at = k.lastIndexOf('@');
+        if (at > 0) { name = k.slice(0, at); ver = k.slice(at + 1); }
+        else { const sl = k.lastIndexOf('/'); name = k.slice(0, sl); ver = k.slice(sl + 1).split('_')[0]; }
+        if (name && startsWithDigit(ver)) out.push({ name, version: ver, eco: 'npm', dev: false, direct: null });
+      });
+      return out;
+    }
+    function parsePubspecLock(text) {
+      const out = [];
+      let inPk = false, cur = null;
+      const flush = () => {
+        if (cur && cur.version && cur.source === 'hosted') {
+          const dep = cur.dependency || '';
+          out.push({ name: cur.name, version: cur.version, eco: 'Pub', dev: dep.indexOf('dev') >= 0, direct: dep ? dep.indexOf('direct') === 0 : null });
+        }
+        cur = null;
+      };
+      eachLine(text, line => {
+        if (line && line[0] !== ' ') { flush(); inPk = line.trim() === 'packages:'; return; }
+        if (!inPk) return;
+        if (line.startsWith('  ') && line[2] !== ' ') { flush(); cur = { name: line.trim().replace(/:$/, '') }; return; }
+        const i = line.indexOf(':');
+        if (cur && i > 0 && line.startsWith('    ') && line[4] !== ' ') {
+          const k = line.slice(0, i).trim();
+          if (k === 'version' || k === 'dependency' || k === 'source') cur[k] = unq(line.slice(i + 1));
+        }
+      });
+      flush();
+      return out;
+    }
+    function parseMixLock(text) {
+      const out = [];
+      for (const m of text.matchAll(/"([a-z0-9_]+)":\s*\{:hex,\s*:[a-z0-9_]+,\s*"([^"]+)"/g)) {
+        if (startsWithDigit(m[2])) out.push({ name: m[1], version: m[2], eco: 'Hex', dev: false, direct: null });
+      }
+      return out;
+    }
+    const PARSERS = {
+      'npm-lock': parseNpmLock, 'npm-pkg': parseNpmPackageJson, 'yarn': parseYarnLock, 'pnpm': parsePnpmLock,
+      'composer': parseComposerLock, 'nuget-lock': parseNugetLock, 'nuget-proj': parseCsproj,
+      'maven-pom': parsePomXml, 'gradle': parseGradle, 'gradle-lock': parseGradleLock,
+      'cargo-lock': parseCargoLock, 'cargo-toml': parseCargoToml, 'go-mod': parseGoMod,
+      'py-req': parseRequirements, 'py-toml-lock': parsePythonTomlLock, 'pipfile-lock': parsePipfileLock,
+      'ruby': parseGemfileLock, 'pubspec': parsePubspecLock, 'mix': parseMixLock
+    };
+    const TYPE_NOTES = {
+      'npm-pkg': 'package.json hanya memuat rentang versi; yang dipindai adalah versi dasarnya. Gunakan lockfile untuk versi yang benar-benar terpasang.',
+      'maven-pom': 'pom.xml hanya memuat dependency langsung; dependency transitif tidak dihitung. Versi yang tidak bisa dihitung (mis. dari BOM eksternal) dilewati.',
+      'gradle': 'build.gradle hanya memuat dependency langsung yang ditulis sebagai "group:artifact:versi". Untuk dependency transitif gunakan gradle.lockfile.',
+      'cargo-toml': 'Cargo.toml memuat rentang versi; yang dipindai adalah versi dasarnya. Gunakan Cargo.lock untuk versi yang terpasang.',
+      'py-req': 'Hanya baris yang dipin dengan == yang bisa dipindai.'
+    };
 
     // ============================================================
     //  Dockerfile
@@ -937,7 +1187,13 @@
     // ============================================================
     const TYPE_LABELS = {
       'npm-lock': 'npm — package-lock.json', 'npm-pkg': 'npm — package.json', 'composer': 'Composer — composer.lock',
-      'nuget-lock': 'NuGet — packages.lock.json', 'nuget-proj': 'NuGet — .csproj / .props', 'docker': 'Dockerfile', 'unknown': '(tidak dikenali)'
+      'nuget-lock': 'NuGet — packages.lock.json', 'nuget-proj': 'NuGet — .csproj / .props / packages.config',
+      'yarn': 'npm — yarn.lock', 'pnpm': 'npm — pnpm-lock.yaml',
+      'maven-pom': 'Java — Maven pom.xml', 'gradle': 'Java — build.gradle(.kts)', 'gradle-lock': 'Java — gradle.lockfile',
+      'cargo-lock': 'Rust — Cargo.lock', 'cargo-toml': 'Rust — Cargo.toml', 'go-mod': 'Go — go.mod',
+      'py-req': 'Python — requirements.txt', 'py-toml-lock': 'Python — poetry.lock / uv.lock', 'pipfile-lock': 'Python — Pipfile.lock',
+      'ruby': 'Ruby — Gemfile.lock', 'pubspec': 'Dart — pubspec.lock', 'mix': 'Elixir — mix.lock',
+      'docker': 'Dockerfile', 'unknown': '(tidak dikenali)'
     };
     function detectType(name, text) {
       const n = String(name).toLowerCase();
@@ -945,6 +1201,21 @@
       if (n.endsWith('composer.lock')) return 'composer';
       if (n.endsWith('packages.lock.json')) return 'nuget-lock';
       if (n.endsWith('package.json')) return 'npm-pkg';
+      if (n.endsWith('yarn.lock')) return 'yarn';
+      if (n.endsWith('pnpm-lock.yaml')) return 'pnpm';
+      if (n.endsWith('pom.xml') || n.endsWith('.pom')) return 'maven-pom';
+      if (n.endsWith('gradle.lockfile')) return 'gradle-lock';
+      if (n.endsWith('build.gradle') || n.endsWith('build.gradle.kts')) return 'gradle';
+      if (n.endsWith('cargo.lock')) return 'cargo-lock';
+      if (n.endsWith('cargo.toml')) return 'cargo-toml';
+      if (n.endsWith('go.mod')) return 'go-mod';
+      if (n.endsWith('pipfile.lock')) return 'pipfile-lock';
+      if (n.endsWith('poetry.lock') || n.endsWith('uv.lock')) return 'py-toml-lock';
+      if (n.indexOf('requirements') >= 0 && n.endsWith('.txt')) return 'py-req';
+      if (n.endsWith('gemfile.lock')) return 'ruby';
+      if (n.endsWith('pubspec.lock')) return 'pubspec';
+      if (n.endsWith('mix.lock')) return 'mix';
+      if (n.endsWith('packages.config')) return 'nuget-proj';
       if (n.endsWith('.csproj') || n.endsWith('.fsproj') || n.endsWith('.vbproj') || n.endsWith('.props')) return 'nuget-proj';
       if (n.indexOf('dockerfile') >= 0 || n.endsWith('.dockerfile')) return 'docker';
       const t = text.trim();
@@ -954,10 +1225,19 @@
           if (j.lockfileVersion !== undefined) return 'npm-lock';
           if (j['content-hash'] !== undefined || Array.isArray(j.packages)) return 'composer';
           if (j.version === 1 && j.dependencies) return 'nuget-lock';
+          if (j._meta && (j.default || j.develop)) return 'pipfile-lock';
           if (j.dependencies || j.devDependencies) return 'npm-pkg';
         } catch (e) { /* bukan JSON */ }
       }
       if (t[0] === '<' && t.indexOf('PackageReference') >= 0) return 'nuget-proj';
+      if (t[0] === '<' && t.indexOf('<dependency>') >= 0 && t.indexOf('<artifactId>') >= 0) return 'maven-pom';
+      if (t.indexOf('# yarn lockfile') >= 0 || t.indexOf('__metadata:') >= 0) return 'yarn';
+      if (/^lockfileVersion:/m.test(t) && t.indexOf('packages:') >= 0) return 'pnpm';
+      if (/^module\s+\S+/m.test(t) && /^go\s+\d/m.test(t)) return 'go-mod';
+      if (t.indexOf('[[package]]') >= 0) return /^checksum\s*=/m.test(t) || t.indexOf('registry+https://github.com/rust-lang') >= 0 ? 'cargo-lock' : 'py-toml-lock';
+      if (/^GEM\s*$/m.test(t) && t.indexOf('specs:') >= 0) return 'ruby';
+      if (/^packages:\s*$/m.test(t) && t.indexOf('sdks:') >= 0) return 'pubspec';
+      if (t.indexOf(':hex,') >= 0) return 'mix';
       if (/^\s*FROM\s/im.test(t)) return 'docker';
       return 'unknown';
     }
@@ -1018,6 +1298,12 @@
       if (eco.startsWith('Alpine')) return 'apk add --no-cache ' + g.name + '=' + to;
       if (eco.startsWith('Debian')) return 'apt-get install -y --no-install-recommends ' + g.name + '=' + to;
       if (eco === 'PyPI') return 'pip install ' + g.name + '==' + to;
+      if (eco === 'Maven') return 'Maven/Gradle: ubah versi ' + g.name + ' menjadi ' + to;
+      if (eco === 'crates.io') return 'cargo update -p ' + g.name + ' --precise ' + to;
+      if (eco === 'Go') return 'go get ' + g.name + '@v' + to;
+      if (eco === 'RubyGems') return 'bundle update ' + g.name + '   # target minimal ' + to;
+      if (eco === 'Pub') return 'dart pub add ' + g.name + ':^' + to;
+      if (eco === 'Hex') return 'mix deps.update ' + g.name + '   # target minimal ' + to;
       return '';
     }
     function renderVulnTable(entries, label) {
@@ -1125,7 +1411,7 @@
         body += '<h2>' + esc(r.name) + ' <span class="mono">(' + esc(TYPE_LABELS[r.type] || r.type) + ')</span></h2>';
         if (r.error) { body += '<div class="note">Gagal diproses: ' + esc(r.error) + '</div>'; return; }
         if (r.docker) { body += renderDocker(r, results.length > 1); return; }
-        body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + (results.length > 1 ? cards(r.entries) : '') + renderVulnTable(r.entries, r.name);
+        body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + (r.note ? '<div class="note">' + esc(r.note) + '</div>' : '') + (results.length > 1 ? cards(r.entries) : '') + renderVulnTable(r.entries, r.name);
       });
       const csv = buildCsv(results);
       const gname = Object.fromEntries(API_GROUPS.map(g => [g.key, g.title]));
@@ -1186,10 +1472,18 @@
         if (segs.slice(0, -1).some(s => SKIP_DIRS.includes(s.toLowerCase()))) return;
         const dir = segs.slice(0, -1).join('/');
         const sibling = n => set.has(dir ? dir + '/' + n : n);
-        const ok = base === 'package-lock.json' || base === 'npm-shrinkwrap.json' || base === 'composer.lock' || base === 'packages.lock.json'
-          || base.endsWith('.csproj') || base.endsWith('.fsproj') || base.endsWith('.vbproj') || base === 'directory.packages.props'
+        // Cargo.toml anggota workspace sudah tercakup Cargo.lock di folder induk
+        const hasCargoLockAbove = parts => { for (let k = parts.length - 1; k >= 0; k--) { const d2 = parts.slice(0, k).join('/'); if (set.has(d2 ? d2 + '/Cargo.lock' : 'Cargo.lock')) return true; } return false; };
+        const NPM_LOCKS = ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml'];
+        const FIXED = ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.lock', 'packages.lock.json', 'directory.packages.props',
+          'pom.xml', 'gradle.lockfile', 'cargo.lock', 'go.mod', 'poetry.lock', 'uv.lock', 'pipfile.lock', 'gemfile.lock', 'pubspec.lock', 'mix.lock', 'packages.config'];
+        const ok = FIXED.includes(base)
+          || base.endsWith('.csproj') || base.endsWith('.fsproj') || base.endsWith('.vbproj')
           || base.startsWith('dockerfile') || base.endsWith('.dockerfile')
-          || (base === 'package.json' && !sibling('package-lock.json') && !sibling('npm-shrinkwrap.json'));
+          || (base.startsWith('requirements') && base.endsWith('.txt'))
+          || (base === 'package.json' && !NPM_LOCKS.some(sibling))
+          || ((base === 'build.gradle' || base === 'build.gradle.kts') && !sibling('gradle.lockfile'))
+          || (base === 'cargo.toml' && !hasCargoLockAbove(segs));
         if (ok) picked.push(p);
       });
       picked.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
@@ -1615,16 +1909,14 @@
           const log = m => this.log(m);
           try {
             if (it.type === 'docker') { res.docker = await analyzeDocker(it.text, log, opts); return res; }
-            let pkgs;
-            if (it.type === 'npm-lock') pkgs = parseNpmLock(it.text);
-            else if (it.type === 'npm-pkg') pkgs = parseNpmPackageJson(it.text);
-            else if (it.type === 'composer') pkgs = parseComposerLock(it.text);
-            else if (it.type === 'nuget-lock') pkgs = parseNugetLock(it.text);
-            else if (it.type === 'nuget-proj') pkgs = parseCsproj(it.text);
-            else throw new Error('Jenis file tidak dikenali. Pilih jenis secara manual.');
+            const parse = PARSERS[it.type];
+            if (!parse) throw new Error('Jenis file tidak dikenali. Pilih jenis secara manual.');
+            let pkgs = parse(it.text);
+            res.note = TYPE_NOTES[it.type] || '';
+            if (pkgs.unpinned) res.note += ' ' + pkgs.unpinned + ' baris tidak dipin dan dilewati.';
             if (opts.omitDev) { const n = pkgs.length; pkgs = pkgs.filter(p => !p.dev); res.skipped = n - pkgs.length; }
             log(it.name + ': ' + pkgs.length + ' package terbaca');
-            if (!pkgs.length) throw new Error('Tidak ada package yang terbaca dari file ini.');
+            if (!pkgs.length) throw new Error('Tidak ada package yang terbaca dari file ini.' + (TYPE_NOTES[it.type] ? ' ' + TYPE_NOTES[it.type] : ''));
             res.entries = await scanPackages(pkgs, log, opts);
           } catch (e) { res.error = e.message; }
           return res;
