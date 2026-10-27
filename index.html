@@ -18,6 +18,9 @@
     .side-tools { display: flex; justify-content: space-between; gap: 8px; margin: 10px 0 4px; }
     .lnk { background: none; border: 0; color: #93c5fd; cursor: pointer; font-size: 12px; padding: 2px 0; }
     .lnk:hover { text-decoration: underline; }
+    .grp { margin-top: 14px; }
+    .grp-h { font-weight: 700; font-size: 13px; color: #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 3px; border-bottom: 2px solid #1e40af; }
+    .grp-d { margin: 4px 0 2px; font-size: 12px; }
     .api { border-top: 1px solid #334155; padding: 7px 0; }
     .api-h { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
     .api-h b { flex: 1; min-width: 0; font-size: 13px; }
@@ -81,18 +84,22 @@
         <button class="lnk" v-if="apiOpen" @click="toggleAllDetail">{{ allDetailOpen ? 'Tutup semua detail' : 'Buka semua detail' }}</button>
       </div>
       <div v-if="apiOpen">
-        <div class="api" v-for="a in apis" :key="a.key">
-          <div class="api-h" @click="openKeys[a.key] = !openKeys[a.key]">
-            <span class="chev">{{ openKeys[a.key] ? '▾' : '▸' }}</span>
-            <b>{{ a.name }}</b>
-            <span class="pill" :class="{ okp: stats[a.key].ok && !stats[a.key].fail, errp: stats[a.key].fail }">{{ statLabel(a) }}</span>
-          </div>
-          <div class="api-d" v-if="openKeys[a.key]">
-            <code>{{ a.url }}</code>
-            <div>{{ a.use }}</div>
-            <div class="muted">Dikirim: {{ a.sends }}</div>
-            <div class="muted">Dipakai: {{ a.when }}</div>
-            <div class="bad" v-if="stats[a.key].last" style="font-size:12px">Terakhir gagal: {{ stats[a.key].last }}</div>
+        <div class="grp" v-for="g in groups" :key="g.key">
+          <div class="grp-h">{{ g.title }} <span class="pill">{{ g.none ? 'tanpa API' : groupApis(g).length + ' API' }}</span></div>
+          <div class="muted grp-d">{{ g.desc }}</div>
+          <div class="api" v-for="a in groupApis(g)" :key="a.key">
+            <div class="api-h" @click="openKeys[a.key] = !openKeys[a.key]">
+              <span class="chev">{{ openKeys[a.key] ? '▾' : '▸' }}</span>
+              <b>{{ a.name }}</b>
+              <span class="pill" :class="{ okp: stats[a.key].ok && !stats[a.key].fail, errp: stats[a.key].fail }">{{ statLabel(a) }}</span>
+            </div>
+            <div class="api-d" v-if="openKeys[a.key]">
+              <code>{{ a.url }}</code>
+              <div>{{ a.use }}</div>
+              <div class="muted">Dikirim: {{ a.sends }}</div>
+              <div class="muted">Dipakai: {{ a.when }}</div>
+              <div class="bad" v-if="stats[a.key].last" style="font-size:12px">Terakhir gagal: {{ stats[a.key].last }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -322,17 +329,25 @@
     // ============================================================
     //  Daftar API publik + pencatat pemanggilan (ditampilkan di panel kiri & laporan)
     // ============================================================
+    // Kelompok API: tiap sumber hanya muncul di satu kelompok supaya tidak tercampur
+    const API_GROUPS = [
+      { key: 'sca', title: 'SCA — cek kerentanan package', desc: 'Dipakai saat memindai lockfile / package.json / .csproj dan paket yang dipin di Dockerfile.' },
+      { key: 'docker', title: 'Dockerfile — status EOL image', desc: 'Hanya dipakai saat memindai Dockerfile.' },
+      { key: 'scrape', title: 'Scraping — ambil file dari link', desc: 'Hanya dipakai saat memasukkan link repo/file GitHub, GitLab, atau URL. Hasilnya diteruskan ke scan SCA/Dockerfile.' },
+      { key: 'sast', title: 'SAST — pemeriksaan kode', desc: 'Tidak memakai API apa pun: kode dicek lokal di browser dan tidak dikirim ke mana pun.', none: true },
+      { key: 'app', title: 'Aplikasi — library halaman', desc: 'Dimuat saat halaman dibuka, bukan bagian dari proses scan.' }
+    ];
     const API_LIST = [
-      { key: 'osv-batch', name: 'OSV.dev — querybatch', url: 'POST https://api.osv.dev/v1/querybatch', use: 'Mencocokkan package + versi ke daftar advisory (SCA).', sends: 'nama package, versi, ekosistem', when: 'Selalu (lockfile & paket di Dockerfile)' },
-      { key: 'osv-vuln', name: 'OSV.dev — detail advisory', url: 'GET https://api.osv.dev/v1/vulns/{id}', use: 'Severity, CWE, ringkasan, dan versi perbaikan per advisory.', sends: 'ID advisory (GHSA-…, ALPINE-CVE-…)', when: 'Selalu bila ada temuan' },
-      { key: 'epss', name: 'FIRST — EPSS', url: 'GET https://api.first.org/data/v1/epss?cve=…', use: 'Probabilitas sebuah CVE dieksploitasi.', sends: 'ID CVE', when: 'Opsi "EPSS & CISA KEV"' },
-      { key: 'kev', name: 'CISA KEV (mirror GitHub)', url: 'GET https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json', use: 'Daftar CVE yang sudah dieksploitasi di dunia nyata.', sends: 'tidak ada (hanya mengunduh daftar)', when: 'Opsi "EPSS & CISA KEV"' },
-      { key: 'eol', name: 'endoflife.date', url: 'GET https://endoflife.date/api/{produk}.json', use: 'Status EOL base image (Node, Python, Alpine, Debian, …).', sends: 'nama produk, mis. nodejs', when: 'Scan Dockerfile' },
-      { key: 'gh-api', name: 'GitHub REST API', url: 'GET https://api.github.com/repos/{owner}/{repo}[/git/trees/{ref}]', use: 'Mencari file yang bisa dipindai di repo GitHub.', sends: 'owner/repo, branch; token bila diisi', when: 'Ambil dari link GitHub' },
-      { key: 'gh-raw', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
-      { key: 'gl-api', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
-      { key: 'url', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
-      { key: 'cdn', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
+      { key: 'osv-batch', group: 'sca', name: 'OSV.dev — querybatch', url: 'POST https://api.osv.dev/v1/querybatch', use: 'Mencocokkan package + versi ke daftar advisory (SCA).', sends: 'nama package, versi, ekosistem', when: 'Selalu (lockfile & paket di Dockerfile)' },
+      { key: 'osv-vuln', group: 'sca', name: 'OSV.dev — detail advisory', url: 'GET https://api.osv.dev/v1/vulns/{id}', use: 'Severity, CWE, ringkasan, dan versi perbaikan per advisory.', sends: 'ID advisory (GHSA-…, ALPINE-CVE-…)', when: 'Selalu bila ada temuan' },
+      { key: 'epss', group: 'sca', name: 'FIRST — EPSS', url: 'GET https://api.first.org/data/v1/epss?cve=…', use: 'Probabilitas sebuah CVE dieksploitasi.', sends: 'ID CVE', when: 'Opsi "EPSS & CISA KEV"' },
+      { key: 'kev', group: 'sca', name: 'CISA KEV (mirror GitHub)', url: 'GET https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json', use: 'Daftar CVE yang sudah dieksploitasi di dunia nyata.', sends: 'tidak ada (hanya mengunduh daftar)', when: 'Opsi "EPSS & CISA KEV"' },
+      { key: 'eol', group: 'docker', name: 'endoflife.date', url: 'GET https://endoflife.date/api/{produk}.json', use: 'Status EOL base image (Node, Python, Alpine, Debian, …).', sends: 'nama produk, mis. nodejs', when: 'Scan Dockerfile' },
+      { key: 'gh-api', group: 'scrape', name: 'GitHub REST API', url: 'GET https://api.github.com/repos/{owner}/{repo}[/git/trees/{ref}]', use: 'Mencari file yang bisa dipindai di repo GitHub.', sends: 'owner/repo, branch; token bila diisi', when: 'Ambil dari link GitHub' },
+      { key: 'gh-raw', group: 'scrape', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
+      { key: 'gl-api', group: 'scrape', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
+      { key: 'url', group: 'scrape', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
+      { key: 'cdn', group: 'app', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
       // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
     //  { key: 'sonatype', name: 'Sonatype Guide (via proxy lokal)', url: 'POST {proxy lokal}/component-report → https://api.guide.sonatype.com/api/v3/component-report', use: 'Data tambahan CVE, CWE, dan skor CVSS dari Sonatype. Butuh token pribadi dan proxy lokal karena server Sonatype memblokir akses langsung dari browser (CORS).', sends: 'PURL package (pkg:npm/nama@versi) + email/token di header Authorization (lewat proxy lokal, tidak disimpan proxy)', when: 'Opsi "Sonatype Guide" aktif (panel Sonatype)' }
     ];
@@ -1092,9 +1107,10 @@
         body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + (results.length > 1 ? cards(r.entries) : '') + renderVulnTable(r.entries, r.name);
       });
       const csv = buildCsv(results);
-      const used = API_LIST.filter(a => apiStats[a.key].calls);
-      body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Tujuan</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
-        used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.use) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
+      const gname = Object.fromEntries(API_GROUPS.map(g => [g.key, g.title]));
+      const used = API_LIST.filter(a => apiStats[a.key].calls && a.group !== 'app');
+      body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>Kelompok</th><th>API</th><th>Endpoint</th><th>Tujuan</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
+        used.map(a => '<tr><td>' + esc(gname[a.group]) + '</td><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.use) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
       body += '<div class="note">Sumber CVE/CWE: data OSV (GHSA dan alias NVD). Temuan yang hanya ada di database berbayar/privat (mis. Sonatype) tidak ikut; untuk itu gunakan <span class="mono">scan_sca.ps1</span>.</div>';
       body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">Unduh CSV</a></p>';
       return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
@@ -1320,7 +1336,7 @@
       data() {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
-          apis: API_LIST, stats: apiStats, apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
+          apis: API_LIST, groups: API_GROUPS, stats: apiStats, apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
           pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
@@ -1374,6 +1390,7 @@
           if (!s.calls) return 'belum dipanggil';
           return s.calls + '× · ' + s.ok + ' ok' + (s.fail ? ' · ' + s.fail + ' gagal' : '');
         },
+        groupApis(g) { return this.apis.filter(a => a.group === g.key); },
         toggleAllDetail() {
           const open = !this.allDetailOpen;
           this.apis.forEach(a => { this.openKeys[a.key] = open; });
