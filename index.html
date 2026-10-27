@@ -11,7 +11,17 @@
     header { padding: 20px 32px; background: #1e293b; border-bottom: 1px solid #334155; }
     header h1 { margin: 0; font-size: 22px; }
     header p { margin: 4px 0 0; color: #94a3b8; font-size: 14px; }
-    main { max-width: 1000px; margin: 24px auto; padding: 0 16px 48px; }
+    .layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 24px; max-width: 1480px; margin: 0 auto; padding: 0 20px; }
+    main { min-width: 0; margin: 24px 0; padding: 0 0 48px; }
+    .side { margin-top: 24px; position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow: auto; background: #111c33; border: 1px solid #334155; border-radius: 10px; padding: 14px; font-size: 13px; }
+    .side h2 { margin: 0 0 6px; font-size: 15px; }
+    .api { border-top: 1px solid #334155; padding: 9px 0; }
+    .api code { display: block; word-break: break-all; font-size: 11px; margin: 4px 0; color: #93c5fd; }
+    .api .muted { font-size: 12px; }
+    .pill { float: right; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #334155; color: #cbd5e1; }
+    .pill.okp { background: #14532d; color: #bbf7d0; }
+    .pill.errp { background: #7f1d1d; color: #fecaca; }
+    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } .side { position: static; max-height: none; } }
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tabs button { padding: 8px 16px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; }
     .tabs button.active { background: #2563eb; border-color: #2563eb; }
@@ -50,6 +60,23 @@
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
+    <div class="layout">
+    <aside class="side">
+      <h2>API publik yang dipakai</h2>
+      <p class="muted">Semua panggilan langsung dari browser Anda ke layanan di bawah. Isi file/kode tidak diunggah ke server milik aplikasi ini; hanya data di baris "Dikirim" yang keluar.</p>
+      <div class="api" v-for="a in apis" :key="a.key">
+        <div>
+          <span class="pill" :class="{ okp: stats[a.key].ok && !stats[a.key].fail, errp: stats[a.key].fail }">{{ statLabel(a) }}</span>
+          <b>{{ a.name }}</b>
+        </div>
+        <code>{{ a.url }}</code>
+        <div>{{ a.use }}</div>
+        <div class="muted">Dikirim: {{ a.sends }}</div>
+        <div class="muted">Dipakai: {{ a.when }}</div>
+        <div class="bad" v-if="stats[a.key].last" style="font-size:12px">Terakhir gagal: {{ stats[a.key].last }}</div>
+      </div>
+    </aside>
+
     <main>
       <div class="tabs">
         <button :class="{ active: tab === 'sca' }" @click="tab = 'sca'">SCA &amp; Dockerfile</button>
@@ -65,6 +92,17 @@
           <div class="muted" style="margin-top:6px">package-lock.json · package.json · composer.lock · packages.lock.json · *.csproj · Dockerfile</div>
           <input ref="file" type="file" multiple hidden @change="onPick" />
         </div>
+
+        <div class="row">
+          <input type="text" v-model="urlText" placeholder="Link repo GitHub / GitLab, atau link file Dockerfile / package.json / lockfile (boleh banyak, pisah spasi)" @keyup.enter="fetchUrls" />
+          <input type="password" v-model="token" autocomplete="off" placeholder="Token (opsional, repo private)" style="max-width:220px" />
+          <button class="btn blue" :disabled="urlBusy || !urlText.trim()" @click="fetchUrls">{{ urlBusy ? 'Mengambil...' : 'Ambil dari link' }}</button>
+        </div>
+        <div class="muted" style="margin-top:6px">
+          Contoh: <code>https://github.com/lodash/lodash</code> · <code>https://gitlab.com/grup/proyek/-/tree/main/sub</code> · <code>https://github.com/o/r/blob/main/Dockerfile</code>.
+          Repo private: login browser Anda tidak bisa dipakai halaman ini (diblokir kebijakan keamanan browser), jadi tempel token read-only (GitHub: fine-grained "Contents: read", GitLab: <code>read_repository</code>). Token hanya di memori halaman, dikirim ke GitHub/GitLab saja, dan tidak disimpan.
+        </div>
+        <div class="log" v-if="urlLogs.length"><div v-for="(l, i) in urlLogs" :key="i">{{ l }}</div></div>
 
         <div class="row">
           <input type="text" v-model="pasteName" placeholder="Nama file untuk teks tempelan (opsional, mis. package-lock.json)" />
@@ -126,6 +164,7 @@
         </table>
       </section>
     </main>
+    </div>
   </div>
 
   <script>
@@ -224,6 +263,34 @@
     function scoreToSev(sc) { return sc >= 9 ? 'CRITICAL' : sc >= 7 ? 'HIGH' : sc >= 4 ? 'MEDIUM' : sc > 0 ? 'LOW' : 'UNKNOWN'; }
 
     // ============================================================
+    //  Daftar API publik + pencatat pemanggilan (ditampilkan di panel kiri & laporan)
+    // ============================================================
+    const API_LIST = [
+      { key: 'osv-batch', name: 'OSV.dev — querybatch', url: 'POST https://api.osv.dev/v1/querybatch', use: 'Mencocokkan package + versi ke daftar advisory (SCA).', sends: 'nama package, versi, ekosistem', when: 'Selalu (lockfile & paket di Dockerfile)' },
+      { key: 'osv-vuln', name: 'OSV.dev — detail advisory', url: 'GET https://api.osv.dev/v1/vulns/{id}', use: 'Severity, CWE, ringkasan, dan versi perbaikan per advisory.', sends: 'ID advisory (GHSA-…, ALPINE-CVE-…)', when: 'Selalu bila ada temuan' },
+      { key: 'epss', name: 'FIRST — EPSS', url: 'GET https://api.first.org/data/v1/epss?cve=…', use: 'Probabilitas sebuah CVE dieksploitasi.', sends: 'ID CVE', when: 'Opsi "EPSS & CISA KEV"' },
+      { key: 'kev', name: 'CISA KEV (mirror GitHub)', url: 'GET https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json', use: 'Daftar CVE yang sudah dieksploitasi di dunia nyata.', sends: 'tidak ada (hanya mengunduh daftar)', when: 'Opsi "EPSS & CISA KEV"' },
+      { key: 'eol', name: 'endoflife.date', url: 'GET https://endoflife.date/api/{produk}.json', use: 'Status EOL base image (Node, Python, Alpine, Debian, …).', sends: 'nama produk, mis. nodejs', when: 'Scan Dockerfile' },
+      { key: 'gh-api', name: 'GitHub REST API', url: 'GET https://api.github.com/repos/{owner}/{repo}[/git/trees/{ref}]', use: 'Mencari file yang bisa dipindai di repo GitHub.', sends: 'owner/repo, branch; token bila diisi', when: 'Ambil dari link GitHub' },
+      { key: 'gh-raw', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
+      { key: 'gl-api', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
+      { key: 'url', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
+      { key: 'cdn', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' }
+    ];
+    const apiStats = Vue.reactive({});
+    API_LIST.forEach(a => { apiStats[a.key] = { calls: 0, ok: 0, fail: 0, last: '' }; });
+    apiStats.cdn.calls = 1; apiStats.cdn.ok = 1;
+    async function apiFetch(key, url, init) {
+      const s = apiStats[key];
+      s.calls++;
+      try {
+        const res = await fetch(url, init);
+        if (res.ok) s.ok++; else { s.fail++; s.last = 'HTTP ' + res.status; }
+        return res;
+      } catch (e) { s.fail++; s.last = e.message; throw e; }
+    }
+
+    // ============================================================
     //  OSV client
     // ============================================================
     const OSV = 'https://api.osv.dev';
@@ -238,7 +305,7 @@
         const next = [];
         for (let s = 0; s < todo.length; s += 500) {
           const chunk = todo.slice(s, s + 500);
-          const res = await fetch(OSV + '/v1/querybatch', {
+          const res = await apiFetch('osv-batch', OSV + '/v1/querybatch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -267,7 +334,7 @@
       let lastErr;
       for (let t = 0; t < 3; t++) {
         try {
-          const res = await fetch(OSV + '/v1/vulns/' + encodeURIComponent(id));
+          const res = await apiFetch('osv-vuln', OSV + '/v1/vulns/' + encodeURIComponent(id));
           if (!res.ok) throw new Error('HTTP ' + res.status);
           vulnCache[id] = await res.json();
           return vulnCache[id];
@@ -396,7 +463,7 @@
           const list = Array.from(cveSet), chunks = [];
           for (let i = 0; i < list.length; i += 50) chunks.push(list.slice(i, i + 50));
           await pool(chunks, 4, async ch => {
-            const res = await fetch('https://api.first.org/data/v1/epss?cve=' + ch.join(','));
+            const res = await apiFetch('epss', 'https://api.first.org/data/v1/epss?cve=' + ch.join(','));
             if (!res.ok) return;
             const j = await res.json();
             (j.data || []).forEach(d => { epss[d.cve] = parseFloat(d.epss); });
@@ -404,7 +471,7 @@
         } catch (e) { log('EPSS gagal: ' + e.message); }
         try {
           log('Mengambil daftar CISA KEV...');
-          const res = await fetch('https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json');
+          const res = await apiFetch('kev', 'https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json');
           if (res.ok) { const j = await res.json(); (j.vulnerabilities || []).forEach(x => kev.add(x.cveID)); }
         } catch (e) { log('KEV gagal: ' + e.message); }
         entries.forEach(e => e.vulns.forEach(v => {
@@ -558,7 +625,7 @@
     }
     async function checkEol(target) {
       if (!eolCache[target.slug]) {
-        eolCache[target.slug] = fetch('https://endoflife.date/api/' + target.slug + '.json').then(r => r.ok ? r.json() : []).catch(() => []);
+        eolCache[target.slug] = apiFetch('eol', 'https://endoflife.date/api/' + target.slug + '.json').then(r => r.ok ? r.json() : []).catch(() => []);
       }
       const cycles = await eolCache[target.slug];
       if (!cycles.length) return { status: 'unknown', note: 'Data endoflife.date tidak tersedia' };
@@ -899,8 +966,164 @@
         body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + cards(r.entries) + renderVulnTable(r.entries, r.name);
       });
       const csv = buildCsv(results);
+      const used = API_LIST.filter(a => apiStats[a.key].calls);
+      body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Tujuan</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
+        used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.use) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
       body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">Unduh CSV</a></p>';
       return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
+    }
+
+    // ============================================================
+    //  Ambil file dari link GitHub / GitLab / URL langsung
+    // ============================================================
+    const MAX_REPO_FILES = 40;
+    const SKIP_DIRS = ['node_modules', 'vendor', '.git', 'dist', 'bin', 'obj', 'bower_components'];
+
+    function parseSourceUrl(raw) {
+      let u;
+      try { u = new URL(raw.trim()); } catch (e) { throw new Error('Link tidak valid: ' + raw); }
+      const host = u.hostname.toLowerCase();
+      const parts = u.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+      if (host === 'github.com' || host === 'www.github.com') {
+        if (parts.length < 2) throw new Error('Link GitHub harus memuat owner/repo: ' + raw);
+        const o = { kind: 'github', owner: parts[0], repo: parts[1].replace(/\.git$/, ''), ref: '', path: '', isFile: false };
+        if (['blob', 'tree', 'raw'].includes(parts[2]) && parts[3]) {
+          o.ref = parts[3]; o.path = parts.slice(4).join('/'); o.isFile = parts[2] !== 'tree' && !!o.path;
+        }
+        return o;
+      }
+      if (host === 'raw.githubusercontent.com' && parts.length >= 4) {
+        return { kind: 'github', owner: parts[0], repo: parts[1], ref: parts[2], path: parts.slice(3).join('/'), isFile: true };
+      }
+      if (host === 'gitlab.com' || host.indexOf('gitlab') >= 0) {
+        const full = u.pathname.replace(/^\//, '');
+        const sep = full.indexOf('/-/');
+        const projPath = (sep >= 0 ? full.slice(0, sep) : full).replace(/\.git$/, '').replace(/\/$/, '');
+        const o = { kind: 'gitlab', host, project: decodeURIComponent(projPath), ref: '', path: '', isFile: false };
+        if (sep >= 0) {
+          const rest = full.slice(sep + 3).split('/').map(decodeURIComponent);
+          if (['blob', 'tree', 'raw'].includes(rest[0]) && rest[1]) {
+            o.ref = rest[1]; o.path = rest.slice(2).join('/'); o.isFile = rest[0] !== 'tree' && !!o.path;
+          }
+        }
+        if (o.project.split('/').length < 2) throw new Error('Link GitLab harus memuat grup/proyek: ' + raw);
+        return o;
+      }
+      return { kind: 'url', url: u.href, path: parts[parts.length - 1] || u.hostname };
+    }
+
+    function pickScannable(paths, prefix) {
+      const set = new Set(paths);
+      const picked = [];
+      paths.forEach(p => {
+        if (prefix && p !== prefix && !p.startsWith(prefix.replace(/\/$/, '') + '/')) return;
+        const segs = p.split('/');
+        const base = segs[segs.length - 1].toLowerCase();
+        if (segs.slice(0, -1).some(s => SKIP_DIRS.includes(s.toLowerCase()))) return;
+        const dir = segs.slice(0, -1).join('/');
+        const sibling = n => set.has(dir ? dir + '/' + n : n);
+        const ok = base === 'package-lock.json' || base === 'npm-shrinkwrap.json' || base === 'composer.lock' || base === 'packages.lock.json'
+          || base.endsWith('.csproj') || base.endsWith('.fsproj') || base.endsWith('.vbproj') || base === 'directory.packages.props'
+          || base.startsWith('dockerfile') || base.endsWith('.dockerfile')
+          || (base === 'package.json' && !sibling('package-lock.json') && !sibling('npm-shrinkwrap.json'));
+        if (ok) picked.push(p);
+      });
+      picked.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+      return picked;
+    }
+
+    async function httpErr(res, what, hasToken) {
+      if (res.status === 404) return new Error(what + ' tidak ditemukan' + (hasToken ? ' (cek token/izin)' : ' atau private (isi token read-only)'));
+      if (res.status === 401) return new Error(what + ': token ditolak (401)');
+      if (res.status === 403 || res.status === 429) return new Error(what + ': kena batas request/izin (HTTP ' + res.status + '). Tanpa token GitHub dibatasi 60 request per jam; isi token untuk menaikkan.');
+      return new Error(what + ': HTTP ' + res.status);
+    }
+
+    async function fetchGithub(src, token, log) {
+      const hdr = { Accept: 'application/vnd.github+json' };
+      if (token) hdr.Authorization = 'Bearer ' + token;
+      const base = 'https://api.github.com/repos/' + encodeURIComponent(src.owner) + '/' + encodeURIComponent(src.repo);
+      const fileUrl = (ref, path) => {
+        if (token) return { key: 'gh-api', url: base + '/contents/' + path.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(ref), init: { headers: { Accept: 'application/vnd.github.raw+json', Authorization: 'Bearer ' + token } } };
+        return { key: 'gh-raw', url: 'https://raw.githubusercontent.com/' + src.owner + '/' + src.repo + '/' + ref + '/' + path.split('/').map(encodeURIComponent).join('/'), init: undefined };
+      };
+      const get = async (ref, path) => {
+        const f = fileUrl(ref, path);
+        const res = await apiFetch(f.key, f.url, f.init);
+        if (!res.ok) throw await httpErr(res, path, !!token);
+        return res.text();
+      };
+      if (src.isFile) {
+        let ref = src.ref;
+        if (!ref) { const r = await apiFetch('gh-api', base, { headers: hdr }); if (!r.ok) throw await httpErr(r, src.owner + '/' + src.repo, !!token); ref = (await r.json()).default_branch; }
+        log('GitHub: ' + src.path);
+        return [{ name: src.repo + '/' + src.path, text: await get(ref, src.path) }];
+      }
+      const r = await apiFetch('gh-api', base, { headers: hdr });
+      if (!r.ok) throw await httpErr(r, src.owner + '/' + src.repo, !!token);
+      const info = await r.json();
+      const ref = src.ref || info.default_branch;
+      log('GitHub ' + info.full_name + ' (' + (info.private ? 'private' : 'publik') + ', branch ' + ref + ')');
+      const tr = await apiFetch('gh-api', base + '/git/trees/' + encodeURIComponent(ref) + '?recursive=1', { headers: hdr });
+      if (!tr.ok) throw await httpErr(tr, 'Daftar file', !!token);
+      const tj = await tr.json();
+      if (tj.truncated) log('Peringatan: daftar file repo terlalu besar dan dipotong oleh GitHub.');
+      const paths = (tj.tree || []).filter(x => x.type === 'blob').map(x => x.path);
+      return await downloadPicked(pickScannable(paths, src.path), src.repo, (p) => get(ref, p), log);
+    }
+
+    async function fetchGitlab(src, token, log) {
+      const api = 'https://' + src.host + '/api/v4/projects/' + encodeURIComponent(src.project);
+      const init = token ? { headers: { Authorization: 'Bearer ' + token } } : undefined;
+      const name = src.project.split('/').pop();
+      const r = await apiFetch('gl-api', api, init);
+      if (!r.ok) throw await httpErr(r, src.project, !!token);
+      const info = await r.json();
+      const ref = src.ref || info.default_branch;
+      const get = async (path) => {
+        const res = await apiFetch('gl-api', api + '/repository/files/' + encodeURIComponent(path) + '/raw?ref=' + encodeURIComponent(ref), init);
+        if (!res.ok) throw await httpErr(res, path, !!token);
+        return res.text();
+      };
+      log('GitLab ' + info.path_with_namespace + ' (' + info.visibility + ', branch ' + ref + ')');
+      if (src.isFile) return [{ name: name + '/' + src.path, text: await get(src.path) }];
+      const paths = [];
+      for (let page = 1; page <= 30; page++) {
+        const tr = await apiFetch('gl-api', api + '/repository/tree?recursive=true&per_page=100&page=' + page + '&ref=' + encodeURIComponent(ref), init);
+        if (!tr.ok) throw await httpErr(tr, 'Daftar file', !!token);
+        const arr = await tr.json();
+        arr.forEach(x => { if (x.type === 'blob') paths.push(x.path); });
+        if (arr.length < 100) break;
+      }
+      return await downloadPicked(pickScannable(paths, src.path), name, get, log);
+    }
+
+    async function downloadPicked(picked, repoName, getFn, log) {
+      if (!picked.length) { log('Tidak ada file yang bisa dipindai (lockfile / Dockerfile / package.json / .csproj).'); return []; }
+      if (picked.length > MAX_REPO_FILES) log('Ditemukan ' + picked.length + ' file, hanya ' + MAX_REPO_FILES + ' teratas (paling dekat root) yang diambil.');
+      const list = picked.slice(0, MAX_REPO_FILES), out = [];
+      await pool(list, 5, async p => {
+        try { out.push({ name: repoName + '/' + p, text: await getFn(p) }); log('  + ' + p); }
+        catch (e) { log('  ! ' + p + ': ' + e.message); }
+      });
+      out.sort((a, b) => a.name.localeCompare(b.name));
+      return out;
+    }
+
+    async function fetchDirect(src, log) {
+      log('Mengunduh ' + src.url);
+      let res;
+      try { res = await apiFetch('url', src.url); }
+      catch (e) { throw new Error('Gagal mengunduh (kemungkinan server tujuan tidak mengizinkan CORS). Buka link lalu simpan/tempel isinya: ' + src.url); }
+      if (!res.ok) throw await httpErr(res, src.path, false);
+      return [{ name: src.path, text: await res.text() }];
+    }
+
+    async function fetchFromUrl(raw, token, log) {
+      const src = parseSourceUrl(raw);
+      if (src.kind === 'github') return fetchGithub(src, token, log);
+      if (src.kind === 'gitlab') return fetchGitlab(src, token, log);
+      return fetchDirect(src, log);
     }
 
     // ============================================================
@@ -923,6 +1146,7 @@
       data() {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
+          apis: API_LIST, stats: apiStats, urlText: '', token: '', urlBusy: false, urlLogs: [],
           pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -931,6 +1155,28 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
+        statLabel(a) {
+          const s = this.stats[a.key];
+          if (!s.calls) return 'belum dipanggil';
+          return s.calls + '× · ' + s.ok + ' ok' + (s.fail ? ' · ' + s.fail + ' gagal' : '');
+        },
+        async fetchUrls() {
+          const links = this.urlText.split(/[\s,]+/).filter(Boolean);
+          if (!links.length) return;
+          this.urlBusy = true; this.urlLogs = []; this.error = '';
+          const log = m => this.urlLogs.push(m);
+          let added = 0;
+          for (const link of links) {
+            try {
+              log('== ' + link);
+              const files = await fetchFromUrl(link, this.token.trim(), log);
+              files.forEach(f => { this.addItem(f.name, f.text); added++; });
+            } catch (e) { log('GAGAL: ' + e.message); }
+          }
+          log(added ? added + ' file ditambahkan ke daftar. Klik "Scan & buka laporan".' : 'Tidak ada file yang ditambahkan.');
+          if (added) this.urlText = '';
+          this.urlBusy = false;
+        },
         addItem(name, text) {
           this.items.push({ id: this.nextId++, name, text, type: detectType(name, text) });
         },
@@ -940,7 +1186,12 @@
             this.addItem(f.name, await f.text());
           }
         },
-        onDrop(e) { this.over = false; this.error = ''; this.readFiles(e.dataTransfer.files); },
+        onDrop(e) {
+          this.over = false; this.error = '';
+          if (e.dataTransfer.files && e.dataTransfer.files.length) { this.readFiles(e.dataTransfer.files); return; }
+          const link = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '').trim();
+          if (link.startsWith('http')) { this.urlText = link; this.fetchUrls(); }
+        },
         onPick(e) { this.error = ''; this.readFiles(e.target.files); e.target.value = ''; },
         addPaste() {
           this.addItem(this.pasteName.trim() || 'tempelan-' + this.nextId, this.pasteText);
