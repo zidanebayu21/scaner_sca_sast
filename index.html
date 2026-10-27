@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scanner SCA &amp; SAST</title>
+  <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #0f172a; color: #e2e8f0; }
+    header { padding: 20px 32px; background: #1e293b; border-bottom: 1px solid #334155; }
+    header h1 { margin: 0; font-size: 22px; }
+    header p { margin: 4px 0 0; color: #94a3b8; font-size: 14px; }
+    main { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tabs button { padding: 8px 16px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; }
+    .tabs button.active { background: #2563eb; border-color: #2563eb; }
+    textarea { width: 100%; min-height: 220px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
+    .actions { margin: 12px 0; display: flex; gap: 8px; align-items: center; }
+    .btn { padding: 8px 18px; background: #16a34a; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { border: 1px solid #334155; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #1e40af; }
+    tr:nth-child(even) td { background: #111c33; }
+    .ok { color: #4ade80; }
+    .bad { color: #f87171; font-weight: 600; }
+    .sev-HIGH { color: #f87171; } .sev-MEDIUM { color: #fbbf24; } .sev-LOW { color: #60a5fa; }
+    .muted { color: #94a3b8; font-size: 13px; }
+    a { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Scanner SCA &amp; SAST</h1>
+      <p>Cek kerentanan dependency (SCA via OSV.dev) dan pola kode berbahaya (SAST sederhana) langsung di browser.</p>
+    </header>
+
+    <main>
+      <div class="tabs">
+        <button :class="{ active: tab === 'sca' }" @click="tab = 'sca'">SCA (Dependency)</button>
+        <button :class="{ active: tab === 'sast' }" @click="tab = 'sast'">SAST (Kode)</button>
+      </div>
+
+      <!-- SCA -->
+      <section v-if="tab === 'sca'">
+        <p class="muted">Tempel isi <code>package.json</code> (dependencies / devDependencies). Versi dengan ^ atau ~ dibaca sebagai versi dasarnya.</p>
+        <textarea v-model="pkgText" placeholder='{ "dependencies": { "lodash": "4.17.15" } }'></textarea>
+        <div class="actions">
+          <button class="btn" :disabled="scaLoading" @click="scanSca">{{ scaLoading ? 'Memindai...' : 'Scan SCA' }}</button>
+          <span class="bad" v-if="scaError">{{ scaError }}</span>
+        </div>
+        <table v-if="scaResults.length">
+          <thead><tr><th>Package</th><th>Versi</th><th>Status</th><th>Advisory</th></tr></thead>
+          <tbody>
+            <tr v-for="r in scaResults" :key="r.name">
+              <td>{{ r.name }}</td>
+              <td>{{ r.version }}</td>
+              <td :class="r.vulns.length ? 'bad' : 'ok'">{{ r.vulns.length ? r.vulns.length + ' kerentanan' : 'Aman' }}</td>
+              <td>
+                <div v-for="id in r.vulns" :key="id">
+                  <a :href="'https://osv.dev/vulnerability/' + id" target="_blank" rel="noopener noreferrer">{{ id }}</a>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- SAST -->
+      <section v-else>
+        <p class="muted">Tempel kode JavaScript/TypeScript. Pemeriksaan berbasis pola sederhana (OWASP).</p>
+        <textarea v-model="codeText" placeholder="const x = eval(userInput);"></textarea>
+        <div class="actions">
+          <button class="btn" @click="scanSast">Scan SAST</button>
+          <span class="ok" v-if="sastDone && !sastResults.length">Tidak ada temuan.</span>
+        </div>
+        <table v-if="sastResults.length">
+          <thead><tr><th>Baris</th><th>Aturan</th><th>Severity</th><th>Kode</th></tr></thead>
+          <tbody>
+            <tr v-for="(f, i) in sastResults" :key="i">
+              <td>{{ f.line }}</td>
+              <td>{{ f.rule }}</td>
+              <td :class="'sev-' + f.severity">{{ f.severity }}</td>
+              <td><code>{{ f.snippet }}</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    // Aturan SAST: dicek dengan String.includes (tanpa RegExp.exec)
+    const SAST_RULES = [
+      { token: 'eval(', rule: 'Penggunaan eval()', severity: 'HIGH' },
+      { token: 'new Function(', rule: 'Penggunaan new Function()', severity: 'HIGH' },
+      { token: '.innerHTML', rule: 'Penulisan innerHTML (XSS)', severity: 'HIGH' },
+      { token: '.outerHTML', rule: 'Penulisan outerHTML (XSS)', severity: 'HIGH' },
+      { token: 'document.write(', rule: 'document.write()', severity: 'MEDIUM' },
+      { token: 'v-html', rule: 'Directive v-html (XSS)', severity: 'MEDIUM' },
+      { token: 'dangerouslySetInnerHTML', rule: 'dangerouslySetInnerHTML (XSS)', severity: 'MEDIUM' },
+      { token: 'localStorage.setItem(', rule: 'Simpan data di localStorage', severity: 'LOW' },
+      { token: 'http://', rule: 'URL tanpa HTTPS', severity: 'LOW' }
+    ];
+
+    createApp({
+      data() {
+        return {
+          tab: 'sca',
+          pkgText: '{\n  "dependencies": {\n    "lodash": "4.17.15",\n    "axios": "^0.21.0",\n    "vue": "3.5.13"\n  }\n}',
+          scaResults: [],
+          scaLoading: false,
+          scaError: '',
+          codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nsetTimeout(() => run(), 100);\nconst r = eval(expr);',
+          sastResults: [],
+          sastDone: false
+        };
+      },
+      methods: {
+        cleanVersion(v) {
+          return String(v).replace(/^[\^~>=<\s]+/, '');
+        },
+        async scanSca() {
+          this.scaError = '';
+          this.scaResults = [];
+          let pkg;
+          try {
+            pkg = JSON.parse(this.pkgText);
+          } catch (e) {
+            this.scaError = 'JSON tidak valid.';
+            return;
+          }
+          const deps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
+          const list = Object.keys(deps).map(name => ({ name, version: this.cleanVersion(deps[name]) }));
+          if (!list.length) {
+            this.scaError = 'Tidak ada dependencies.';
+            return;
+          }
+          this.scaLoading = true;
+          try {
+            const res = await fetch('https://api.osv.dev/v1/querybatch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                queries: list.map(d => ({ package: { name: d.name, ecosystem: 'npm' }, version: d.version }))
+              })
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            this.scaResults = list.map((d, i) => ({
+              ...d,
+              vulns: ((data.results[i] && data.results[i].vulns) || []).map(v => v.id)
+            }));
+          } catch (e) {
+            this.scaError = 'Gagal menghubungi OSV.dev: ' + e.message;
+          } finally {
+            this.scaLoading = false;
+          }
+        },
+        scanSast() {
+          const findings = [];
+          this.codeText.split('\n').forEach((line, idx) => {
+            SAST_RULES.forEach(r => {
+              if (line.includes(r.token)) {
+                findings.push({ line: idx + 1, rule: r.rule, severity: r.severity, snippet: line.trim() });
+              }
+            });
+          });
+          this.sastResults = findings;
+          this.sastDone = true;
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
