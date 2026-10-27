@@ -149,6 +149,7 @@
           </tbody>
         </table>
 
+        <!-- T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
         <div class="sona">
           <div class="sona-h" @click="sonaOpen = !sonaOpen">
             <span class="chev">{{ sonaOpen ? '▾' : '▸' }}</span>
@@ -181,9 +182,10 @@
             </div>
           </div>
         </div>
+        -->
 
         <div class="opts">
-          <label :title="sonaReady ? '' : 'Isi email dan token Sonatype dulu'"><input type="checkbox" v-model="sonaUse" :disabled="!sonaReady" /> Tambahkan data Sonatype Guide</label>
+          <!-- <label :title="sonaReady ? '' : 'Isi email dan token Sonatype dulu'"><input type="checkbox" v-model="sonaUse" :disabled="!sonaReady" /> Tambahkan data Sonatype Guide</label> -->
           <label><input type="checkbox" v-model="omitDev" /> Abaikan devDependencies</label>
           <label><input type="checkbox" v-model="enrich" /> Tambahkan EPSS &amp; CISA KEV</label>
         </div>
@@ -331,7 +333,8 @@
       { key: 'gl-api', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
       { key: 'url', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
       { key: 'cdn', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
-      { key: 'sonatype', name: 'Sonatype Guide (via proxy lokal)', url: 'POST {proxy lokal}/component-report → https://api.guide.sonatype.com/api/v3/component-report', use: 'Data tambahan CVE, CWE, dan skor CVSS dari Sonatype. Butuh token pribadi dan proxy lokal karena server Sonatype memblokir akses langsung dari browser (CORS).', sends: 'PURL package (pkg:npm/nama@versi) + email/token di header Authorization (lewat proxy lokal, tidak disimpan proxy)', when: 'Opsi "Sonatype Guide" aktif (panel Sonatype)' }
+      // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
+    //  { key: 'sonatype', name: 'Sonatype Guide (via proxy lokal)', url: 'POST {proxy lokal}/component-report → https://api.guide.sonatype.com/api/v3/component-report', use: 'Data tambahan CVE, CWE, dan skor CVSS dari Sonatype. Butuh token pribadi dan proxy lokal karena server Sonatype memblokir akses langsung dari browser (CORS).', sends: 'PURL package (pkg:npm/nama@versi) + email/token di header Authorization (lewat proxy lokal, tidak disimpan proxy)', when: 'Opsi "Sonatype Guide" aktif (panel Sonatype)' }
     ];
     const apiStats = Vue.reactive({});
     API_LIST.forEach(a => { apiStats[a.key] = { calls: 0, ok: 0, fail: 0, last: '' }; });
@@ -457,63 +460,64 @@
       return out;
     }
 
-    // ============================================================
-    //  Sonatype Guide (lewat proxy lokal; browser tidak bisa langsung karena CORS)
-    // ============================================================
-    const PURL_TYPE = { npm: 'npm', Packagist: 'composer', NuGet: 'nuget', PyPI: 'pypi' };
-    const SONA_KEY = 'scaSonatype';
-    function purlOf(e) {
-      const t = PURL_TYPE[e.eco];
-      if (!t) return '';
-      const name = e.eco === 'PyPI' ? e.name.toLowerCase() : e.name;
-      return 'pkg:' + t + '/' + name.split('/').map(encodeURIComponent).join('/') + '@' + e.version;
-    }
-    function b64(s) {
-      let bin = '';
-      new TextEncoder().encode(s).forEach(x => { bin += String.fromCharCode(x); });
-      return btoa(bin);
-    }
-    function sonaUrl(cfg, path) { return String(cfg.proxy).replace(/\/+$/, '') + path; }
-    function sonaHeaders(cfg) {
-      return { 'Content-Type': 'application/json', Authorization: 'Basic ' + b64(cfg.email + ':' + cfg.token) };
-    }
-    // gabungkan temuan Sonatype ke entry; true bila temuan baru (bukan duplikat OSV)
-    function mergeSonatype(e, v) {
-      const cve = String(v.cve || ''), sid = String(v.id || ''), cwe = v.cwe ? String(v.cwe) : '';
-      const ex = e.vulns.find(x => (cve && (x.cves.includes(cve) || x.id === cve)) || x.id === sid || x.aliases.includes(sid));
-      if (ex) {
-        if (cwe && !ex.cwes.includes(cwe)) ex.cwes.push(cwe);
-        ex.alsoSonatype = true;
-        return false;
-      }
-      e.vulns.push({
-        id: cve || sid, aliases: sid && sid !== cve ? [sid] : [], cves: cve ? [cve] : [],
-        severity: scoreToSev(parseFloat(v.cvssScore) || 0), cwes: cwe ? [cwe] : [],
-        summary: v.title || '', fixed: null, epss: null, kev: false, src: 'Sonatype', url: v.reference || ''
-      });
-      return true;
-    }
-    async function sonatypeEnrich(entries, cfg, log) {
-      const list = entries.map(e => ({ e, p: purlOf(e) })).filter(x => x.p);
-      if (!list.length) return;
-      const byKey = new Map();
-      list.forEach(x => byKey.set(decodeURIComponent(x.p).toLowerCase(), x.e));
-      const chunks = [];
-      for (let i = 0; i < list.length; i += 128) chunks.push(list.slice(i, i + 128));
-      log('Sonatype Guide: ' + list.length + ' package lewat proxy ' + cfg.proxy + '...');
-      let added = 0, failed = '';
-      await pool(chunks, 3, async ch => {
-        try {
-          const res = await apiFetch('sonatype', sonaUrl(cfg, '/component-report'), { method: 'POST', headers: sonaHeaders(cfg), body: JSON.stringify({ coordinates: ch.map(x => x.p) }) });
-          if (!res.ok) { failed = res.status === 401 ? 'email/token ditolak (401)' : 'HTTP ' + res.status; return; }
-          (await res.json() || []).forEach(c => {
-            const e = byKey.get(decodeURIComponent(String(c.coordinates)).toLowerCase());
-            if (e) (c.vulnerabilities || []).forEach(v => { if (mergeSonatype(e, v)) added++; });
-          });
-        } catch (err) { failed = 'proxy tidak terjangkau di ' + cfg.proxy; }
-      });
-      log(failed ? 'Sonatype dilewati: ' + failed : 'Sonatype selesai: ' + added + ' temuan tambahan');
-    }
+    // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
+    //// ============================================================
+    ////  Sonatype Guide (lewat proxy lokal; browser tidak bisa langsung karena CORS)
+    //// ============================================================
+    //const PURL_TYPE = { npm: 'npm', Packagist: 'composer', NuGet: 'nuget', PyPI: 'pypi' };
+    //const SONA_KEY = 'scaSonatype';
+    //function purlOf(e) {
+    //  const t = PURL_TYPE[e.eco];
+    //  if (!t) return '';
+    //  const name = e.eco === 'PyPI' ? e.name.toLowerCase() : e.name;
+    //  return 'pkg:' + t + '/' + name.split('/').map(encodeURIComponent).join('/') + '@' + e.version;
+    //}
+    //function b64(s) {
+    //  let bin = '';
+    //  new TextEncoder().encode(s).forEach(x => { bin += String.fromCharCode(x); });
+    //  return btoa(bin);
+    //}
+    //function sonaUrl(cfg, path) { return String(cfg.proxy).replace(/\/+$/, '') + path; }
+    //function sonaHeaders(cfg) {
+    //  return { 'Content-Type': 'application/json', Authorization: 'Basic ' + b64(cfg.email + ':' + cfg.token) };
+    //}
+    //// gabungkan temuan Sonatype ke entry; true bila temuan baru (bukan duplikat OSV)
+    //function mergeSonatype(e, v) {
+    //  const cve = String(v.cve || ''), sid = String(v.id || ''), cwe = v.cwe ? String(v.cwe) : '';
+    //  const ex = e.vulns.find(x => (cve && (x.cves.includes(cve) || x.id === cve)) || x.id === sid || x.aliases.includes(sid));
+    //  if (ex) {
+    //    if (cwe && !ex.cwes.includes(cwe)) ex.cwes.push(cwe);
+    //    ex.alsoSonatype = true;
+    //    return false;
+    //  }
+    //  e.vulns.push({
+    //    id: cve || sid, aliases: sid && sid !== cve ? [sid] : [], cves: cve ? [cve] : [],
+    //    severity: scoreToSev(parseFloat(v.cvssScore) || 0), cwes: cwe ? [cwe] : [],
+    //    summary: v.title || '', fixed: null, epss: null, kev: false, src: 'Sonatype', url: v.reference || ''
+    //  });
+    //  return true;
+    //}
+    //async function sonatypeEnrich(entries, cfg, log) {
+    //  const list = entries.map(e => ({ e, p: purlOf(e) })).filter(x => x.p);
+    //  if (!list.length) return;
+    //  const byKey = new Map();
+    //  list.forEach(x => byKey.set(decodeURIComponent(x.p).toLowerCase(), x.e));
+    //  const chunks = [];
+    //  for (let i = 0; i < list.length; i += 128) chunks.push(list.slice(i, i + 128));
+    //  log('Sonatype Guide: ' + list.length + ' package lewat proxy ' + cfg.proxy + '...');
+    //  let added = 0, failed = '';
+    //  await pool(chunks, 3, async ch => {
+    //    try {
+    //      const res = await apiFetch('sonatype', sonaUrl(cfg, '/component-report'), { method: 'POST', headers: sonaHeaders(cfg), body: JSON.stringify({ coordinates: ch.map(x => x.p) }) });
+    //      if (!res.ok) { failed = res.status === 401 ? 'email/token ditolak (401)' : 'HTTP ' + res.status; return; }
+    //      (await res.json() || []).forEach(c => {
+    //        const e = byKey.get(decodeURIComponent(String(c.coordinates)).toLowerCase());
+    //        if (e) (c.vulnerabilities || []).forEach(v => { if (mergeSonatype(e, v)) added++; });
+    //      });
+    //    } catch (err) { failed = 'proxy tidak terjangkau di ' + cfg.proxy; }
+    //  });
+    //  log(failed ? 'Sonatype dilewati: ' + failed : 'Sonatype selesai: ' + added + ' temuan tambahan');
+    //}
 
     // ============================================================
     //  Inti SCA: package -> temuan + versi aman
@@ -536,7 +540,7 @@
       log(ids.size + ' advisory unik, mengambil detail...');
       await pool(Array.from(ids), 15, id => getVuln(id).catch(() => null));
       entries.forEach((e, i) => { e.vulns = buildVulns(idLists[i], e.name, e.version, e.eco); });
-      if (opts.sonatype) await sonatypeEnrich(entries, opts.sonatype, log);
+    //  if (opts.sonatype) await sonatypeEnrich(entries, opts.sonatype, log);
 
       // versi aman = fixed tertinggi, lalu diverifikasi ulang ke OSV
       const calc = e => {
@@ -1091,9 +1095,7 @@
       const used = API_LIST.filter(a => apiStats[a.key].calls);
       body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Tujuan</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
         used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.use) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
-      body += opts.sonatype
-        ? '<div class="note">Sonatype Guide dipakai lewat proxy lokal. Temuan yang hanya ada di Sonatype ditandai <span class="mono">[Sonatype]</span>; data Sonatype tidak memuat rentang versi sehingga versi perbaikannya tidak diketahui.</div>'
-        : '<div class="note">Sumber CVE/CWE: data OSV (GHSA dan alias NVD). Data Sonatype tidak ikut karena opsi Sonatype Guide tidak diaktifkan, sehingga temuan yang hanya ada di Sonatype tidak muncul di laporan ini.</div>';
+      body += '<div class="note">Sumber CVE/CWE: data OSV (GHSA dan alias NVD). Temuan yang hanya ada di database berbayar/privat (mis. Sonatype) tidak ikut; untuk itu gunakan <span class="mono">scan_sca.ps1</span>.</div>';
       body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">Unduh CSV</a></p>';
       return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
     }
@@ -1251,51 +1253,52 @@
       return fetchDirect(src, log);
     }
 
-    // Isi sonatype-proxy.js (diunduh lewat tombol di panel Sonatype)
-    const PROXY_SRC = String.raw`// sonatype-proxy.js - proxy lokal agar halaman HTML bisa memanggil Sonatype Guide (CORS).
-// Jalankan: node sonatype-proxy.js      (port 8787, hanya 127.0.0.1; ganti dengan PORT=9000)
-// Proxy tidak menyimpan token: header Authorization dari halaman diteruskan apa adanya ke Sonatype.
-const http = require('http');
-const https = require('https');
+    // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
+    //// Isi sonatype-proxy.js (diunduh lewat tombol di panel Sonatype)
+    //const PROXY_SRC = String.raw`// sonatype-proxy.js - proxy lokal agar halaman HTML bisa memanggil Sonatype Guide (CORS).
+//// Jalankan: node sonatype-proxy.js      (port 8787, hanya 127.0.0.1; ganti dengan PORT=9000)
+//// Proxy tidak menyimpan token: header Authorization dari halaman diteruskan apa adanya ke Sonatype.
+//const http = require('http');
+//const https = require('https');
 
-const PORT = parseInt(process.env.PORT || '8787', 10);
-const UPSTREAM = { host: 'api.guide.sonatype.com', path: '/api/v3/component-report' };
+//const PORT = parseInt(process.env.PORT || '8787', 10);
+//const UPSTREAM = { host: 'api.guide.sonatype.com', path: '/api/v3/component-report' };
 
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
-  res.setHeader('Access-Control-Max-Age', '600');
-}
+//function cors(res) {
+//  res.setHeader('Access-Control-Allow-Origin', '*');
+//  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+//  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
+//  res.setHeader('Access-Control-Max-Age', '600');
+//}
 
-http.createServer((req, res) => {
-  cors(res);
-  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-  if (req.method === 'GET' && req.url === '/ping') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end('{"ok":true}');
-  }
-  if (req.method !== 'POST' || req.url !== '/component-report') { res.writeHead(404); return res.end('not found'); }
+//http.createServer((req, res) => {
+//  cors(res);
+//  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+//  if (req.method === 'GET' && req.url === '/ping') {
+    //res.writeHead(200, { 'Content-Type': 'application/json' });
+    //return res.end('{"ok":true}');
+//  }
+//  if (req.method !== 'POST' || req.url !== '/component-report') { res.writeHead(404); return res.end('not found'); }
 
-  const chunks = [];
-  let size = 0;
-  req.on('data', c => { size += c.length; if (size > 5e6) { req.destroy(); return; } chunks.push(c); });
-  req.on('end', () => {
-    const body = Buffer.concat(chunks);
-    const up = https.request({
-      host: UPSTREAM.host, path: UPSTREAM.path, method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': body.length, Authorization: req.headers.authorization || '' }
-    }, r => {
-      res.writeHead(r.statusCode, { 'Content-Type': r.headers['content-type'] || 'application/json' });
-      r.pipe(res);
-    });
-    up.on('error', e => { res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); });
-    up.end(body);
-  });
-}).listen(PORT, '127.0.0.1', () => {
-  console.log('Sonatype proxy aktif: http://127.0.0.1:' + PORT + '  (Ctrl+C untuk berhenti)');
-});
-`;
+//  const chunks = [];
+//  let size = 0;
+//  req.on('data', c => { size += c.length; if (size > 5e6) { req.destroy(); return; } chunks.push(c); });
+//  req.on('end', () => {
+    //const body = Buffer.concat(chunks);
+    //const up = https.request({
+    //  host: UPSTREAM.host, path: UPSTREAM.path, method: 'POST',
+    //  headers: { 'Content-Type': 'application/json', 'Content-Length': body.length, Authorization: req.headers.authorization || '' }
+    //}, r => {
+    //  res.writeHead(r.statusCode, { 'Content-Type': r.headers['content-type'] || 'application/json' });
+    //  r.pipe(res);
+    //});
+    //up.on('error', e => { res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); });
+    //up.end(body);
+//  });
+//}).listen(PORT, '127.0.0.1', () => {
+//  console.log('Sonatype proxy aktif: http://127.0.0.1:' + PORT + '  (Ctrl+C untuk berhenti)');
+//});
+//`;
 
     // ============================================================
     //  Aplikasi Vue
@@ -1318,7 +1321,7 @@ http.createServer((req, res) => {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           apis: API_LIST, stats: apiStats, apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
-          sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
+    //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
           pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -1327,52 +1330,48 @@ http.createServer((req, res) => {
       },
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
-        sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
+    //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
       },
       created() {
-        try {
-          const saved = JSON.parse(localStorage.getItem(SONA_KEY) || 'null');
-          if (saved && saved.email && saved.token) {
-            this.sona = { email: saved.email, token: saved.token, proxy: saved.proxy || this.sona.proxy };
-            this.sonaUse = true;
-          }
-        } catch (e) { /* localStorage tidak tersedia / rusak: abaikan */ }
+        // Hapus token Sonatype yang pernah tersimpan oleh versi sebelumnya.
+        try { localStorage.removeItem('scaSonatype'); } catch (e) { /* localStorage tidak tersedia: abaikan */ }
       },
       methods: {
         log(m) { this.logs.push(m); },
-        sonaCfg() { return { email: this.sona.email.trim(), token: this.sona.token.trim(), proxy: this.sona.proxy.trim() }; },
-        saveSona() {
-          try { localStorage.setItem(SONA_KEY, JSON.stringify(this.sonaCfg())); this.sonaOk = true; this.sonaMsg = 'Tersimpan di localStorage browser ini.'; }
-          catch (e) { this.sonaOk = false; this.sonaMsg = 'Gagal menyimpan: ' + e.message; }
-        },
-        clearSona() {
-          try { localStorage.removeItem(SONA_KEY); } catch (e) { /* abaikan */ }
-          this.sona.email = ''; this.sona.token = ''; this.sonaUse = false;
-          this.sonaOk = true; this.sonaMsg = 'Email dan token dihapus dari halaman dan localStorage.';
-        },
-        async testSona() {
-          const cfg = this.sonaCfg();
-          this.sonaBusy = true; this.sonaMsg = ''; this.sonaOk = false;
-          try {
-            try { await fetch(sonaUrl(cfg, '/ping')); }
-            catch (e) { this.sonaMsg = 'Proxy tidak terjangkau di ' + cfg.proxy + '. Jalankan: node sonatype-proxy.js'; return; }
-            const res = await apiFetch('sonatype', sonaUrl(cfg, '/component-report'), { method: 'POST', headers: sonaHeaders(cfg), body: JSON.stringify({ coordinates: ['pkg:npm/lodash@4.17.15'] }) });
-            if (res.status === 401) this.sonaMsg = 'Proxy jalan, tetapi Sonatype menolak email/token (401). Cek email akun dan token.';
-            else if (!res.ok) this.sonaMsg = 'Proxy jalan, Sonatype menjawab HTTP ' + res.status + '.';
-            else { const j = await res.json(); this.sonaOk = true; this.sonaMsg = 'Koneksi OK. Contoh: lodash@4.17.15 punya ' + (((j[0] || {}).vulnerabilities || []).length) + ' temuan di Sonatype.'; this.sonaUse = true; }
-          } catch (e) { this.sonaMsg = 'Gagal: ' + e.message; }
-          finally { this.sonaBusy = false; }
-        },
-        downloadProxy() {
-          const url = URL.createObjectURL(new Blob([PROXY_SRC], { type: 'text/javascript' }));
-          const a = document.createElement('a');
-          a.href = url; a.download = 'sonatype-proxy.js';
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        },
+        // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
+    //    sonaCfg() { return { email: this.sona.email.trim(), token: this.sona.token.trim(), proxy: this.sona.proxy.trim() }; },
+    //    saveSona() {
+    //      try { localStorage.setItem(SONA_KEY, JSON.stringify(this.sonaCfg())); this.sonaOk = true; this.sonaMsg = 'Tersimpan di localStorage browser ini.'; }
+    //      catch (e) { this.sonaOk = false; this.sonaMsg = 'Gagal menyimpan: ' + e.message; }
+    //    },
+    //    clearSona() {
+    //      try { localStorage.removeItem(SONA_KEY); } catch (e) { /* abaikan */ }
+    //      this.sona.email = ''; this.sona.token = ''; this.sonaUse = false;
+    //      this.sonaOk = true; this.sonaMsg = 'Email dan token dihapus dari halaman dan localStorage.';
+    //    },
+    //    async testSona() {
+    //      const cfg = this.sonaCfg();
+    //      this.sonaBusy = true; this.sonaMsg = ''; this.sonaOk = false;
+    //      try {
+    //        try { await fetch(sonaUrl(cfg, '/ping')); }
+    //        catch (e) { this.sonaMsg = 'Proxy tidak terjangkau di ' + cfg.proxy + '. Jalankan: node sonatype-proxy.js'; return; }
+    //        const res = await apiFetch('sonatype', sonaUrl(cfg, '/component-report'), { method: 'POST', headers: sonaHeaders(cfg), body: JSON.stringify({ coordinates: ['pkg:npm/lodash@4.17.15'] }) });
+    //        if (res.status === 401) this.sonaMsg = 'Proxy jalan, tetapi Sonatype menolak email/token (401). Cek email akun dan token.';
+    //        else if (!res.ok) this.sonaMsg = 'Proxy jalan, Sonatype menjawab HTTP ' + res.status + '.';
+    //        else { const j = await res.json(); this.sonaOk = true; this.sonaMsg = 'Koneksi OK. Contoh: lodash@4.17.15 punya ' + (((j[0] || {}).vulnerabilities || []).length) + ' temuan di Sonatype.'; this.sonaUse = true; }
+    //      } catch (e) { this.sonaMsg = 'Gagal: ' + e.message; }
+    //      finally { this.sonaBusy = false; }
+    //    },
+    //    downloadProxy() {
+    //      const url = URL.createObjectURL(new Blob([PROXY_SRC], { type: 'text/javascript' }));
+    //      const a = document.createElement('a');
+    //      a.href = url; a.download = 'sonatype-proxy.js';
+    //      document.body.appendChild(a); a.click(); a.remove();
+    //      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    //    },
         statLabel(a) {
           const s = this.stats[a.key];
-          if (!s.calls) return this.sonaReady || a.key !== 'sonatype' ? 'belum dipanggil' : 'belum diatur';
+          if (!s.calls) return 'belum dipanggil';
           return s.calls + '× · ' + s.ok + ' ok' + (s.fail ? ' · ' + s.fail + ' gagal' : '');
         },
         toggleAllDetail() {
@@ -1439,7 +1438,7 @@ http.createServer((req, res) => {
           // buka tab dulu (sinkron saat klik) supaya tidak diblokir popup blocker
           const w = window.open('', '_blank');
           this.scanning = true; this.error = ''; this.logs = [];
-          const opts = { omitDev: this.omitDev, enrich: this.enrich, sonatype: this.sonaUse && this.sonaReady ? this.sonaCfg() : null };
+          const opts = { omitDev: this.omitDev, enrich: this.enrich, sonatype: null };
           try {
             const results = [];
             for (const it of this.items) { this.log('== ' + it.name); results.push(await this.scanItem(it, opts)); }
