@@ -18,6 +18,8 @@ Buka `index.html` di browser (tidak perlu build / server).
 
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
 
+Tab **DAST pasif (URL)**: masukkan URL situs publik; laporan HTML berisi nilai MDN HTTP Observatory dan analisis header respons (HSTS, CSP, cookie, dll.) dari HackerTarget. Ini pemeriksaan pasif, bukan DAST aktif; host lokal/VPN tidak bisa dijangkau.
+
 ---
 
 # Vibe Code Contest November 2026

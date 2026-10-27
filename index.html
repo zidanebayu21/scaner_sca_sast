@@ -108,6 +108,7 @@
     <main>
       <div class="tabs">
         <button :class="{ active: tab === 'sca' }" @click="tab = 'sca'">SCA &amp; Dockerfile</button>
+        <button :class="{ active: tab === 'dast' }" @click="tab = 'dast'">DAST pasif (URL)</button>
         <button :class="{ active: tab === 'sast' }" @click="tab = 'sast'">SAST (Kode)</button>
       </div>
 
@@ -207,8 +208,24 @@
         <p class="muted">Sumber data: OSV.dev, FIRST EPSS, CISA KEV, endoflife.date. Pemindaian image Docker penuh (paket OS di dalam image, seperti Trivy/Harbor) butuh Docker dan tidak bisa dijalankan di browser. Untuk itu gunakan <code>scan_sca_docker.ps1</code>.</p>
       </section>
 
+      <!-- DAST pasif -->
+      <section v-else-if="tab === 'dast'">
+        <p class="muted">Masukkan URL situs publik (boleh beberapa, pisah spasi, maks 10). Hasil dibuka sebagai laporan HTML di tab baru: nilai MDN Observatory + analisis header respons (HSTS, CSP, cookie, dll.).</p>
+        <div class="row">
+          <input type="text" v-model="dastText" placeholder="https://unpkg.com  https://situs-anda.go.id" @keyup.enter="runDast" />
+          <button class="btn" :disabled="dastBusy || !dastText.trim()" @click="runDast">{{ dastBusy ? 'Memeriksa...' : 'Cek & buka laporan' }}</button>
+        </div>
+        <div class="actions">
+          <a v-if="dastUrl" class="btn blue" :href="dastUrl" target="_blank">Buka laporan lagi</a>
+          <a v-if="dastUrl" class="btn gray" :href="dastUrl" :download="dastName">Unduh HTML</a>
+          <span class="bad" v-if="dastError">{{ dastError }}</span>
+        </div>
+        <div class="log" v-if="dastLogs.length"><div v-for="(l, i) in dastLogs" :key="i">{{ l }}</div></div>
+        <p class="muted">Pemeriksaan ini pasif (hanya membaca respons publik), bukan DAST aktif. Host lokal/internal/VPN tidak bisa dijangkau karena yang mengambil adalah layanan publik, bukan browser Anda. HackerTarget gratis dibatasi ±50 request per hari. Periksa hanya situs yang Anda miliki atau berwenang untuk diuji.</p>
+      </section>
+
       <!-- SAST -->
-      <section v-else>
+      <section v-else-if="tab === 'sast'">
         <p class="muted">Tempel kode JavaScript/TypeScript. Pemeriksaan berbasis pola sederhana (OWASP).</p>
         <textarea v-model="codeText" placeholder="const x = eval(userInput);"></textarea>
         <div class="actions">
@@ -334,6 +351,7 @@
       { key: 'sca', title: 'SCA — cek kerentanan package', desc: 'Dipakai saat memindai lockfile / package.json / .csproj dan paket yang dipin di Dockerfile.' },
       { key: 'docker', title: 'Dockerfile — status EOL image', desc: 'Hanya dipakai saat memindai Dockerfile.' },
       { key: 'scrape', title: 'Scraping — ambil file dari link', desc: 'Hanya dipakai saat memasukkan link repo/file GitHub, GitLab, atau URL. Hasilnya diteruskan ke scan SCA/Dockerfile.' },
+      { key: 'dast', title: 'DAST pasif — cek header situs', desc: 'Hanya dipakai di tab DAST pasif. URL yang Anda masukkan dikirim ke layanan ini; keduanya hanya membaca respons publik situs, tidak menyerang.' },
       { key: 'sast', title: 'SAST — pemeriksaan kode', desc: 'Tidak memakai API apa pun: kode dicek lokal di browser dan tidak dikirim ke mana pun.', none: true },
       { key: 'app', title: 'Aplikasi — library halaman', desc: 'Dimuat saat halaman dibuka, bukan bagian dari proses scan.' }
     ];
@@ -347,6 +365,8 @@
       { key: 'gh-raw', group: 'scrape', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
       { key: 'gl-api', group: 'scrape', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
       { key: 'url', group: 'scrape', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
+      { key: 'obs', group: 'dast', name: 'MDN HTTP Observatory', url: 'POST https://observatory-api.mdn.mozilla.net/api/v2/scan?host={host}', use: 'Nilai (A–F), skor, dan jumlah tes keamanan header yang lulus/gagal (CSP, HSTS, cookie, redirect, dll.).', sends: 'nama host situs (tanpa path)', when: 'Tab DAST pasif' },
+      { key: 'ht', group: 'dast', name: 'HackerTarget — httpheaders', url: 'GET https://api.hackertarget.com/httpheaders/?q={url}', use: 'Mengambil header respons situs, lalu dianalisis di browser (HSTS, CSP, cookie, dll.). Batas gratis ±50 request/hari.', sends: 'URL yang dicek', when: 'Tab DAST pasif' },
       { key: 'cdn', group: 'app', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
       // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
     //  { key: 'sonatype', name: 'Sonatype Guide (via proxy lokal)', url: 'POST {proxy lokal}/component-report → https://api.guide.sonatype.com/api/v3/component-report', use: 'Data tambahan CVE, CWE, dan skor CVSS dari Sonatype. Butuh token pribadi dan proxy lokal karena server Sonatype memblokir akses langsung dari browser (CORS).', sends: 'PURL package (pkg:npm/nama@versi) + email/token di header Authorization (lewat proxy lokal, tidak disimpan proxy)', when: 'Opsi "Sonatype Guide" aktif (panel Sonatype)' }
@@ -1317,6 +1337,135 @@
 //`;
 
     // ============================================================
+    //  DAST pasif: header respons (HackerTarget) + nilai MDN Observatory
+    //  Hanya membaca respons publik situs; tidak ada payload serangan.
+    // ============================================================
+    function isPrivateHost(h) {
+      h = h.toLowerCase();
+      if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.lan') || h.startsWith('[')) return true;
+      const m = rx1(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/g, h);
+      if (m) {
+        const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+        return a === 10 || a === 127 || a === 0 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254);
+      }
+      return h.indexOf('.') < 0;
+    }
+    function parseHeaders(text) {
+      const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+      const hdr = {}, cookies = [];
+      lines.slice(1).forEach(l => {
+        const i = l.indexOf(':');
+        if (i <= 0) return;
+        const k = l.slice(0, i).trim().toLowerCase(), v = l.slice(i + 1).trim();
+        if (k === 'set-cookie') cookies.push(v);
+        hdr[k] = hdr[k] !== undefined ? hdr[k] + ', ' + v : v;
+      });
+      return { status: lines[0] || '', hdr, cookies, raw: lines };
+    }
+    async function fetchHeaders(url) {
+      const res = await apiFetch('ht', 'https://api.hackertarget.com/httpheaders/?q=' + encodeURIComponent(url));
+      const t = await res.text();
+      if (!/^\s*HTTP\//i.test(t)) {
+        if (/quota|exceeded|limit/i.test(t)) throw new Error('Kuota harian HackerTarget habis (±50 request/hari tanpa key)');
+        throw new Error('HackerTarget: ' + t.trim().slice(0, 120));
+      }
+      return parseHeaders(t);
+    }
+    async function observatoryScan(host) {
+      const res = await apiFetch('obs', 'https://observatory-api.mdn.mozilla.net/api/v2/scan?host=' + encodeURIComponent(host), { method: 'POST' });
+      if (!res.ok) throw new Error('Observatory HTTP ' + res.status);
+      const j = await res.json();
+      if (j.error) throw new Error('Observatory: ' + (j.message || j.error));
+      return j;
+    }
+    function analyzeHeaders(u, p) {
+      const f = [], H = p.hdr, https = u.protocol === 'https:';
+      const add = (sev, header, rule, detail, fix) => f.push({ sev, header, rule, detail: detail || '', fix: fix || '' });
+      if (!https) add('HIGH', '-', 'Situs diakses lewat HTTP (tanpa TLS)', u.href, 'Sajikan seluruh situs lewat HTTPS dan alihkan HTTP ke HTTPS.');
+      const hsts = H['strict-transport-security'];
+      if (https) {
+        if (!hsts) add('MEDIUM', 'Strict-Transport-Security', 'HSTS tidak ada', '', 'Tambahkan Strict-Transport-Security: max-age=31536000; includeSubDomains.');
+        else {
+          const ma = rx1(/max-age=(\d+)/gi, hsts);
+          if (!ma || parseInt(ma[1], 10) < 15552000) add('LOW', 'Strict-Transport-Security', 'HSTS max-age terlalu pendek', hsts, 'Pakai max-age minimal 15552000 (idealnya 31536000).');
+        }
+      }
+      const csp = H['content-security-policy'];
+      if (!csp) add('MEDIUM', 'Content-Security-Policy', 'CSP tidak ada', '', 'Tambahkan Content-Security-Policy yang membatasi sumber script/style.');
+      else {
+        if (csp.indexOf("'unsafe-inline'") >= 0) add('LOW', 'Content-Security-Policy', "CSP memakai 'unsafe-inline'", csp.slice(0, 160), 'Ganti dengan nonce/hash.');
+        if (csp.indexOf("'unsafe-eval'") >= 0) add('LOW', 'Content-Security-Policy', "CSP memakai 'unsafe-eval'", csp.slice(0, 160), 'Hapus unsafe-eval.');
+      }
+      if ((H['x-content-type-options'] || '').toLowerCase().indexOf('nosniff') < 0) add('LOW', 'X-Content-Type-Options', 'nosniff tidak ada', '', 'Tambahkan X-Content-Type-Options: nosniff.');
+      if (!H['x-frame-options'] && !(csp && csp.indexOf('frame-ancestors') >= 0)) add('LOW', 'X-Frame-Options', 'Tidak ada perlindungan clickjacking', '', "Tambahkan X-Frame-Options: DENY atau CSP frame-ancestors 'none'.");
+      if (!H['referrer-policy']) add('LOW', 'Referrer-Policy', 'Referrer-Policy tidak ada', '', 'Tambahkan Referrer-Policy: strict-origin-when-cross-origin.');
+      if (!H['permissions-policy']) add('LOW', 'Permissions-Policy', 'Permissions-Policy tidak ada', '', 'Batasi fitur browser (kamera, mikrofon, geolokasi) yang tidak dipakai.');
+      if (H['server'] && /\d/.test(H['server'])) add('LOW', 'Server', 'Header Server membuka versi', H['server'], 'Sembunyikan versi perangkat lunak.');
+      ['x-powered-by', 'x-aspnet-version', 'x-aspnetmvc-version'].forEach(k => { if (H[k]) add('LOW', k, 'Header membuka teknologi/versi', H[k], 'Hapus header ini.'); });
+      if (H['access-control-allow-origin'] === '*') add('LOW', 'Access-Control-Allow-Origin', 'CORS terbuka untuk semua origin (*)', '', 'Batasi ke origin yang dibutuhkan bila respons berisi data sensitif.');
+      p.cookies.forEach(c => {
+        const name = c.split('=')[0].trim(), lc = c.toLowerCase();
+        if (https && lc.indexOf('; secure') < 0) add('MEDIUM', 'Set-Cookie', 'Cookie tanpa flag Secure: ' + name, '', 'Tambahkan atribut Secure.');
+        if (lc.indexOf('httponly') < 0) add('MEDIUM', 'Set-Cookie', 'Cookie tanpa flag HttpOnly: ' + name, '', 'Tambahkan atribut HttpOnly.');
+        if (lc.indexOf('samesite') < 0) add('LOW', 'Set-Cookie', 'Cookie tanpa SameSite: ' + name, '', 'Tambahkan SameSite=Lax atau Strict.');
+      });
+      f.sort((a, b) => SEV_ORDER[b.sev] - SEV_ORDER[a.sev]);
+      return f;
+    }
+    async function dastCheck(raw, log) {
+      const res = { input: raw, error: '', findings: [], obs: null, obsErr: '', headers: null, hdrErr: '' };
+      let u;
+      try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { res.error = 'URL tidak valid'; return res; }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') { res.error = 'Hanya http/https yang didukung'; return res; }
+      res.url = u.href; res.host = u.hostname;
+      if (isPrivateHost(u.hostname)) { res.error = 'Host lokal/internal tidak bisa dijangkau layanan publik (butuh scan_dast.ps1 dari jaringan Anda).'; return res; }
+      log('Memeriksa ' + u.href + '...');
+      const [o, h] = await Promise.allSettled([observatoryScan(u.hostname), fetchHeaders(u.href)]);
+      if (o.status === 'fulfilled') res.obs = o.value; else res.obsErr = o.reason.message;
+      if (h.status === 'fulfilled') { res.headers = h.value; res.findings = analyzeHeaders(u, h.value); } else res.hdrErr = h.reason.message;
+      log('  Observatory: ' + (res.obs ? 'nilai ' + res.obs.grade + ' (' + res.obs.score + ')' : 'gagal — ' + res.obsErr) + ' · header: ' + (res.headers ? res.findings.length + ' temuan' : 'gagal — ' + res.hdrErr));
+      return res;
+    }
+    const GRADE_COLOR = { A: '#16a34a', B: '#65a30d', C: '#d97706', D: '#ea580c', E: '#dc2626', F: '#7f1d1d' };
+    function buildDastReport(results) {
+      const now = new Date().toLocaleString('id-ID');
+      let body = '<h1>Laporan DAST Pasif (cek header situs)</h1><div class="sub">Dibuat ' + esc(now) + ' · ' + results.length + ' URL · sumber: MDN HTTP Observatory, HackerTarget httpheaders</div>';
+      body += '<div class="note">Ini pemeriksaan <b>pasif</b>: hanya membaca header respons publik dan nilai dari Observatory. Bukan DAST aktif (tanpa spider, ajax, atau payload serangan). Untuk itu gunakan <span class="mono">scan_dast.ps1</span>.</div>';
+      results.forEach(r => {
+        body += '<h2>' + esc(r.url || r.input) + '</h2>';
+        if (r.error) { body += '<div class="note">Dilewati: ' + esc(r.error) + '</div>'; return; }
+        const c = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+        r.findings.forEach(x => { c[x.sev] = (c[x.sev] || 0) + 1; });
+        body += '<div class="cards">';
+        if (r.obs) {
+          const g = String(r.obs.grade || '?'), col = GRADE_COLOR[g[0]] || '#64748b';
+          body += '<div class="card" style="border-color:' + col + '"><b style="color:' + col + '">' + esc(g) + '</b><span>nilai Observatory (' + esc(r.obs.score) + '/100)</span></div>' +
+            '<div class="card"><b>' + esc(r.obs.tests_passed) + '/' + esc(r.obs.tests_quantity) + '</b><span>tes Observatory lulus</span></div>';
+        }
+        if (r.headers) {
+          body += '<div class="card h"><b>' + c.HIGH + '</b><span>Tinggi</span></div><div class="card m"><b>' + c.MEDIUM + '</b><span>Sedang</span></div><div class="card l"><b>' + c.LOW + '</b><span>Rendah</span></div>';
+        }
+        body += '</div>';
+        if (r.obs) body += '<p class="cap">Observatory memindai host <span class="mono">' + esc(r.host) + '</span> (bukan path). <a href="' + esc(r.obs.details_url) + '" target="_blank" rel="noopener noreferrer">Lihat rincian tes di MDN Observatory</a> · status HTTP ' + esc(r.obs.status_code) + '.</p>';
+        else body += '<div class="note">Observatory gagal: ' + esc(r.obsErr) + '</div>';
+        if (r.headers) {
+          body += '<h3>Temuan header</h3>';
+          if (!r.findings.length) body += '<p class="cap">Tidak ada temuan dari aturan yang diperiksa.</p>';
+          else {
+            body += '<table><thead><tr><th>No</th><th>Tingkat</th><th>Header</th><th>Temuan</th><th>Detail</th><th>Saran</th></tr></thead><tbody>';
+            r.findings.forEach((x, i) => { body += '<tr><td>' + (i + 1) + '</td><td>' + badge(x.sev) + '</td><td class="mono">' + esc(x.header) + '</td><td>' + esc(x.rule) + '</td><td class="mono">' + esc(x.detail) + '</td><td>' + esc(x.fix) + '</td></tr>'; });
+            body += '</tbody></table>';
+          }
+          body += '<details style="margin-top:10px"><summary>Header respons mentah (' + r.headers.raw.length + ' baris)</summary><pre>' + esc(r.headers.raw.join('\n')) + '</pre></details>';
+        } else body += '<div class="note">Pengambilan header gagal: ' + esc(r.hdrErr) + '</div>';
+      });
+      const used = API_LIST.filter(a => a.group === 'dast' && apiStats[a.key].calls);
+      body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
+        used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
+      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan DAST Pasif</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
+    }
+
+    // ============================================================
     //  Aplikasi Vue
     // ============================================================
     const { createApp } = Vue;
@@ -1336,7 +1485,7 @@
       data() {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
-          apis: API_LIST, groups: API_GROUPS, stats: apiStats, apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
+          apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
           pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
@@ -1389,6 +1538,27 @@
           const s = this.stats[a.key];
           if (!s.calls) return 'belum dipanggil';
           return s.calls + '× · ' + s.ok + ' ok' + (s.fail ? ' · ' + s.fail + ' gagal' : '');
+        },
+        async runDast() {
+          const links = this.dastText.split(/[\s,]+/).filter(Boolean).slice(0, 10);
+          if (!links.length) return;
+          const w = window.open('', '_blank');
+          this.dastBusy = true; this.dastLogs = []; this.dastError = '';
+          const log = m => this.dastLogs.push(m);
+          try {
+            const results = [];
+            for (const l of links) results.push(await dastCheck(l, log));
+            const html = buildDastReport(results);
+            if (this.dastUrl) URL.revokeObjectURL(this.dastUrl);
+            this.dastUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+            const d = new Date(), p2 = n => String(n).padStart(2, '0');
+            this.dastName = d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '_laporan_dast.html';
+            log('Selesai. Laporan siap.');
+            if (w) w.location.href = this.dastUrl; else log('Popup diblokir browser: klik "Buka laporan lagi".');
+          } catch (e) {
+            this.dastError = 'Pemeriksaan gagal: ' + e.message;
+            if (w) w.close();
+          } finally { this.dastBusy = false; }
         },
         groupApis(g) { return this.apis.filter(a => a.group === g.key); },
         toggleAllDetail() {
