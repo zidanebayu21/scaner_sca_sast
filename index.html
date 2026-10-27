@@ -13,15 +13,22 @@
     header p { margin: 4px 0 0; color: #94a3b8; font-size: 14px; }
     .layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 24px; max-width: 1480px; margin: 0 auto; padding: 0 20px; }
     main { min-width: 0; margin: 24px 0; padding: 0 0 48px; }
-    .side { margin-top: 24px; position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow: auto; background: #111c33; border: 1px solid #334155; border-radius: 10px; padding: 14px; font-size: 13px; }
+    .side { margin-top: 24px; align-self: start; background: #111c33; border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; font-size: 13px; }
     .side h2 { margin: 0 0 6px; font-size: 15px; }
-    .api { border-top: 1px solid #334155; padding: 9px 0; }
-    .api code { display: block; word-break: break-all; font-size: 11px; margin: 4px 0; color: #93c5fd; }
+    .side-tools { display: flex; justify-content: space-between; gap: 8px; margin: 10px 0 4px; }
+    .lnk { background: none; border: 0; color: #93c5fd; cursor: pointer; font-size: 12px; padding: 2px 0; }
+    .lnk:hover { text-decoration: underline; }
+    .api { border-top: 1px solid #334155; padding: 7px 0; }
+    .api-h { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+    .api-h b { flex: 1; min-width: 0; font-size: 13px; }
+    .chev { color: #94a3b8; width: 10px; font-size: 11px; }
+    .api-d { padding: 6px 0 2px 16px; }
+    .api code { display: block; word-break: break-all; font-size: 11px; margin: 0 0 5px; color: #93c5fd; }
     .api .muted { font-size: 12px; }
-    .pill { float: right; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #334155; color: #cbd5e1; }
+    .pill { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: #334155; color: #cbd5e1; white-space: nowrap; }
     .pill.okp { background: #14532d; color: #bbf7d0; }
     .pill.errp { background: #7f1d1d; color: #fecaca; }
-    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } .side { position: static; max-height: none; } }
+    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tabs button { padding: 8px 16px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; }
     .tabs button.active { background: #2563eb; border-color: #2563eb; }
@@ -64,16 +71,25 @@
     <aside class="side">
       <h2>API publik yang dipakai</h2>
       <p class="muted">Semua panggilan langsung dari browser Anda ke layanan di bawah. Isi file/kode tidak diunggah ke server milik aplikasi ini; hanya data di baris "Dikirim" yang keluar.</p>
-      <div class="api" v-for="a in apis" :key="a.key">
-        <div>
-          <span class="pill" :class="{ okp: stats[a.key].ok && !stats[a.key].fail, errp: stats[a.key].fail }">{{ statLabel(a) }}</span>
-          <b>{{ a.name }}</b>
+      <div class="side-tools">
+        <button class="lnk" @click="apiOpen = !apiOpen">{{ apiOpen ? '▾ Sembunyikan semua API' : '▸ Tampilkan ' + apis.length + ' API' }}</button>
+        <button class="lnk" v-if="apiOpen" @click="toggleAllDetail">{{ allDetailOpen ? 'Tutup semua detail' : 'Buka semua detail' }}</button>
+      </div>
+      <div v-if="apiOpen">
+        <div class="api" v-for="a in apis" :key="a.key">
+          <div class="api-h" @click="openKeys[a.key] = !openKeys[a.key]">
+            <span class="chev">{{ openKeys[a.key] ? '▾' : '▸' }}</span>
+            <b>{{ a.name }}</b>
+            <span class="pill" :class="{ okp: stats[a.key].ok && !stats[a.key].fail, errp: stats[a.key].fail }">{{ statLabel(a) }}</span>
+          </div>
+          <div class="api-d" v-if="openKeys[a.key]">
+            <code>{{ a.url }}</code>
+            <div>{{ a.use }}</div>
+            <div class="muted">Dikirim: {{ a.sends }}</div>
+            <div class="muted">Dipakai: {{ a.when }}</div>
+            <div class="bad" v-if="stats[a.key].last" style="font-size:12px">Terakhir gagal: {{ stats[a.key].last }}</div>
+          </div>
         </div>
-        <code>{{ a.url }}</code>
-        <div>{{ a.use }}</div>
-        <div class="muted">Dikirim: {{ a.sends }}</div>
-        <div class="muted">Dipakai: {{ a.when }}</div>
-        <div class="bad" v-if="stats[a.key].last" style="font-size:12px">Terakhir gagal: {{ stats[a.key].last }}</div>
       </div>
     </aside>
 
@@ -275,7 +291,8 @@
       { key: 'gh-raw', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
       { key: 'gl-api', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
       { key: 'url', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
-      { key: 'cdn', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' }
+      { key: 'cdn', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
+      { key: 'sonatype', off: true, name: 'Sonatype Guide / OSS Index (tidak aktif)', url: 'POST https://api.guide.sonatype.com/api/v3/component-report', use: 'Tidak dipakai: server Sonatype tidak mengizinkan akses dari browser (CORS) dan butuh token pribadi.', sends: '-', when: 'Gunakan scan_sca.ps1 bila butuh data Sonatype' }
     ];
     const apiStats = Vue.reactive({});
     API_LIST.forEach(a => { apiStats[a.key] = { calls: 0, ok: 0, fail: 0, last: '' }; });
@@ -876,7 +893,10 @@
       }).sort((a, b) => SEV_ORDER[b.sev] - SEV_ORDER[a.sev] || (b.kev - a.kev) || a.name.localeCompare(b.name));
       if (!groups.length) return '<p class="cap">Tidak ada kerentanan yang ditemukan di ' + esc(label) + '.</p>';
 
-      let html = '<table><thead><tr><th>No</th><th>Package</th><th>Terpasang → Update ke</th><th>Jenis</th><th>Tingkat</th><th>Advisory</th><th>EPSS</th><th>KEV</th><th>Tipe</th></tr></thead><tbody>';
+      let html = '<table><thead><tr><th>No</th><th>Package</th><th>Terpasang → Update ke</th><th>Jenis</th><th>Tingkat</th><th>CVE</th><th>CWE</th><th>Advisory</th><th>EPSS</th><th>KEV</th><th>Tipe</th></tr></thead><tbody>';
+      const listCell = (arr, mk) => !arr.length ? '-' : arr.length <= 3 ? arr.map(x => '<div>' + mk(x) + '</div>').join('') : '<details><summary>' + arr.length + ' item</summary>' + arr.map(x => '<div>' + mk(x) + '</div>').join('') + '</details>';
+      const cveLink = c => '<a class="mono" href="https://nvd.nist.gov/vuln/detail/' + esc(c) + '" target="_blank" rel="noopener noreferrer">' + esc(c) + '</a>';
+      const cweLink = c => '<a class="mono" href="https://cwe.mitre.org/data/definitions/' + esc(String(c).replace('CWE-', '')) + '.html" target="_blank" rel="noopener noreferrer">' + esc(c) + '</a>';
       groups.forEach((g, idx) => {
         const verCol = g.items.map(i => '<div class="mono nums">' + esc(i.version) + ' → ' + (i.updateTo ? '<b>' + esc(i.updateTo) + '</b>' : '<b style="color:#b91c1c">BELUM ADA versi aman</b>') + (i.partial && i.updateTo ? ' <span title="Sebagian advisory belum punya perbaikan">⚠</span>' : '') + '</div>').join('');
         const kindCol = g.items.map(i => '<div>' + esc(i.kind || '-') + '</div>').join('');
@@ -891,7 +911,11 @@
         }));
         const tipe = g.items.map(i => '<div>' + (i.dev ? 'dev' : 'prod') + (i.direct === true ? ', langsung' : i.direct === false ? ', transitif' : '') + '</div>').join('');
         const still = g.items.filter(i => i.still.length).map(i => '<div class="mono" style="color:#b91c1c">' + esc(i.updateTo) + ' masih terdampak: ' + esc(i.still.join(', ')) + '</div>').join('');
+        const cveAll = [], cweAll = [];
+        g.items.forEach(i => i.vulns.forEach(v => { v.cves.forEach(c => { if (cveAll.indexOf(c) < 0) cveAll.push(c); }); v.cwes.forEach(c => { if (cweAll.indexOf(c) < 0) cweAll.push(c); }); }));
+        cweAll.sort((a, b) => parseInt(String(a).replace(/\D/g, ''), 10) - parseInt(String(b).replace(/\D/g, ''), 10));
         html += '<tr class="' + (g.nofix ? 'nofix' : '') + '"><td>' + (idx + 1) + '</td><td><b>' + esc(g.name) + '</b><div class="mono">' + esc(g.eco) + '</div></td><td>' + verCol + still + '</td><td>' + kindCol + '</td><td>' + badge(g.sev) + '</td>' +
+          '<td>' + listCell(cveAll, cveLink) + '</td><td>' + listCell(cweAll, cweLink) + '</td>' +
           '<td><details><summary>' + advN + ' advisory</summary>' + advList + '</details></td><td>' + (maxEpss === null ? '-' : (maxEpss * 100).toFixed(1) + '%') + '</td><td>' + (g.kev ? '<b style="color:#b91c1c">YA</b>' : '-') + '</td><td>' + tipe + '</td></tr>';
       });
       html += '</tbody></table>';
@@ -930,7 +954,7 @@
       }));
       return '\ufeff' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
     }
-    function renderDocker(r) {
+    function renderDocker(r, multi) {
       const d = r.docker;
       let html = '<h3>Base image</h3>';
       if (!d.bases.length) html += '<p class="cap">Tidak ada instruksi FROM.</p>';
@@ -950,7 +974,7 @@
         html += '</tbody></table>';
       }
       html += '<h3>Paket yang dipin di Dockerfile (' + d.pinned + ' paket diperiksa via OSV)</h3>';
-      html += d.entries.length ? cards(d.entries) + renderVulnTable(d.entries, 'paket Dockerfile') : '<p class="cap">Tidak ada paket berversi persis yang bisa diperiksa. Paket tanpa versi tidak dapat dicocokkan ke advisory.</p>';
+      html += d.entries.length ? (multi ? cards(d.entries) : '') + renderVulnTable(d.entries, 'paket Dockerfile') : '<p class="cap">Tidak ada paket berversi persis yang bisa diperiksa. Paket tanpa versi tidak dapat dicocokkan ke advisory.</p>';
       html += '<div class="note">Batasan: pemindaian ini bersifat statis atas isi Dockerfile. Paket OS dan library yang ikut terpasang di dalam image (yang muncul di tab Vulnerabilities Harbor) hanya bisa diketahui setelah image dibangun. Untuk itu jalankan <span class="mono">scan_sca_docker.ps1 --path=&lt;Dockerfile&gt;</span>.</div>';
       return html;
     }
@@ -962,13 +986,14 @@
       results.forEach(r => {
         body += '<h2>' + esc(r.name) + ' <span class="mono">(' + esc(TYPE_LABELS[r.type] || r.type) + ')</span></h2>';
         if (r.error) { body += '<div class="note">Gagal diproses: ' + esc(r.error) + '</div>'; return; }
-        if (r.docker) { body += renderDocker(r); return; }
-        body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + cards(r.entries) + renderVulnTable(r.entries, r.name);
+        if (r.docker) { body += renderDocker(r, results.length > 1); return; }
+        body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + (results.length > 1 ? cards(r.entries) : '') + renderVulnTable(r.entries, r.name);
       });
       const csv = buildCsv(results);
       const used = API_LIST.filter(a => apiStats[a.key].calls);
       body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Tujuan</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
         used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.use) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
+      body += '<div class="note">Sumber CVE/CWE: data OSV (GHSA dan alias NVD). Sonatype (OSS Index / Guide) tidak dipakai di versi browser karena API-nya tidak mengizinkan akses dari browser (CORS) dan butuh token pribadi, jadi temuan yang hanya ada di Sonatype tidak muncul di laporan ini. Gunakan <span class="mono">scan_sca.ps1</span> untuk data Sonatype.</div>';
       body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">Unduh CSV</a></p>';
       return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
     }
@@ -1146,19 +1171,27 @@
       data() {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
-          apis: API_LIST, stats: apiStats, urlText: '', token: '', urlBusy: false, urlLogs: [],
+          apis: API_LIST, stats: apiStats, apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
           pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false
         };
       },
+      computed: {
+        allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); }
+      },
       methods: {
         log(m) { this.logs.push(m); },
         statLabel(a) {
           const s = this.stats[a.key];
+          if (a.off) return 'tidak aktif';
           if (!s.calls) return 'belum dipanggil';
           return s.calls + '× · ' + s.ok + ' ok' + (s.fail ? ' · ' + s.fail + ' gagal' : '');
+        },
+        toggleAllDetail() {
+          const open = !this.allDetailOpen;
+          this.apis.forEach(a => { this.openKeys[a.key] = open; });
         },
         async fetchUrls() {
           const links = this.urlText.split(/[\s,]+/).filter(Boolean);
