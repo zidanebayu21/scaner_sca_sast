@@ -233,13 +233,14 @@
           <span class="ok" v-if="sastDone && !sastResults.length">Tidak ada temuan.</span>
         </div>
         <table v-if="sastResults.length">
-          <thead><tr><th>Baris</th><th>Aturan</th><th>Severity</th><th>Kode</th></tr></thead>
+          <thead><tr><th>Baris</th><th>Aturan</th><th>Severity</th><th>Kode</th><th>Saran</th></tr></thead>
           <tbody>
             <tr v-for="(f, i) in sastResults" :key="i">
               <td>{{ f.line }}</td>
               <td>{{ f.rule }}</td>
               <td :class="'sev-' + f.severity">{{ f.severity }}</td>
               <td><code>{{ f.snippet }}</code></td>
+              <td>{{ f.fix }}</td>
             </tr>
           </tbody>
         </table>
@@ -1393,8 +1394,15 @@
       const csp = H['content-security-policy'];
       if (!csp) add('MEDIUM', 'Content-Security-Policy', 'CSP tidak ada', '', 'Tambahkan Content-Security-Policy yang membatasi sumber script/style.');
       else {
-        if (csp.indexOf("'unsafe-inline'") >= 0) add('LOW', 'Content-Security-Policy', "CSP memakai 'unsafe-inline'", csp.slice(0, 160), 'Ganti dengan nonce/hash.');
-        if (csp.indexOf("'unsafe-eval'") >= 0) add('LOW', 'Content-Security-Policy', "CSP memakai 'unsafe-eval'", csp.slice(0, 160), 'Hapus unsafe-eval.');
+        const dir = {};
+        csp.split(';').forEach(d => { const t = d.trim().split(/\s+/); if (t[0]) dir[t[0].toLowerCase()] = t.slice(1).join(' '); });
+        const scriptSrc = dir['script-src'] !== undefined ? dir['script-src'] : (dir['default-src'] || '');
+        const styleSrc = dir['style-src'] !== undefined ? dir['style-src'] : (dir['default-src'] || '');
+        // browser mengabaikan 'unsafe-inline' bila ada nonce/hash/strict-dynamic di script-src
+        const protectedInline = scriptSrc.indexOf("'nonce-") >= 0 || scriptSrc.indexOf("'sha") >= 0 || scriptSrc.indexOf("'strict-dynamic'") >= 0;
+        if (scriptSrc.indexOf("'unsafe-inline'") >= 0 && !protectedInline) add('MEDIUM', 'Content-Security-Policy', "script-src memakai 'unsafe-inline'", scriptSrc.slice(0, 160), 'Ganti dengan nonce/hash per-request.');
+        if (scriptSrc.indexOf("'unsafe-eval'") >= 0) add('LOW', 'Content-Security-Policy', "script-src memakai 'unsafe-eval'", scriptSrc.slice(0, 160), 'Hapus unsafe-eval.');
+        if (styleSrc.indexOf("'unsafe-inline'") >= 0) add('LOW', 'Content-Security-Policy', "style-src memakai 'unsafe-inline' (risiko lebih rendah dari script-src)", styleSrc.slice(0, 160), 'Pakai nonce untuk <style> jika framework UI mendukung.');
       }
       if ((H['x-content-type-options'] || '').toLowerCase().indexOf('nosniff') < 0) add('LOW', 'X-Content-Type-Options', 'nosniff tidak ada', '', 'Tambahkan X-Content-Type-Options: nosniff.');
       if (!H['x-frame-options'] && !(csp && csp.indexOf('frame-ancestors') >= 0)) add('LOW', 'X-Frame-Options', 'Tidak ada perlindungan clickjacking', '', "Tambahkan X-Frame-Options: DENY atau CSP frame-ancestors 'none'.");
@@ -1470,15 +1478,15 @@
     // ============================================================
     const { createApp } = Vue;
     const SAST_RULES = [
-      { token: 'eval(', rule: 'Penggunaan eval()', severity: 'HIGH' },
-      { token: 'new Function(', rule: 'Penggunaan new Function()', severity: 'HIGH' },
-      { token: '.innerHTML', rule: 'Penulisan innerHTML (XSS)', severity: 'HIGH' },
-      { token: '.outerHTML', rule: 'Penulisan outerHTML (XSS)', severity: 'HIGH' },
-      { token: 'document.write(', rule: 'document.write()', severity: 'MEDIUM' },
-      { token: 'v-html', rule: 'Directive v-html (XSS)', severity: 'MEDIUM' },
-      { token: 'dangerouslySetInnerHTML', rule: 'dangerouslySetInnerHTML (XSS)', severity: 'MEDIUM' },
-      { token: 'localStorage.setItem(', rule: 'Simpan data di localStorage', severity: 'LOW' },
-      { token: 'http://', rule: 'URL tanpa HTTPS', severity: 'LOW' }
+      { token: 'eval(', rule: 'Penggunaan eval()', severity: 'HIGH', fix: 'Hindari eval(); parse data dengan JSON.parse atau gunakan pemetaan fungsi (lookup table).' },
+      { token: 'new Function(', rule: 'Penggunaan new Function()', severity: 'HIGH', fix: 'Hindari new Function(); ganti dengan fungsi biasa atau pemetaan fungsi.' },
+      { token: '.innerHTML', rule: 'Penulisan innerHTML (XSS)', severity: 'HIGH', fix: 'Pakai textContent, atau bangun elemen dengan createElement; jika harus HTML, sanitasi dengan DOMPurify.' },
+      { token: '.outerHTML', rule: 'Penulisan outerHTML (XSS)', severity: 'HIGH', fix: 'Pakai createElement/replaceWith; jika harus HTML, sanitasi dengan DOMPurify.' },
+      { token: 'document.write(', rule: 'document.write()', severity: 'MEDIUM', fix: 'Ganti dengan manipulasi DOM (createElement, append) atau data binding framework.' },
+      { token: 'v-html', rule: 'Directive v-html (XSS)', severity: 'MEDIUM', fix: 'Tampilkan sebagai teks dengan {{ }}; jika HTML wajib, sanitasi dulu (DOMPurify).' },
+      { token: 'dangerouslySetInnerHTML', rule: 'dangerouslySetInnerHTML (XSS)', severity: 'MEDIUM', fix: 'Render sebagai teks/komponen React; jika HTML wajib, sanitasi dulu (DOMPurify).' },
+      { token: 'localStorage.setItem(', rule: 'Simpan data di localStorage', severity: 'LOW', fix: 'Jangan simpan token/data sensitif di localStorage (terbaca skrip XSS); pakai cookie HttpOnly + Secure + SameSite.' },
+      { token: 'http://', rule: 'URL tanpa HTTPS', severity: 'LOW', fix: 'Gunakan https:// agar lalu lintas terenkripsi.' }
     ];
 
     createApp({
@@ -1646,7 +1654,7 @@
           const findings = [];
           this.codeText.split('\n').forEach((line, idx) => {
             SAST_RULES.forEach(r => {
-              if (line.includes(r.token)) findings.push({ line: idx + 1, rule: r.rule, severity: r.severity, snippet: line.trim() });
+              if (line.includes(r.token)) findings.push({ line: idx + 1, rule: r.rule, severity: r.severity, snippet: line.trim(), fix: r.fix });
             });
           });
           this.sastResults = findings;
