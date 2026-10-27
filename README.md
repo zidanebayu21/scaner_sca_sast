@@ -9,6 +9,15 @@ Aplikasi HTML-only (Vue 3 via CDN) untuk memeriksa keamanan proyek langsung di b
 
 Buka `index.html` di browser (tidak perlu build / server).
 
+1. Seret & lepas (atau pilih / tempel teks) satu atau beberapa file: `package-lock.json`, `package.json`, `composer.lock`, `packages.lock.json`, `*.csproj`, atau `Dockerfile`.
+2. Klik **Scan & buka laporan**. Laporan HTML terbuka di tab baru (bisa diunduh, ada tautan CSV).
+
+**SCA**: package dicek ke OSV.dev lengkap dengan versi aman (diverifikasi ulang), jenis update, severity (GHSA/CVSS), CWE, EPSS, status CISA KEV, dan perintah perbaikan. Package tanpa versi aman ditandai merah.
+
+**Dockerfile**: status EOL base image (endoflife.date), temuan konfigurasi (tanpa USER, secret di ENV, `curl | sh`, `:latest`, dll.), serta kerentanan paket yang dipin (`apk`, `apt`, `npm`, `pip`). Pemindaian image penuh (paket OS di dalam image) butuh Docker dan tidak bisa dilakukan di browser.
+
+Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
+
 ---
 
 # Vibe Code Contest November 2026

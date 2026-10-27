@@ -11,14 +11,22 @@
     header { padding: 20px 32px; background: #1e293b; border-bottom: 1px solid #334155; }
     header h1 { margin: 0; font-size: 22px; }
     header p { margin: 4px 0 0; color: #94a3b8; font-size: 14px; }
-    main { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+    main { max-width: 1000px; margin: 24px auto; padding: 0 16px 48px; }
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tabs button { padding: 8px 16px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; }
     .tabs button.active { background: #2563eb; border-color: #2563eb; }
-    textarea { width: 100%; min-height: 220px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
-    .actions { margin: 12px 0; display: flex; gap: 8px; align-items: center; }
-    .btn { padding: 8px 18px; background: #16a34a; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+    textarea { width: 100%; min-height: 160px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
+    input[type=text], select { padding: 7px 10px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
+    .actions { margin: 12px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .btn { padding: 9px 20px; background: #16a34a; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
+    .btn.blue { background: #2563eb; }
+    .btn.gray { background: #475569; padding: 7px 14px; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .drop { border: 2px dashed #475569; border-radius: 10px; padding: 34px 16px; text-align: center; color: #94a3b8; cursor: pointer; background: #111c33; transition: .15s; }
+    .drop.over { border-color: #2563eb; background: #172554; color: #e2e8f0; }
+    .drop b { color: #e2e8f0; }
+    .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+    .row input[type=text] { flex: 1; min-width: 200px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
     th, td { border: 1px solid #334155; padding: 8px; text-align: left; vertical-align: top; }
     th { background: #1e40af; }
@@ -27,45 +35,74 @@
     .bad { color: #f87171; font-weight: 600; }
     .sev-HIGH { color: #f87171; } .sev-MEDIUM { color: #fbbf24; } .sev-LOW { color: #60a5fa; }
     .muted { color: #94a3b8; font-size: 13px; }
+    .log { background: #020617; border: 1px solid #334155; border-radius: 6px; padding: 10px 12px; font-family: Consolas, monospace; font-size: 12px; max-height: 200px; overflow: auto; margin-top: 12px; }
+    .log div { white-space: pre-wrap; }
+    .opts { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; margin-top: 12px; }
+    .opts label { cursor: pointer; }
     a { color: #93c5fd; }
+    code { background: #1e293b; padding: 1px 5px; border-radius: 4px; }
   </style>
 </head>
 <body>
   <div id="app">
     <header>
       <h1>Scanner SCA &amp; SAST</h1>
-      <p>Cek kerentanan dependency (SCA via OSV.dev) dan pola kode berbahaya (SAST sederhana) langsung di browser.</p>
+      <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
     <main>
       <div class="tabs">
-        <button :class="{ active: tab === 'sca' }" @click="tab = 'sca'">SCA (Dependency)</button>
+        <button :class="{ active: tab === 'sca' }" @click="tab = 'sca'">SCA &amp; Dockerfile</button>
         <button :class="{ active: tab === 'sast' }" @click="tab = 'sast'">SAST (Kode)</button>
       </div>
 
-      <!-- SCA -->
+      <!-- SCA + Docker -->
       <section v-if="tab === 'sca'">
-        <p class="muted">Tempel isi <code>package.json</code> (dependencies / devDependencies). Versi dengan ^ atau ~ dibaca sebagai versi dasarnya.</p>
-        <textarea v-model="pkgText" placeholder='{ "dependencies": { "lodash": "4.17.15" } }'></textarea>
-        <div class="actions">
-          <button class="btn" :disabled="scaLoading" @click="scanSca">{{ scaLoading ? 'Memindai...' : 'Scan SCA' }}</button>
-          <span class="bad" v-if="scaError">{{ scaError }}</span>
+        <div class="drop" :class="{ over: over }"
+             @dragover.prevent="over = true" @dragleave.prevent="over = false"
+             @drop.prevent="onDrop" @click="$refs.file.click()">
+          <div><b>Seret &amp; lepas file di sini</b> atau klik untuk memilih</div>
+          <div class="muted" style="margin-top:6px">package-lock.json · package.json · composer.lock · packages.lock.json · *.csproj · Dockerfile</div>
+          <input ref="file" type="file" multiple hidden @change="onPick" />
         </div>
-        <table v-if="scaResults.length">
-          <thead><tr><th>Package</th><th>Versi</th><th>Status</th><th>Advisory</th></tr></thead>
+
+        <div class="row">
+          <input type="text" v-model="pasteName" placeholder="Nama file untuk teks tempelan (opsional, mis. package-lock.json)" />
+        </div>
+        <textarea v-model="pasteText" style="margin-top:8px" placeholder="...atau tempel isi file di sini, lalu klik Tambah"></textarea>
+        <div class="actions" style="margin-top:6px">
+          <button class="btn gray" :disabled="!pasteText.trim()" @click="addPaste">Tambah dari teks</button>
+        </div>
+
+        <table v-if="items.length">
+          <thead><tr><th>File</th><th>Jenis</th><th>Ukuran</th><th></th></tr></thead>
           <tbody>
-            <tr v-for="r in scaResults" :key="r.name">
-              <td>{{ r.name }}</td>
-              <td>{{ r.version }}</td>
-              <td :class="r.vulns.length ? 'bad' : 'ok'">{{ r.vulns.length ? r.vulns.length + ' kerentanan' : 'Aman' }}</td>
+            <tr v-for="(it, i) in items" :key="it.id">
+              <td>{{ it.name }}</td>
               <td>
-                <div v-for="id in r.vulns" :key="id">
-                  <a :href="'https://osv.dev/vulnerability/' + id" target="_blank" rel="noopener noreferrer">{{ id }}</a>
-                </div>
+                <select v-model="it.type">
+                  <option v-for="(label, key) in typeLabels" :key="key" :value="key">{{ label }}</option>
+                </select>
               </td>
+              <td>{{ (it.text.length / 1024).toFixed(1) }} KB</td>
+              <td><button class="btn gray" @click="items.splice(i, 1)">Hapus</button></td>
             </tr>
           </tbody>
         </table>
+
+        <div class="opts">
+          <label><input type="checkbox" v-model="omitDev" /> Abaikan devDependencies</label>
+          <label><input type="checkbox" v-model="enrich" /> Tambahkan EPSS &amp; CISA KEV</label>
+        </div>
+
+        <div class="actions">
+          <button class="btn" :disabled="scanning || !items.length" @click="runScan">{{ scanning ? 'Memindai...' : 'Scan & buka laporan' }}</button>
+          <a v-if="reportUrl" class="btn blue" :href="reportUrl" target="_blank">Buka laporan lagi</a>
+          <a v-if="reportUrl" class="btn gray" :href="reportUrl" :download="reportName">Unduh HTML</a>
+          <span class="bad" v-if="error">{{ error }}</span>
+        </div>
+        <div class="log" v-if="logs.length"><div v-for="(l, i) in logs" :key="i">{{ l }}</div></div>
+        <p class="muted">Sumber data: OSV.dev, FIRST EPSS, CISA KEV, endoflife.date. Pemindaian image Docker penuh (paket OS di dalam image, seperti Trivy/Harbor) butuh Docker dan tidak bisa dijalankan di browser. Untuk itu gunakan <code>scan_sca_docker.ps1</code>.</p>
       </section>
 
       <!-- SAST -->
@@ -92,9 +129,784 @@
   </div>
 
   <script>
-    const { createApp } = Vue;
+    // ============================================================
+    //  Util
+    // ============================================================
+    const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
+    const SEV_ID = { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' };
 
-    // Aturan SAST: dicek dengan String.includes (tanpa RegExp.exec)
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // Ambil kecocokan pertama tanpa RegExp.exec (re wajib berflag g)
+    function rx1(re, s) {
+      for (const m of String(s).matchAll(re)) return m;
+      return null;
+    }
+    function normSev(s) {
+      s = String(s || '').toUpperCase();
+      if (s === 'MODERATE') s = 'MEDIUM';
+      return SEV_ORDER[s] !== undefined ? s : 'UNKNOWN';
+    }
+    function maxSev(list) {
+      let best = 'UNKNOWN';
+      list.forEach(s => { if (SEV_ORDER[s] > SEV_ORDER[best]) best = s; });
+      return best;
+    }
+    async function pool(items, n, fn) {
+      let i = 0;
+      const workers = [];
+      for (let w = 0; w < Math.min(n, items.length); w++) {
+        workers.push((async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } })());
+      }
+      await Promise.all(workers);
+    }
+
+    // ---- Perbandingan versi (semver longgar; juga revisi Alpine "-r0")
+    function parseVer(v) {
+      v = String(v).trim();
+      if (v[0] === 'v' || v[0] === 'V' || v[0] === '=') v = v.slice(1);
+      const plus = v.indexOf('+'); if (plus >= 0) v = v.slice(0, plus);
+      const dash = v.indexOf('-');
+      let main = v, pre = '';
+      if (dash >= 0) { main = v.slice(0, dash); pre = v.slice(dash + 1); }
+      const nums = main.split('.').map(x => parseInt(x, 10) || 0);
+      if (/^r\d+$/.test(pre)) { nums.push(parseInt(pre.slice(1), 10)); pre = ''; }
+      return { nums, pre };
+    }
+    function cmpVer(a, b) {
+      const x = parseVer(a), y = parseVer(b);
+      const n = Math.max(x.nums.length, y.nums.length);
+      for (let i = 0; i < n; i++) {
+        const d = (x.nums[i] || 0) - (y.nums[i] || 0);
+        if (d) return d < 0 ? -1 : 1;
+      }
+      if (x.pre === y.pre) return 0;
+      if (!x.pre) return 1;
+      if (!y.pre) return -1;
+      const p = x.pre.split('.'), q = y.pre.split('.');
+      for (let i = 0; i < Math.max(p.length, q.length); i++) {
+        if (p[i] === undefined) return -1;
+        if (q[i] === undefined) return 1;
+        const pn = /^\d+$/.test(p[i]), qn = /^\d+$/.test(q[i]);
+        if (pn && qn) { const d = parseInt(p[i], 10) - parseInt(q[i], 10); if (d) return d < 0 ? -1 : 1; }
+        else if (pn) return -1;
+        else if (qn) return 1;
+        else if (p[i] !== q[i]) return p[i] < q[i] ? -1 : 1;
+      }
+      return 0;
+    }
+    function updateKind(from, to) {
+      if (!to) return '';
+      const a = parseVer(from).nums, b = parseVer(to).nums;
+      if ((b[0] || 0) !== (a[0] || 0)) return 'major';
+      if ((b[1] || 0) !== (a[1] || 0)) return 'minor';
+      return 'patch';
+    }
+
+    // ---- CVSS v3 -> skor -> severity
+    function cvss3Score(vec) {
+      const m = {};
+      vec.split('/').forEach(p => { const kv = p.split(':'); m[kv[0]] = kv[1]; });
+      const AV = { N: .85, A: .62, L: .55, P: .2 }[m.AV], AC = { L: .77, H: .44 }[m.AC], UI = { N: .85, R: .62 }[m.UI];
+      const PR = (m.S === 'C' ? { N: .85, L: .68, H: .5 } : { N: .85, L: .62, H: .27 })[m.PR];
+      const W = { H: .56, L: .22, N: 0 };
+      if ([AV, AC, UI, PR, W[m.C], W[m.I], W[m.A]].some(x => x === undefined)) return 0;
+      const iss = 1 - (1 - W[m.C]) * (1 - W[m.I]) * (1 - W[m.A]);
+      const imp = m.S === 'U' ? 6.42 * iss : 7.52 * (iss - 0.029) - 3.25 * Math.pow(iss - 0.02, 15);
+      if (imp <= 0) return 0;
+      const ex = 8.22 * AV * AC * PR * UI;
+      const raw = m.S === 'U' ? Math.min(imp + ex, 10) : Math.min(1.08 * (imp + ex), 10);
+      return Math.ceil(raw * 10 - 1e-9) / 10;
+    }
+    function scoreToSev(sc) { return sc >= 9 ? 'CRITICAL' : sc >= 7 ? 'HIGH' : sc >= 4 ? 'MEDIUM' : sc > 0 ? 'LOW' : 'UNKNOWN'; }
+
+    // ============================================================
+    //  OSV client
+    // ============================================================
+    const OSV = 'https://api.osv.dev';
+    const vulnCache = {};
+
+    async function osvBatch(items) {
+      // items: [{name, version, eco}] -> [[id,...], ...]
+      const out = items.map(() => []);
+      let todo = items.map((it, i) => ({ i, token: '' }));
+      let guard = 0;
+      while (todo.length && guard++ < 10) {
+        const next = [];
+        for (let s = 0; s < todo.length; s += 500) {
+          const chunk = todo.slice(s, s + 500);
+          const res = await fetch(OSV + '/v1/querybatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              queries: chunk.map(c => {
+                const it = items[c.i];
+                const q = { package: { name: it.name, ecosystem: it.eco }, version: it.version };
+                if (c.token) q.page_token = c.token;
+                return q;
+              })
+            })
+          });
+          if (!res.ok) throw new Error('OSV HTTP ' + res.status);
+          const data = await res.json();
+          chunk.forEach((c, k) => {
+            const r = data.results[k] || {};
+            (r.vulns || []).forEach(v => out[c.i].push(v.id));
+            if (r.next_page_token) next.push({ i: c.i, token: r.next_page_token });
+          });
+        }
+        todo = next;
+      }
+      return out;
+    }
+    async function getVuln(id) {
+      if (vulnCache[id]) return vulnCache[id];
+      let lastErr;
+      for (let t = 0; t < 3; t++) {
+        try {
+          const res = await fetch(OSV + '/v1/vulns/' + encodeURIComponent(id));
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          vulnCache[id] = await res.json();
+          return vulnCache[id];
+        } catch (e) { lastErr = e; }
+      }
+      throw lastErr;
+    }
+
+    // versi perbaikan untuk versi terpasang `ver` (null = belum ada)
+    function fixedFor(vuln, name, ver, eco) {
+      let best = null, matched = false;
+      // utamakan entri affected dengan ekosistem yang sama (mis. Alpine:v3.16, bukan cabang lain)
+      const sameEco = (vuln.affected || []).some(a => a.package && a.package.ecosystem === eco && String(a.package.name).toLowerCase() === String(name).toLowerCase());
+      (vuln.affected || []).forEach(a => {
+        if (a.package && String(a.package.name).toLowerCase() !== String(name).toLowerCase()) return;
+        if (sameEco && a.package.ecosystem !== eco) return;
+        (a.ranges || []).forEach(r => {
+          if (r.type === 'GIT') return;
+          const evs = (r.events || []).map(e => ({
+            k: e.introduced !== undefined ? 'i' : e.fixed !== undefined ? 'f' : e.last_affected !== undefined ? 'l' : '',
+            v: e.introduced !== undefined ? e.introduced : e.fixed !== undefined ? e.fixed : e.last_affected
+          })).filter(e => e.k);
+          evs.sort((p, q) => (p.v === '0' ? -1 : q.v === '0' ? 1 : cmpVer(p.v, q.v)));
+          let active = false;
+          for (const e of evs) {
+            if (e.k === 'i') { if (cmpVer(ver, e.v) >= 0) active = true; }
+            else if (e.k === 'f') {
+              if (active && cmpVer(ver, e.v) < 0) { matched = true; if (best === null || cmpVer(e.v, best) < 0) best = e.v; active = false; break; }
+              active = false;
+            } else if (e.k === 'l') { if (active && cmpVer(ver, e.v) > 0) active = false; }
+          }
+          if (active) matched = true;
+        });
+      });
+      return matched ? best : null;
+    }
+    function analyzeVuln(v, name, ver, eco) {
+      const aliases = v.aliases || [];
+      const cves = [v.id].concat(aliases).filter(x => String(x).startsWith('CVE-'));
+      let sev = normSev(v.database_specific && v.database_specific.severity);
+      if (sev === 'UNKNOWN') {
+        (v.severity || []).forEach(s => {
+          if (String(s.score).startsWith('CVSS:3')) { const x = scoreToSev(cvss3Score(s.score)); if (SEV_ORDER[x] > SEV_ORDER[sev]) sev = x; }
+        });
+      }
+      const cwes = (v.database_specific && v.database_specific.cwe_ids) || [];
+      return {
+        id: v.id, aliases, cves, severity: sev, cwes,
+        summary: v.summary || (v.details ? String(v.details).split('\n')[0].slice(0, 160) : ''),
+        fixed: fixedFor(v, name, ver, eco), epss: null, kev: false
+      };
+    }
+    function buildVulns(ids, name, ver, eco) {
+      const covered = new Set();
+      const out = [];
+      ids.slice().sort().forEach(id => {
+        const raw = vulnCache[id];
+        if (!raw) { out.push({ id, aliases: [], cves: [], severity: 'UNKNOWN', cwes: [], summary: '(detail tidak berhasil diambil)', fixed: null, epss: null, kev: false }); return; }
+        const als = [raw.id].concat(raw.aliases || []);
+        if (als.some(a => covered.has(a))) return;
+        als.forEach(a => covered.add(a));
+        out.push(analyzeVuln(raw, name, ver, eco));
+      });
+      return out;
+    }
+
+    // ============================================================
+    //  Inti SCA: package -> temuan + versi aman
+    // ============================================================
+    async function scanPackages(pkgs, log, opts) {
+      const map = new Map();
+      pkgs.forEach(p => {
+        const k = p.eco + '|' + p.name + '|' + p.version;
+        const e = map.get(k);
+        if (e) { e.dev = e.dev && p.dev; e.direct = e.direct === true || p.direct === true ? true : e.direct; }
+        else map.set(k, Object.assign({}, p, { vulns: [], updateTo: '', kind: '', partial: false, still: [] }));
+      });
+      const entries = Array.from(map.values());
+      if (!entries.length) return entries;
+
+      log('Query OSV.dev untuk ' + entries.length + ' package...');
+      const idLists = await osvBatch(entries.map(e => ({ name: e.name, version: e.version, eco: e.eco })));
+      const ids = new Set();
+      idLists.forEach(l => l.forEach(i => ids.add(i)));
+      log(ids.size + ' advisory unik, mengambil detail...');
+      await pool(Array.from(ids), 15, id => getVuln(id).catch(() => null));
+      entries.forEach((e, i) => { e.vulns = buildVulns(idLists[i], e.name, e.version, e.eco); });
+
+      // versi aman = fixed tertinggi, lalu diverifikasi ulang ke OSV
+      const calc = e => {
+        let cand = null; e.partial = false;
+        e.vulns.forEach(v => { if (v.fixed === null) e.partial = true; else if (cand === null || cmpVer(v.fixed, cand) > 0) cand = v.fixed; });
+        e.updateTo = cand || '';
+      };
+      entries.forEach(calc);
+      for (let round = 0; round < 3; round++) {
+        const todo = entries.filter(e => e.updateTo);
+        if (!todo.length) break;
+        const lists = await osvBatch(todo.map(e => ({ name: e.name, version: e.updateTo, eco: e.eco })));
+        const need = [];
+        lists.forEach((l, i) => { if (l.length) need.push([todo[i], l]); });
+        if (!need.length) break;
+        const nid = new Set();
+        need.forEach(p => p[1].forEach(i => { if (!vulnCache[i]) nid.add(i); }));
+        await pool(Array.from(nid), 15, id => getVuln(id).catch(() => null));
+        let changed = false;
+        need.forEach(p => {
+          const e = p[0];
+          const vs = buildVulns(p[1], e.name, e.updateTo, e.eco);
+          let next = null;
+          vs.forEach(v => { if (v.fixed !== null && (next === null || cmpVer(v.fixed, next) > 0)) next = v.fixed; });
+          if (next && cmpVer(next, e.updateTo) > 0) { e.updateTo = next; changed = true; }
+          else { e.still = vs.map(v => v.id); }
+        });
+        if (!changed) break;
+      }
+      entries.forEach(e => { e.kind = updateKind(e.version, e.updateTo); });
+
+      // EPSS + KEV
+      const cveSet = new Set();
+      entries.forEach(e => e.vulns.forEach(v => v.cves.forEach(c => cveSet.add(c))));
+      if (opts.enrich && cveSet.size) {
+        const epss = {}, kev = new Set();
+        try {
+          log('Mengambil EPSS untuk ' + cveSet.size + ' CVE...');
+          const list = Array.from(cveSet), chunks = [];
+          for (let i = 0; i < list.length; i += 50) chunks.push(list.slice(i, i + 50));
+          await pool(chunks, 4, async ch => {
+            const res = await fetch('https://api.first.org/data/v1/epss?cve=' + ch.join(','));
+            if (!res.ok) return;
+            const j = await res.json();
+            (j.data || []).forEach(d => { epss[d.cve] = parseFloat(d.epss); });
+          });
+        } catch (e) { log('EPSS gagal: ' + e.message); }
+        try {
+          log('Mengambil daftar CISA KEV...');
+          const res = await fetch('https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json');
+          if (res.ok) { const j = await res.json(); (j.vulnerabilities || []).forEach(x => kev.add(x.cveID)); }
+        } catch (e) { log('KEV gagal: ' + e.message); }
+        entries.forEach(e => e.vulns.forEach(v => {
+          v.cves.forEach(c => {
+            if (epss[c] !== undefined && (v.epss === null || epss[c] > v.epss)) v.epss = epss[c];
+            if (kev.has(c)) v.kev = true;
+          });
+        }));
+      }
+      return entries;
+    }
+
+    // ============================================================
+    //  Parser file
+    // ============================================================
+    function cleanRange(v) {
+      v = String(v).trim();
+      if (v.indexOf('||') >= 0) v = v.split('||')[0].trim();
+      v = v.replace(/^[\^~>=<\s\[\(]+/, '');
+      const cut = v.search(/[\s,\)\]]/);
+      if (cut >= 0) v = v.slice(0, cut);
+      return v;
+    }
+    function startsWithDigit(v) { return /^\d/.test(String(v)); }
+
+    function parseNpmLock(text) {
+      const j = JSON.parse(text), out = [];
+      if (j.packages) {
+        const root = j.packages[''] || {};
+        const direct = new Set(Object.keys(Object.assign({}, root.dependencies, root.devDependencies, root.optionalDependencies)));
+        Object.keys(j.packages).forEach(path => {
+          const p = j.packages[path];
+          if (!path || !p || !p.version || p.link || !startsWithDigit(p.version)) return;
+          const idx = path.lastIndexOf('node_modules/');
+          const name = p.name || path.slice(idx + 13);
+          out.push({ name, version: p.version, eco: 'npm', dev: !!p.dev, direct: path === 'node_modules/' + name && direct.has(name) });
+        });
+      } else if (j.dependencies) {
+        const walk = (deps, top) => Object.keys(deps).forEach(name => {
+          const d = deps[name];
+          if (d && d.version && startsWithDigit(d.version)) out.push({ name, version: d.version, eco: 'npm', dev: !!d.dev, direct: top ? null : false });
+          if (d && d.dependencies) walk(d.dependencies, false);
+        });
+        walk(j.dependencies, true);
+      }
+      return out;
+    }
+    function parseNpmPackageJson(text) {
+      const j = JSON.parse(text), out = [];
+      [['dependencies', false], ['devDependencies', true], ['optionalDependencies', false]].forEach(pair => {
+        const d = j[pair[0]] || {};
+        Object.keys(d).forEach(name => {
+          const v = cleanRange(d[name]);
+          if (startsWithDigit(v)) out.push({ name, version: v, eco: 'npm', dev: pair[1], direct: true });
+        });
+      });
+      return out;
+    }
+    function parseComposerLock(text) {
+      const j = JSON.parse(text), out = [];
+      [['packages', false], ['packages-dev', true]].forEach(pair => (j[pair[0]] || []).forEach(p => {
+        let v = String(p.version || '');
+        if (v[0] === 'v') v = v.slice(1);
+        if (!startsWithDigit(v)) return;
+        out.push({ name: p.name, version: v, eco: 'Packagist', dev: pair[1], direct: null });
+      }));
+      return out;
+    }
+    function parseNugetLock(text) {
+      const j = JSON.parse(text), out = [];
+      Object.keys(j.dependencies || {}).forEach(tfm => {
+        const d = j.dependencies[tfm];
+        Object.keys(d).forEach(name => {
+          const x = d[name];
+          if (x.type === 'Project' || !x.resolved) return;
+          out.push({ name, version: x.resolved, eco: 'NuGet', dev: false, direct: x.type === 'Direct' });
+        });
+      });
+      return out;
+    }
+    function parseCsproj(text) {
+      const doc = new DOMParser().parseFromString(text, 'application/xml');
+      if (doc.querySelector('parsererror')) throw new Error('XML tidak valid');
+      const out = [];
+      doc.querySelectorAll('PackageReference, PackageVersion').forEach(n => {
+        const name = n.getAttribute('Include') || n.getAttribute('Update');
+        let ver = n.getAttribute('Version');
+        if (!ver) { const c = n.querySelector('Version'); ver = c ? c.textContent : ''; }
+        ver = cleanRange(ver || '');
+        if (!name || !startsWithDigit(ver) || ver.indexOf('$(') >= 0) return;
+        out.push({ name, version: ver, eco: 'NuGet', dev: false, direct: true });
+      });
+      return out;
+    }
+
+    // ============================================================
+    //  Dockerfile
+    // ============================================================
+    const CODENAMES = { trixie: '13', bookworm: '12', bullseye: '11', buster: '10' };
+    const EOL_SLUG = {
+      node: 'nodejs', python: 'python', php: 'php', nginx: 'nginx', redis: 'redis', postgres: 'postgresql',
+      mysql: 'mysql', mariadb: 'mariadb', golang: 'go', ruby: 'ruby', alpine: 'alpine-linux', debian: 'debian',
+      ubuntu: 'ubuntu', 'eclipse-temurin': 'eclipse-temurin'
+    };
+    const eolCache = {};
+
+    function parseDockerfile(text) {
+      const lines = text.replace(/\r/g, '').split('\n'), raw = [];
+      let buf = '', start = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (!buf) { if (!t || t[0] === '#') continue; start = i + 1; }
+        else if (!t || t[0] === '#') continue;
+        if (t.endsWith('\\')) { buf += (buf ? ' ' : '') + t.slice(0, -1).trim(); continue; }
+        buf += (buf ? ' ' : '') + t;
+        raw.push({ line: start, text: buf }); buf = '';
+      }
+      if (buf) raw.push({ line: start, text: buf });
+      return raw.map(r => {
+        const sp = r.text.search(/\s/);
+        return { line: r.line, cmd: (sp < 0 ? r.text : r.text.slice(0, sp)).toUpperCase(), args: sp < 0 ? '' : r.text.slice(sp + 1).trim() };
+      });
+    }
+    function splitImage(ref) {
+      let digest = '';
+      const at = ref.indexOf('@');
+      if (at >= 0) { digest = ref.slice(at + 1); ref = ref.slice(0, at); }
+      const slash = ref.lastIndexOf('/');
+      const colon = ref.indexOf(':', slash + 1);
+      return { name: colon >= 0 ? ref.slice(0, colon) : ref, tag: colon >= 0 ? ref.slice(colon + 1) : '', digest };
+    }
+    function osEcosystem(img) {
+      const short = img.name.split('/').pop();
+      const t = img.tag.toLowerCase();
+      let m = rx1(/alpine(\d+\.\d+)/g, t);
+      if (m) return 'Alpine:v' + m[1];
+      if (short === 'alpine') { m = rx1(/^(\d+\.\d+)/g, t); if (m) return 'Alpine:v' + m[1]; }
+      for (const c of Object.keys(CODENAMES)) if (t.indexOf(c) >= 0) return 'Debian:' + CODENAMES[c];
+      if (short === 'debian') { m = rx1(/^(\d+)/g, t); if (m) return 'Debian:' + m[1]; }
+      return '';
+    }
+    function eolTargets(img) {
+      const out = [], short = img.name.split('/').pop(), t = img.tag.toLowerCase();
+      const ver = (rx1(/^(\d+(?:\.\d+)*)/g, t) || [])[1] || '';
+      if (img.name.indexOf('dotnet/') >= 0 && ver) out.push({ slug: 'dotnet', ver, label: '.NET' });
+      else if (EOL_SLUG[short] && ver) out.push({ slug: EOL_SLUG[short], ver, label: short });
+      const a = rx1(/alpine(\d+\.\d+)/g, t);
+      if (a) out.push({ slug: 'alpine-linux', ver: a[1], label: 'Alpine' });
+      for (const c of Object.keys(CODENAMES)) if (t.indexOf(c) >= 0) out.push({ slug: 'debian', ver: CODENAMES[c], label: 'Debian ' + c });
+      return out;
+    }
+    async function checkEol(target) {
+      if (!eolCache[target.slug]) {
+        eolCache[target.slug] = fetch('https://endoflife.date/api/' + target.slug + '.json').then(r => r.ok ? r.json() : []).catch(() => []);
+      }
+      const cycles = await eolCache[target.slug];
+      if (!cycles.length) return { status: 'unknown', note: 'Data endoflife.date tidak tersedia' };
+      const parts = target.ver.split('.');
+      let hit = null;
+      for (const n of [3, 2, 1]) {
+        const key = parts.slice(0, n).join('.');
+        hit = cycles.find(c => String(c.cycle) === key);
+        if (hit) break;
+      }
+      if (!hit) hit = cycles.find(c => String(c.cycle).startsWith(parts[0] + '.'));
+      if (!hit) return { status: 'unknown', note: 'Siklus ' + target.ver + ' tidak ditemukan' };
+      const eol = hit.eol;
+      if (eol === false) return { status: 'ok', cycle: hit.cycle, latest: hit.latest, note: 'Masih didukung' };
+      const d = new Date(eol), now = new Date();
+      if (d <= now) return { status: 'eol', cycle: hit.cycle, latest: hit.latest, note: 'EOL sejak ' + eol };
+      const days = Math.round((d - now) / 86400000);
+      return { status: days < 180 ? 'soon' : 'ok', cycle: hit.cycle, latest: hit.latest, note: 'EOL ' + eol + ' (' + days + ' hari lagi)' };
+    }
+
+    // paket yang di-install lewat RUN
+    function extractPackages(cmdText) {
+      const found = [];
+      cmdText.split(/&&|\|\||;/).forEach(seg => {
+        const tk = seg.trim().split(/\s+/).filter(Boolean);
+        const tool = tk[0] === 'sudo' ? tk.slice(1) : tk;
+        const head = tool[0], sub = tool[1];
+        let kind = '';
+        if (head === 'apk' && sub === 'add') kind = 'apk';
+        else if ((head === 'apt-get' || head === 'apt') && sub === 'install') kind = 'apt';
+        else if (head === 'npm' && ['install', 'i', 'add'].includes(sub)) kind = 'npm';
+        else if ((head === 'pip' || head === 'pip3') && sub === 'install') kind = 'pip';
+        if (!kind) return;
+        let skipNext = false;
+        for (let i = 2; i < tool.length; i++) {
+          const x = tool[i];
+          if (skipNext) { skipNext = false; continue; }
+          if (x === '--virtual' || x === '-r' || x === '-t' || x === '--target') { skipNext = true; continue; }
+          if (x[0] === '-' || x.indexOf('$') >= 0 || x[0] === '.' || x[0] === '/') continue;
+          if (kind === 'apk' || kind === 'apt') {
+            const eq = x.indexOf('=');
+            found.push(eq > 0 ? { kind, name: x.slice(0, eq), version: x.slice(eq + 1) } : { kind, name: x, version: '' });
+          } else if (kind === 'npm') {
+            const at = x.lastIndexOf('@');
+            found.push(at > 0 ? { kind, name: x.slice(0, at), version: x.slice(at + 1) } : { kind, name: x, version: '' });
+          } else if (kind === 'pip') {
+            const m = rx1(/^([A-Za-z0-9_.\-]+)(==|>=|<=|~=|>|<)?(.*)$/g, x);
+            if (m) found.push({ kind, name: m[1], version: m[2] === '==' ? m[3] : '' });
+          }
+        }
+      });
+      return found;
+    }
+
+    async function analyzeDocker(text, log, opts) {
+      const ins = parseDockerfile(text);
+      const args = {}, stages = [], findings = [];
+      const add = (line, rule, severity, detail, fix) => findings.push({ line, rule, severity, detail, fix: fix || '' });
+      const sub = s => s.replace(/\$\{(\w+)(?::-([^}]*))?\}|\$(\w+)/g, (all, a, def, b) => {
+        const k = a || b; return args[k] !== undefined ? args[k] : (def || '');
+      });
+      let cur = null, hasHealth = false;
+
+      ins.forEach(i => {
+        if (i.cmd === 'ARG' && !cur) {
+          const eq = i.args.indexOf('=');
+          if (eq > 0) args[i.args.slice(0, eq).trim()] = i.args.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+          return;
+        }
+        if (i.cmd === 'FROM') {
+          const tk = sub(i.args).split(/\s+/).filter(x => x.indexOf('--') !== 0);
+          const asIdx = tk.findIndex(x => x.toLowerCase() === 'as');
+          const ref = tk[0] || '';
+          const img = splitImage(ref);
+          cur = { line: i.line, name: asIdx > 0 ? tk[asIdx + 1] : '', ref, img, internal: stages.some(s => s.name && s.name === ref) || ref === 'scratch', user: '', runs: [] };
+          stages.push(cur);
+          if (!cur.internal) {
+            if (!img.tag && !img.digest) add(i.line, 'Base image tanpa tag (latest)', 'MEDIUM', ref + ' memakai tag latest.', 'Pin tag versi tertentu, mis. ' + ref + ':<versi>.');
+            else if (img.tag === 'latest') add(i.line, 'Base image memakai :latest', 'MEDIUM', ref + ' tidak bisa direproduksi.', 'Pin tag versi tertentu.');
+          }
+          return;
+        }
+        if (!cur) return;
+        if (i.cmd === 'USER') cur.user = sub(i.args).split(':')[0].trim();
+        else if (i.cmd === 'HEALTHCHECK') { if (i.args.toUpperCase().indexOf('NONE') !== 0) hasHealth = true; }
+        else if (i.cmd === 'ADD') {
+          const src = i.args.split(/\s+/)[0] || '';
+          const remote = /^https?:\/\//.test(src), archive = /\.(tar|tgz|gz|bz2|xz|zip)$/i.test(src);
+          if (!remote && !archive) add(i.line, 'ADD dipakai untuk file lokal', 'LOW', i.args, 'Gunakan COPY.');
+          if (remote) add(i.line, 'ADD mengunduh URL jarak jauh', 'MEDIUM', i.args, 'Unduh dengan curl + verifikasi checksum di RUN.');
+        } else if (i.cmd === 'EXPOSE') {
+          if (i.args.split(/\s+/).some(p => p.split('/')[0] === '22')) add(i.line, 'Port SSH (22) di-EXPOSE', 'MEDIUM', i.args, 'Hapus EXPOSE 22; akses kontainer lewat docker exec.');
+        } else if (i.cmd === 'ENV' || i.cmd === 'ARG') {
+          const m = rx1(/^([A-Za-z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|ACCESS_?KEY)[A-Za-z0-9_]*)\s*[= ]\s*(\S+)/gi, i.args);
+          if (m && m[2].indexOf('$') < 0 && m[2] !== '""' && m[2] !== "''") add(i.line, 'Secret di ' + i.cmd, 'HIGH', m[1] + ' berisi nilai langsung di Dockerfile.', 'Gunakan runtime secret / env saat run, bukan di image.');
+        } else if (i.cmd === 'RUN') {
+          cur.runs.push({ line: i.line, text: i.args });
+          const a = i.args;
+          if (/(curl|wget)[^|]*\|\s*(sudo\s+)?(ba|z)?sh\b/.test(a)) add(i.line, 'Pipe unduhan langsung ke shell', 'HIGH', a.slice(0, 120), 'Unduh ke file, verifikasi checksum/GPG, baru jalankan.');
+          if (/chmod\s+(-R\s+)?0?777/.test(a)) add(i.line, 'chmod 777', 'MEDIUM', a.slice(0, 120), 'Beri izin minimal yang dibutuhkan.');
+          if (/(--no-check-certificate|curl\s[^|;&]*\s-k\b|--insecure)/.test(a)) add(i.line, 'Verifikasi TLS dimatikan', 'MEDIUM', a.slice(0, 120), 'Hapus opsi yang menonaktifkan verifikasi sertifikat.');
+          if (/\bsudo\b/.test(a)) add(i.line, 'Penggunaan sudo di RUN', 'LOW', a.slice(0, 120), 'Build sebagai root lalu turunkan dengan USER; tidak perlu sudo.');
+          if (/apt(-get)?\s+install/.test(a)) {
+            if (a.indexOf('--no-install-recommends') < 0) add(i.line, 'apt-get install tanpa --no-install-recommends', 'LOW', a.slice(0, 120), 'Tambahkan --no-install-recommends.');
+            if (a.indexOf('/var/lib/apt/lists') < 0) add(i.line, 'Cache apt tidak dibersihkan', 'LOW', a.slice(0, 120), 'Akhiri RUN dengan rm -rf /var/lib/apt/lists/*.');
+          }
+          if (/apk\s+add/.test(a) && a.indexOf('--no-cache') < 0) add(i.line, 'apk add tanpa --no-cache', 'LOW', a.slice(0, 120), 'Gunakan apk add --no-cache.');
+        }
+      });
+
+      const last = stages[stages.length - 1];
+      if (last && !last.internal) {
+        if (!last.user || last.user === 'root' || last.user === '0') add(last.line, 'Stage akhir berjalan sebagai root (tanpa USER)', 'HIGH', 'Stage akhir tidak memiliki USER non-root.', 'Tambahkan USER non-root sebelum CMD/ENTRYPOINT.');
+        if (!hasHealth) add(last.line, 'Tidak ada HEALTHCHECK', 'LOW', 'Image tidak mendefinisikan HEALTHCHECK.', 'Tambahkan HEALTHCHECK.');
+      }
+
+      // base image: EOL + paket
+      const bases = [], pkgs = [], unpinned = [];
+      for (const st of stages) {
+        if (st.internal) continue;
+        const row = { line: st.line, stage: st.name || '-', image: st.img.name, tag: st.img.tag || (st.img.digest ? '@digest' : '(latest)'), checks: [] };
+        for (const t of eolTargets(st.img)) {
+          log('Cek EOL ' + t.label + ' ' + t.ver + '...');
+          const r = await checkEol(t);
+          row.checks.push(Object.assign({ label: t.label, ver: t.ver }, r));
+          if (r.status === 'eol') add(st.line, 'Base image sudah EOL: ' + t.label + ' ' + t.ver, 'HIGH', r.note, 'Naikkan ke versi yang masih didukung.');
+          else if (r.status === 'soon') add(st.line, 'Base image segera EOL: ' + t.label + ' ' + t.ver, 'MEDIUM', r.note, 'Rencanakan upgrade.');
+        }
+        bases.push(row);
+        const osEco = osEcosystem(st.img);
+        st.runs.forEach(run => extractPackages(run.text).forEach(p => {
+          let eco = '';
+          if (p.kind === 'apk' || p.kind === 'apt') eco = osEco;
+          else if (p.kind === 'npm') eco = 'npm';
+          else if (p.kind === 'pip') eco = 'PyPI';
+          if (!p.version || !startsWithDigit(p.version)) { unpinned.push({ line: run.line, name: p.name, kind: p.kind }); return; }
+          if (!eco) return;
+          pkgs.push({ name: p.name, version: p.version, eco, dev: false, direct: true, origin: 'baris ' + run.line });
+        }));
+      }
+      if (unpinned.length) {
+        const byLine = {};
+        unpinned.forEach(u => { (byLine[u.line] = byLine[u.line] || []).push(u.kind + ':' + u.name); });
+        Object.keys(byLine).forEach(l => add(parseInt(l, 10), 'Paket tidak dipin ke versi', 'LOW', byLine[l].join(', '), 'Pin versi persis (pkg=versi / pkg@versi / pkg==versi).'));
+      }
+      findings.sort((a, b) => SEV_ORDER[b.severity] - SEV_ORDER[a.severity] || a.line - b.line);
+
+      const entries = pkgs.length ? await scanPackages(pkgs, log, opts) : [];
+      return { bases, findings, entries, pinned: pkgs.length, unpinned: unpinned.length };
+    }
+
+    // ============================================================
+    //  Deteksi jenis file
+    // ============================================================
+    const TYPE_LABELS = {
+      'npm-lock': 'npm — package-lock.json', 'npm-pkg': 'npm — package.json', 'composer': 'Composer — composer.lock',
+      'nuget-lock': 'NuGet — packages.lock.json', 'nuget-proj': 'NuGet — .csproj / .props', 'docker': 'Dockerfile', 'unknown': '(tidak dikenali)'
+    };
+    function detectType(name, text) {
+      const n = String(name).toLowerCase();
+      if (n.endsWith('package-lock.json') || n.endsWith('npm-shrinkwrap.json')) return 'npm-lock';
+      if (n.endsWith('composer.lock')) return 'composer';
+      if (n.endsWith('packages.lock.json')) return 'nuget-lock';
+      if (n.endsWith('package.json')) return 'npm-pkg';
+      if (n.endsWith('.csproj') || n.endsWith('.fsproj') || n.endsWith('.vbproj') || n.endsWith('.props')) return 'nuget-proj';
+      if (n.indexOf('dockerfile') >= 0 || n.endsWith('.dockerfile')) return 'docker';
+      const t = text.trim();
+      if (t[0] === '{') {
+        try {
+          const j = JSON.parse(t);
+          if (j.lockfileVersion !== undefined) return 'npm-lock';
+          if (j['content-hash'] !== undefined || Array.isArray(j.packages)) return 'composer';
+          if (j.version === 1 && j.dependencies) return 'nuget-lock';
+          if (j.dependencies || j.devDependencies) return 'npm-pkg';
+        } catch (e) { /* bukan JSON */ }
+      }
+      if (t[0] === '<' && t.indexOf('PackageReference') >= 0) return 'nuget-proj';
+      if (/^\s*FROM\s/im.test(t)) return 'docker';
+      return 'unknown';
+    }
+
+    // ============================================================
+    //  Laporan HTML
+    // ============================================================
+    const REPORT_CSS = `
+      body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;background:#f8fafc}
+      h1{margin:0 0 4px;font-size:24px} h2{margin:32px 0 6px;font-size:19px;border-bottom:2px solid #1e40af;padding-bottom:4px}
+      h3{margin:20px 0 6px;font-size:15px}
+      .sub{color:#475569;font-size:13px;margin-bottom:14px}
+      .cards{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+      .card{border:1px solid #cbd5e1;border-radius:8px;padding:10px 16px;background:#fff;min-width:110px}
+      .card b{display:block;font-size:22px} .card span{font-size:12px;color:#475569}
+      .card.c{border-color:#7f1d1d;background:#fef2f2} .card.h{border-color:#dc2626;background:#fef2f2}
+      .card.m{border-color:#d97706;background:#fffbeb} .card.l{border-color:#2563eb;background:#eff6ff}
+      .cap{font-size:13px;color:#334155;margin:6px 0}
+      table{border-collapse:collapse;width:100%;font-size:13px;background:#fff}
+      th{background:#1e40af;color:#fff;text-align:left;padding:7px 8px;border:1px solid #1e3a8a}
+      td{border:1px solid #cbd5e1;padding:6px 8px;vertical-align:top}
+      tr:nth-child(even) td{background:#f1f5f9}
+      tr.nofix td{background:#fee2e2}
+      .b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;color:#fff}
+      .CRITICAL{background:#7f1d1d}.HIGH{background:#dc2626}.MEDIUM{background:#d97706}.LOW{background:#2563eb}.UNKNOWN{background:#64748b}
+      .okb{background:#16a34a}.eolb{background:#dc2626}.soonb{background:#d97706}
+      .mono{font-family:Consolas,monospace;font-size:12px}
+      .nums{white-space:nowrap}
+      details summary{cursor:pointer;color:#1e40af}
+      pre{background:#0f172a;color:#e2e8f0;padding:12px;border-radius:6px;overflow:auto;font-size:12px}
+      .note{background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;font-size:13px;margin:10px 0}
+      a{color:#1d4ed8}
+    `;
+    function badge(sev) { return '<span class="b ' + sev + '">' + esc(SEV_ID[sev] || sev) + '</span>'; }
+    function advLink(id) {
+      const url = id.startsWith('CVE-') ? 'https://nvd.nist.gov/vuln/detail/' + id : 'https://osv.dev/vulnerability/' + id;
+      return '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(id) + '</a>';
+    }
+    function groupByName(entries) {
+      const g = new Map();
+      entries.forEach(e => { const k = e.eco + '|' + e.name; if (!g.has(k)) g.set(k, { eco: e.eco, name: e.name, items: [] }); g.get(k).items.push(e); });
+      return Array.from(g.values());
+    }
+    function countAdvisories(entries) {
+      const seen = new Set(), c = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
+      let kev = 0;
+      entries.forEach(e => e.vulns.forEach(v => {
+        if (seen.has(v.id)) return; seen.add(v.id);
+        c[v.severity]++; if (v.kev) kev++;
+      }));
+      return { c, total: seen.size, kev };
+    }
+    function fixCommand(g, e) {
+      const eco = g.eco, to = e.updateTo;
+      if (eco === 'npm') return e.direct === false ? 'overrides: "' + g.name + '": "' + to + '"' : 'npm install ' + (e.dev ? '-D ' : '') + g.name + '@' + to;
+      if (eco === 'Packagist') return 'composer require ' + (e.dev ? '--dev ' : '') + g.name + ':' + to;
+      if (eco === 'NuGet') return 'dotnet add package ' + g.name + ' --version ' + to;
+      if (eco.startsWith('Alpine')) return 'apk add --no-cache ' + g.name + '=' + to;
+      if (eco.startsWith('Debian')) return 'apt-get install -y --no-install-recommends ' + g.name + '=' + to;
+      if (eco === 'PyPI') return 'pip install ' + g.name + '==' + to;
+      return '';
+    }
+    function renderVulnTable(entries, label) {
+      const vulnerable = entries.filter(e => e.vulns.length);
+      const groups = groupByName(vulnerable).map(g => {
+        g.items.sort((a, b) => cmpVer(a.version, b.version));
+        g.sev = maxSev(g.items.map(i => maxSev(i.vulns.map(v => v.severity))));
+        g.nofix = g.items.some(i => !i.updateTo);
+        g.kev = g.items.some(i => i.vulns.some(v => v.kev));
+        return g;
+      }).sort((a, b) => SEV_ORDER[b.sev] - SEV_ORDER[a.sev] || (b.kev - a.kev) || a.name.localeCompare(b.name));
+      if (!groups.length) return '<p class="cap">Tidak ada kerentanan yang ditemukan di ' + esc(label) + '.</p>';
+
+      let html = '<table><thead><tr><th>No</th><th>Package</th><th>Terpasang → Update ke</th><th>Jenis</th><th>Tingkat</th><th>Advisory</th><th>EPSS</th><th>KEV</th><th>Tipe</th></tr></thead><tbody>';
+      groups.forEach((g, idx) => {
+        const verCol = g.items.map(i => '<div class="mono nums">' + esc(i.version) + ' → ' + (i.updateTo ? '<b>' + esc(i.updateTo) + '</b>' : '<b style="color:#b91c1c">BELUM ADA versi aman</b>') + (i.partial && i.updateTo ? ' <span title="Sebagian advisory belum punya perbaikan">⚠</span>' : '') + '</div>').join('');
+        const kindCol = g.items.map(i => '<div>' + esc(i.kind || '-') + '</div>').join('');
+        const seenAdv = new Set();
+        let advList = '', advN = 0, maxEpss = null;
+        g.items.forEach(i => i.vulns.forEach(v => {
+          if (seenAdv.has(v.id)) return; seenAdv.add(v.id); advN++;
+          if (v.epss !== null && (maxEpss === null || v.epss > maxEpss)) maxEpss = v.epss;
+          advList += '<div style="margin:3px 0">' + badge(v.severity) + ' ' + advLink(v.id) + (v.cves.length && v.cves[0] !== v.id ? ' (' + esc(v.cves.join(', ')) + ')' : '') +
+            ' — ' + esc(String(v.summary).slice(0, 140)) + (v.cwes.length ? ' <span class="mono">[' + esc(v.cwes.join(', ')) + ']</span>' : '') +
+            (v.fixed ? ' <span class="mono">fix ' + esc(v.fixed) + '</span>' : ' <span class="mono" style="color:#b91c1c">no fix</span>') + '</div>';
+        }));
+        const tipe = g.items.map(i => '<div>' + (i.dev ? 'dev' : 'prod') + (i.direct === true ? ', langsung' : i.direct === false ? ', transitif' : '') + '</div>').join('');
+        const still = g.items.filter(i => i.still.length).map(i => '<div class="mono" style="color:#b91c1c">' + esc(i.updateTo) + ' masih terdampak: ' + esc(i.still.join(', ')) + '</div>').join('');
+        html += '<tr class="' + (g.nofix ? 'nofix' : '') + '"><td>' + (idx + 1) + '</td><td><b>' + esc(g.name) + '</b><div class="mono">' + esc(g.eco) + '</div></td><td>' + verCol + still + '</td><td>' + kindCol + '</td><td>' + badge(g.sev) + '</td>' +
+          '<td><details><summary>' + advN + ' advisory</summary>' + advList + '</details></td><td>' + (maxEpss === null ? '-' : (maxEpss * 100).toFixed(1) + '%') + '</td><td>' + (g.kev ? '<b style="color:#b91c1c">YA</b>' : '-') + '</td><td>' + tipe + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      if (groups.some(g => g.nofix)) html += '<div class="note">Baris merah = package yang belum punya versi aman di data OSV. Pantau rilis upstream, ganti/hapus package, atau catat sebagai accepted risk.</div>';
+
+      const cmds = [];
+      groups.forEach(g => g.items.forEach(i => { if (i.updateTo) { const c = fixCommand(g, i); if (c && cmds.indexOf(c) < 0) cmds.push(c); } }));
+      if (cmds.length) html += '<h3>Perintah perbaikan</h3><pre>' + esc(cmds.join('\n')) + '</pre>';
+      if (groups.some(g => g.eco.startsWith('Alpine') || g.eco.startsWith('Debian'))) html += '<div class="note">Paket OS (Alpine/Debian): versi "Update ke" dihitung dari data OSV dan belum tentu tersedia di repo distro yang dipakai image. Jika base image sudah EOL atau versi tidak ditemukan saat build, naikkan tag base image.</div>';
+      return html;
+    }
+    function cards(entries) {
+      const a = countAdvisories(entries);
+      const vulnPk = groupByName(entries.filter(e => e.vulns.length)).length;
+      const nofix = groupByName(entries.filter(e => e.vulns.length && !e.updateTo)).length;
+      return '<div class="cards">' +
+        '<div class="card"><b>' + entries.length + '</b><span>package dipindai</span></div>' +
+        '<div class="card"><b>' + vulnPk + '</b><span>package rentan</span></div>' +
+        '<div class="card"><b>' + a.total + '</b><span>advisory unik</span></div>' +
+        '<div class="card c"><b>' + a.c.CRITICAL + '</b><span>Kritis</span></div>' +
+        '<div class="card h"><b>' + a.c.HIGH + '</b><span>Tinggi</span></div>' +
+        '<div class="card m"><b>' + a.c.MEDIUM + '</b><span>Sedang</span></div>' +
+        '<div class="card l"><b>' + a.c.LOW + '</b><span>Rendah</span></div>' +
+        '<div class="card"><b>' + a.kev + '</b><span>di CISA KEV</span></div>' +
+        '<div class="card"><b>' + nofix + '</b><span>tanpa versi aman</span></div></div>';
+    }
+    function csvEscape(s) { s = String(s == null ? '' : s); return '"' + s.replace(/"/g, '""') + '"'; }
+    function buildCsv(results) {
+      const rows = [['file', 'package', 'ekosistem', 'terpasang', 'update_ke', 'jenis_update', 'severity', 'advisory', 'cve', 'epss_max', 'kev', 'dev', 'langsung']];
+      results.forEach(r => (r.entries || []).concat(r.docker ? r.docker.entries : []).forEach(e => {
+        if (!e.vulns.length) return;
+        const ep = e.vulns.reduce((m, v) => (v.epss !== null && v.epss > m ? v.epss : m), 0);
+        rows.push([r.name, e.name, e.eco, e.version, e.updateTo || 'BELUM ADA', e.kind, maxSev(e.vulns.map(v => v.severity)),
+          e.vulns.map(v => v.id).join(' '), e.vulns.map(v => v.cves.join(' ')).join(' ').trim(), ep ? (ep * 100).toFixed(2) + '%' : '',
+          e.vulns.some(v => v.kev) ? 'ya' : '', e.dev ? 'dev' : 'prod', e.direct === true ? 'langsung' : e.direct === false ? 'transitif' : '']);
+      }));
+      return '\ufeff' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+    }
+    function renderDocker(r) {
+      const d = r.docker;
+      let html = '<h3>Base image</h3>';
+      if (!d.bases.length) html += '<p class="cap">Tidak ada instruksi FROM.</p>';
+      else {
+        html += '<table><thead><tr><th>Baris</th><th>Stage</th><th>Image</th><th>Tag</th><th>Status dukungan (endoflife.date)</th></tr></thead><tbody>';
+        d.bases.forEach(b => {
+          const chk = b.checks.length ? b.checks.map(c => '<div><span class="b ' + (c.status === 'eol' ? 'eolb' : c.status === 'soon' ? 'soonb' : c.status === 'ok' ? 'okb' : 'UNKNOWN') + '">' + esc(c.label + ' ' + c.ver) + '</span> ' + esc(c.note) + '</div>').join('') : '<span class="cap">Produk tidak dikenali / tag tidak memuat versi</span>';
+          html += '<tr><td>' + b.line + '</td><td>' + esc(b.stage) + '</td><td class="mono">' + esc(b.image) + '</td><td class="mono">' + esc(b.tag) + '</td><td>' + chk + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+      html += '<h3>Temuan konfigurasi Dockerfile</h3>';
+      if (!d.findings.length) html += '<p class="cap">Tidak ada temuan.</p>';
+      else {
+        html += '<table><thead><tr><th>No</th><th>Baris</th><th>Tingkat</th><th>Aturan</th><th>Detail</th><th>Saran</th></tr></thead><tbody>';
+        d.findings.forEach((f, i) => { html += '<tr><td>' + (i + 1) + '</td><td>' + f.line + '</td><td>' + badge(f.severity) + '</td><td>' + esc(f.rule) + '</td><td class="mono">' + esc(f.detail) + '</td><td>' + esc(f.fix) + '</td></tr>'; });
+        html += '</tbody></table>';
+      }
+      html += '<h3>Paket yang dipin di Dockerfile (' + d.pinned + ' paket diperiksa via OSV)</h3>';
+      html += d.entries.length ? cards(d.entries) + renderVulnTable(d.entries, 'paket Dockerfile') : '<p class="cap">Tidak ada paket berversi persis yang bisa diperiksa. Paket tanpa versi tidak dapat dicocokkan ke advisory.</p>';
+      html += '<div class="note">Batasan: pemindaian ini bersifat statis atas isi Dockerfile. Paket OS dan library yang ikut terpasang di dalam image (yang muncul di tab Vulnerabilities Harbor) hanya bisa diketahui setelah image dibangun. Untuk itu jalankan <span class="mono">scan_sca_docker.ps1 --path=&lt;Dockerfile&gt;</span>.</div>';
+      return html;
+    }
+    function buildReport(results, opts) {
+      const now = new Date().toLocaleString('id-ID');
+      let body = '<h1>Laporan Scan SCA &amp; Dockerfile</h1><div class="sub">Dibuat ' + esc(now) + ' · ' + results.length + ' file · sumber: OSV.dev' + (opts.enrich ? ', FIRST EPSS, CISA KEV' : '') + ', endoflife.date' + (opts.omitDev ? ' · devDependencies diabaikan' : '') + '</div>';
+      const all = results.reduce((a, r) => a.concat(r.entries || [], r.docker ? r.docker.entries : []), []);
+      body += cards(all);
+      results.forEach(r => {
+        body += '<h2>' + esc(r.name) + ' <span class="mono">(' + esc(TYPE_LABELS[r.type] || r.type) + ')</span></h2>';
+        if (r.error) { body += '<div class="note">Gagal diproses: ' + esc(r.error) + '</div>'; return; }
+        if (r.docker) { body += renderDocker(r); return; }
+        body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + cards(r.entries) + renderVulnTable(r.entries, r.name);
+      });
+      const csv = buildCsv(results);
+      body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">Unduh CSV</a></p>';
+      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
+    }
+
+    // ============================================================
+    //  Aplikasi Vue
+    // ============================================================
+    const { createApp } = Vue;
     const SAST_RULES = [
       { token: 'eval(', rule: 'Penggunaan eval()', severity: 'HIGH' },
       { token: 'new Function(', rule: 'Penggunaan new Function()', severity: 'HIGH' },
@@ -110,64 +922,75 @@
     createApp({
       data() {
         return {
-          tab: 'sca',
-          pkgText: '{\n  "dependencies": {\n    "lodash": "4.17.15",\n    "axios": "^0.21.0",\n    "vue": "3.5.13"\n  }\n}',
-          scaResults: [],
-          scaLoading: false,
-          scaError: '',
-          codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nsetTimeout(() => run(), 100);\nconst r = eval(expr);',
-          sastResults: [],
-          sastDone: false
+          tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
+          pasteName: '', pasteText: '', omitDev: false, enrich: true,
+          scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
+          codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
+          sastResults: [], sastDone: false
         };
       },
       methods: {
-        cleanVersion(v) {
-          return String(v).replace(/^[\^~>=<\s]+/, '');
+        log(m) { this.logs.push(m); },
+        addItem(name, text) {
+          this.items.push({ id: this.nextId++, name, text, type: detectType(name, text) });
         },
-        async scanSca() {
-          this.scaError = '';
-          this.scaResults = [];
-          let pkg;
+        async readFiles(list) {
+          for (const f of Array.from(list)) {
+            if (f.size > 20 * 1024 * 1024) { this.error = f.name + ' terlalu besar (maks 20 MB).'; continue; }
+            this.addItem(f.name, await f.text());
+          }
+        },
+        onDrop(e) { this.over = false; this.error = ''; this.readFiles(e.dataTransfer.files); },
+        onPick(e) { this.error = ''; this.readFiles(e.target.files); e.target.value = ''; },
+        addPaste() {
+          this.addItem(this.pasteName.trim() || 'tempelan-' + this.nextId, this.pasteText);
+          this.pasteText = ''; this.pasteName = '';
+        },
+        async scanItem(it, opts) {
+          const res = { name: it.name, type: it.type, entries: [], skipped: 0 };
+          const log = m => this.log(m);
           try {
-            pkg = JSON.parse(this.pkgText);
-          } catch (e) {
-            this.scaError = 'JSON tidak valid.';
-            return;
-          }
-          const deps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
-          const list = Object.keys(deps).map(name => ({ name, version: this.cleanVersion(deps[name]) }));
-          if (!list.length) {
-            this.scaError = 'Tidak ada dependencies.';
-            return;
-          }
-          this.scaLoading = true;
+            if (it.type === 'docker') { res.docker = await analyzeDocker(it.text, log, opts); return res; }
+            let pkgs;
+            if (it.type === 'npm-lock') pkgs = parseNpmLock(it.text);
+            else if (it.type === 'npm-pkg') pkgs = parseNpmPackageJson(it.text);
+            else if (it.type === 'composer') pkgs = parseComposerLock(it.text);
+            else if (it.type === 'nuget-lock') pkgs = parseNugetLock(it.text);
+            else if (it.type === 'nuget-proj') pkgs = parseCsproj(it.text);
+            else throw new Error('Jenis file tidak dikenali. Pilih jenis secara manual.');
+            if (opts.omitDev) { const n = pkgs.length; pkgs = pkgs.filter(p => !p.dev); res.skipped = n - pkgs.length; }
+            log(it.name + ': ' + pkgs.length + ' package terbaca');
+            if (!pkgs.length) throw new Error('Tidak ada package yang terbaca dari file ini.');
+            res.entries = await scanPackages(pkgs, log, opts);
+          } catch (e) { res.error = e.message; }
+          return res;
+        },
+        async runScan() {
+          // buka tab dulu (sinkron saat klik) supaya tidak diblokir popup blocker
+          const w = window.open('', '_blank');
+          this.scanning = true; this.error = ''; this.logs = [];
+          const opts = { omitDev: this.omitDev, enrich: this.enrich };
           try {
-            const res = await fetch('https://api.osv.dev/v1/querybatch', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                queries: list.map(d => ({ package: { name: d.name, ecosystem: 'npm' }, version: d.version }))
-              })
-            });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            this.scaResults = list.map((d, i) => ({
-              ...d,
-              vulns: ((data.results[i] && data.results[i].vulns) || []).map(v => v.id)
-            }));
+            const results = [];
+            for (const it of this.items) { this.log('== ' + it.name); results.push(await this.scanItem(it, opts)); }
+            const html = buildReport(results, opts);
+            if (this.reportUrl) URL.revokeObjectURL(this.reportUrl);
+            this.reportUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+            const d = new Date(), p = n => String(n).padStart(2, '0');
+            this.reportName = d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + '_laporan_scan.html';
+            this.log('Selesai. Laporan siap.');
+            if (w) w.location.href = this.reportUrl;
+            else this.log('Popup diblokir browser: klik "Buka laporan lagi".');
           } catch (e) {
-            this.scaError = 'Gagal menghubungi OSV.dev: ' + e.message;
-          } finally {
-            this.scaLoading = false;
-          }
+            this.error = 'Scan gagal: ' + e.message;
+            if (w) w.close();
+          } finally { this.scanning = false; }
         },
         scanSast() {
           const findings = [];
           this.codeText.split('\n').forEach((line, idx) => {
             SAST_RULES.forEach(r => {
-              if (line.includes(r.token)) {
-                findings.push({ line: idx + 1, rule: r.rule, severity: r.severity, snippet: line.trim() });
-              }
+              if (line.includes(r.token)) findings.push({ line: idx + 1, rule: r.rule, severity: r.severity, snippet: line.trim() });
             });
           });
           this.sastResults = findings;
