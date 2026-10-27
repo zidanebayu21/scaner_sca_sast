@@ -1245,6 +1245,58 @@
     // ============================================================
     //  Laporan HTML
     // ============================================================
+    // Penjelasan yang muncul saat kursor diarahkan ke judul kolom / kartu / label tingkat di laporan
+    const TIPS = {
+      'No': 'Nomor urut. Pada tabel SCA, satu baris = satu package yang perlu diperbarui.',
+      'Package': 'Nama package beserta ekosistemnya (npm, Maven, PyPI, crates.io, Go, dll.).',
+      'Terpasang → Update ke': 'Versi yang terpasang sekarang → versi aman minimal. Versi aman dihitung dari data OSV lalu dicek ulang ke OSV. Baris merah berarti belum ada versi yang bersih.',
+      'Jenis': 'Seberapa besar lompatan versinya. patch (x.y.Z): perbaikan kecil, biasanya aman. minor (x.Y.0): fitur baru yang masih kompatibel. major (X.0.0): bisa mengubah perilaku, uji dulu sebelum update.',
+      'Tingkat': 'Keparahan tertinggi di antara semua advisory package ini, berdasarkan skor CVSS: Kritis 9.0-10, Tinggi 7.0-8.9, Sedang 4.0-6.9, Rendah 0.1-3.9.',
+      'CVE': 'Common Vulnerabilities and Exposures: nomor ID publik standar untuk satu kerentanan (format CVE-tahun-nomor). Klik untuk membaca detailnya di NVD.',
+      'CWE': 'Common Weakness Enumeration: jenis kelemahan yang menjadi penyebab, mis. CWE-79 = XSS, CWE-1321 = prototype pollution, CWE-400 = konsumsi sumber daya berlebih. Klik untuk definisinya.',
+      'Advisory': 'Laporan kerentanan dari database keamanan (GHSA = GitHub Security Advisory, dll.) berisi ringkasan dan versi perbaikan. Klik jumlahnya untuk melihat daftar.',
+      'EPSS': 'Exploit Prediction Scoring System (FIRST.org): perkiraan peluang kerentanan ini dieksploitasi dalam 30 hari ke depan. Nilai tertinggi dari semua CVE package ini. Di atas 10% sebaiknya didahulukan.',
+      'KEV': 'CISA Known Exploited Vulnerabilities: YA berarti kerentanan ini sudah terbukti dieksploitasi penyerang di dunia nyata. Prioritaskan perbaikannya.',
+      'Tipe': 'prod = dipakai di aplikasi yang berjalan, dev = hanya untuk development/test. Langsung = dependency yang Anda tulis sendiri, transitif = ikut terbawa package lain.',
+      'Baris': 'Nomor baris di file sumber (Dockerfile).',
+      'Stage': 'Nama tahap build bertingkat (FROM ... AS nama). Tanda - berarti tahap tanpa nama.',
+      'Image': 'Nama base image yang dipakai pada instruksi FROM.',
+      'Tag': 'Versi/varian image. Tag latest atau tanpa tag berubah-ubah dan tidak bisa direproduksi.',
+      'Status dukungan (endoflife.date)': 'Apakah versi ini masih mendapat patch keamanan. EOL (End Of Life) = sudah tidak dirawat vendor, naikkan versinya.',
+      'Aturan': 'Aturan keamanan/praktik terbaik Dockerfile yang dilanggar.',
+      'Detail': 'Potongan nilai/kode yang memicu temuan.',
+      'Saran': 'Langkah perbaikan yang disarankan.',
+      'Header': 'Nama HTTP header respons yang diperiksa.',
+      'Temuan': 'Masalah yang ditemukan pada header tersebut.',
+      'Kelompok': 'Jenis pemeriksaan yang memakai API ini (SCA, Dockerfile, DAST pasif, dst.).',
+      'API': 'Layanan publik yang dipanggil dari browser Anda.',
+      'Endpoint': 'Alamat API yang dipanggil.',
+      'Tujuan': 'Untuk apa API ini dipakai.',
+      'Data yang dikirim': 'Data yang keluar dari browser Anda ke layanan ini. Isi file tidak dikirim, hanya data pada kolom ini.',
+      'Panggilan': 'Jumlah request pada sesi ini (berhasil / gagal).',
+      'package dipindai': 'Jumlah package unik (nama + versi) yang diperiksa.',
+      'package rentan': 'Package yang punya minimal satu advisory.',
+      'advisory unik': 'Jumlah laporan kerentanan berbeda (duplikat antar-package dihitung sekali).',
+      'Kritis': 'CVSS 9.0-10.0. Bisa dieksploitasi dengan dampak sangat besar; perbaiki segera.',
+      'Tinggi': 'CVSS 7.0-8.9. Dampak besar; jadwalkan perbaikan cepat.',
+      'Sedang': 'CVSS 4.0-6.9. Perlu syarat tertentu agar bisa dieksploitasi.',
+      'Rendah': 'CVSS 0.1-3.9. Dampak kecil atau sulit dieksploitasi.',
+      'di CISA KEV': 'Jumlah advisory yang CVE-nya masuk daftar CISA KEV (sudah dieksploitasi di dunia nyata).',
+      'tanpa versi aman': 'Package yang belum punya versi perbaikan. Pantau rilis upstream, ganti package, atau catat sebagai accepted risk.',
+      'nilai Observatory': 'Nilai A+ sampai F dari MDN HTTP Observatory berdasarkan kelengkapan header keamanan situs.',
+      'tes Observatory lulus': 'Jumlah tes header keamanan Observatory yang lulus dari total tes.'
+    };
+    function tipify(html) {
+      const attr = t => esc(t);
+      return html
+        .replace(/<th>([^<]*)<\/th>/g, (all, label) => (TIPS[label] ? '<th data-tip="' + attr(TIPS[label]) + '">' + label + '</th>' : all))
+        .replace(/(<div class="card[^"]*"[^>]*)>(<b[^>]*>[^<]*<\/b><span>)([^<]+)(<\/span>)/g, (all, a, b, label, c) => {
+          const key = label.replace(/\s*\(\d+\/100\)\s*$/, '');
+          return TIPS[key] ? a + ' data-tip="' + attr(TIPS[key]) + '">' + b + label + c : all;
+        });
+    }
+    const HINT = '<div class="cap">Arahkan kursor ke judul kolom, kartu, atau label tingkat untuk melihat artinya.</div>';
+
     const REPORT_CSS = `
       body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;background:#f8fafc}
       h1{margin:0 0 4px;font-size:24px} h2{margin:32px 0 6px;font-size:19px;border-bottom:2px solid #1e40af;padding-bottom:4px}
@@ -1270,8 +1322,12 @@
       pre{background:#0f172a;color:#e2e8f0;padding:12px;border-radius:6px;overflow:auto;font-size:12px}
       .note{background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;font-size:13px;margin:10px 0}
       a{color:#1d4ed8}
+      th[data-tip]{position:relative;cursor:help;text-decoration:underline dotted rgba(255,255,255,.65);text-underline-offset:3px}
+      th[data-tip]:hover::after,.card[data-tip]:hover::after,.b[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:0;top:100%;z-index:20;width:300px;max-width:80vw;white-space:normal;text-align:left;text-decoration:none;font-family:Segoe UI,Arial,sans-serif;font-weight:400;font-size:12px;line-height:1.5;color:#f1f5f9;background:#0f172a;padding:8px 11px;border-radius:6px;box-shadow:0 6px 18px rgba(15,23,42,.35);margin-top:4px}
+      th[data-tip]:nth-last-child(-n+3):hover::after{left:auto;right:0}
+      .card[data-tip],.b[data-tip]{position:relative;cursor:help}
     `;
-    function badge(sev) { return '<span class="b ' + sev + '">' + esc(SEV_ID[sev] || sev) + '</span>'; }
+    function badge(sev) { return '<span class="b ' + sev + '"' + (TIPS[SEV_ID[sev]] ? ' data-tip="' + esc(TIPS[SEV_ID[sev]]) + '"' : '') + '>' + esc(SEV_ID[sev] || sev) + '</span>'; }
     function advLink(id, url) {
       const u = url || (id.startsWith('CVE-') ? 'https://nvd.nist.gov/vuln/detail/' + id : 'https://osv.dev/vulnerability/' + id);
       return '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(id) + '</a>';
@@ -1420,7 +1476,7 @@
         used.map(a => '<tr><td>' + esc(gname[a.group]) + '</td><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.use) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
       body += '<div class="note">Sumber CVE/CWE: data OSV (GHSA dan alias NVD). Temuan yang hanya ada di database berbayar/privat (mis. Sonatype) tidak ikut; untuk itu gunakan <span class="mono">scan_sca.ps1</span>.</div>';
       body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">Unduh CSV</a></p>';
-      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
+      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + HINT + tipify(body) + '</body></html>';
     }
 
     // ============================================================
@@ -1764,7 +1820,7 @@
       const used = API_LIST.filter(a => a.group === 'dast' && apiStats[a.key].calls);
       body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
         used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
-      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan DAST Pasif</title><style>' + REPORT_CSS + '</style></head><body>' + body + '</body></html>';
+      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan DAST Pasif</title><style>' + REPORT_CSS + '</style></head><body>' + HINT + tipify(body) + '</body></html>';
     }
 
     // ============================================================
