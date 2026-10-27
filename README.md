@@ -18,6 +18,8 @@ Buka `index.html` di browser (tidak perlu build / server).
 
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
 
+**Sonatype Guide (opsional)**: buka panel Sonatype di bawah daftar file, login ke guide.sonatype.com, buat token (Settings → User Tokens), lalu isi email + token dan klik Tes koneksi. Server Sonatype tidak mengirim header CORS, jadi panggilannya lewat proxy lokal: `node sonatype-proxy.js` (file ada di repo ini dan bisa diunduh dari panel). Token disimpan di localStorage browser Anda bila Anda klik "Simpan"; token tidak ada di kode.
+
 ---
 
 # Vibe Code Contest November 2026
