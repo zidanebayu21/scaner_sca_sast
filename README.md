@@ -24,7 +24,7 @@ Tab **API Debug (HKDF)** berisi **Hook tab lain**: untuk endpoint yang pakai enk
 
 Tab **JWT Decode** menampilkan header, payload, dan status exp/nbf/iat token JWT langsung di browser (signature tidak diverifikasi).
 
-Tab **Rate Limiter (dari curl)**: seperti Postman, khusus cek rate limiter. Tempel curl satu endpoint, tentukan jumlah & jeda, lalu pasang skrip yang dihasilkan di tab aplikasi target (sama prinsipnya dengan Hook: same-origin, cookie sesi ikut otomatis, tidak kena CORS). Panel di tab target mencatat status, waktu, dan header `Retry-After` tiap percobaan, dengan tombol stop dan salin CSV. Hanya untuk sistem yang Anda berwenang menguji.
+Tab **Rate Limiter (dari curl)**: seperti Postman, khusus cek rate limiter. Tempel curl satu endpoint, tentukan jumlah & jeda. **Opsi 1 — hit langsung dari halaman ini**: paling simpel, jalan kalau server mengizinkan CORS (cookie sesi tidak ikut, cocok untuk endpoint berotentikasi header/token). **Opsi 2 — skrip di tab aplikasi target**: untuk endpoint yang diblokir CORS atau butuh cookie sesi, sama prinsipnya dengan Hook (same-origin). Kedua opsi mencatat status, waktu, dan header `Retry-After` tiap percobaan, dengan tombol stop dan salin CSV. Hanya untuk sistem yang Anda berwenang menguji.
 
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
 

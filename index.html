@@ -79,7 +79,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.31</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.32</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -367,8 +367,25 @@
           <label>Jumlah request <input type="number" v-model.number="rl.count" min="1" max="300" style="max-width:90px" /></label>
           <label>Jeda antar request (ms) <input type="number" v-model.number="rl.delay" min="0" max="5000" style="max-width:100px" /></label>
         </div>
+
+        <h3 style="margin-top:20px">Opsi 1 — Hit langsung dari halaman ini</h3>
+        <p class="muted">Paling simpel, tidak perlu tempel skrip ke tab lain. Jalan selama server mengizinkan CORS dari origin halaman ini; kalau tidak, pakai Opsi 2 di bawah. Cookie sesi browser <b>tidak</b> ikut terkirim dari sini (beda tab/origin) — cocok untuk endpoint yang otentikasinya lewat header seperti API key/Bearer token yang sudah ada di curl.</p>
+        <div class="actions">
+          <button class="btn" :disabled="rl.busy || !rl.url.trim()" @click="runRateDirect">{{ rl.busy ? 'Menjalankan...' : 'Jalankan di sini' }}</button>
+          <button class="btn gray" v-if="rl.busy" @click="rl.stop = true">Stop</button>
+          <button class="btn gray" v-if="rl.results.length" @click="copyRateCsv">{{ rl.csvCopied ? 'Tersalin' : 'Salin CSV' }}</button>
+        </div>
+        <div class="muted" v-if="rl.results.length">{{ rl.results.length }} / {{ rl.count }} · {{ rateCounts }}</div>
+        <div class="log" v-if="rl.results.length" style="max-height:220px;overflow:auto">
+          <div v-for="r in [...rl.results].reverse()" :key="r.i" :class="r.status === 429 ? 'sev-MEDIUM' : (r.status === 'error' || r.status >= 400) ? 'sev-HIGH' : 'ok'">
+            #{{ r.i }} {{ r.status }} · {{ r.ms }}ms<span v-if="r.retryAfter"> · Retry-After: {{ r.retryAfter }}</span>
+          </div>
+        </div>
+
+        <h3 style="margin-top:20px">Opsi 2 — Skrip di tab aplikasi target</h3>
+        <p class="muted">Kalau Opsi 1 diblokir CORS atau butuh cookie sesi, pasang skrip ini di tab aplikasi target (seperti tab Hook): jalan <i>same-origin</i>, cookie ikut otomatis.</p>
         <template v-if="rateScript">
-          <textarea readonly :value="rateScript" style="min-height:80px;font-size:11px;margin-top:8px"></textarea>
+          <textarea readonly :value="rateScript" style="min-height:80px;font-size:11px"></textarea>
           <div class="actions">
             <button class="btn gray" @click="copyRateScript">{{ rl.copied ? 'Tersalin' : 'Salin skrip' }}</button>
             <a class="btn blue" :href="rateBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="rl.msg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">📌 Seret ke bookmark</a>
@@ -376,7 +393,7 @@
           <div class="muted" v-if="rl.msg" style="color:#f59e0b">{{ rl.msg }}</div>
         </template>
         <div class="muted" style="margin-top:6px">
-          Panel hasil muncul di pojok kiri-bawah tab target (supaya tidak bertumpuk dengan panel Hook di kanan-bawah), dengan tombol stop dan salin CSV.
+          Panel di tab target muncul di pojok kiri-bawah (supaya tidak bertumpuk dengan panel Hook di kanan-bawah), dengan tombol stop dan salin CSV di sana juga.
         </div>
       </section>
     </main>
@@ -2285,6 +2302,8 @@
     //  Mengulang SATU request apa adanya sejumlah kali dengan jeda yang ditentukan,
     //  lalu menampilkan status/waktu/header Retry-After tiap percobaan.
     // ============================================================
+    // Header yang tidak bisa (atau tidak perlu) diset manual lewat fetch() dari halaman ini.
+    const RATE_FORBIDDEN_HDR = /^(cookie2?|user-agent|referer|origin|host|connection|content-length|date|dnt|expect|te|trailer|transfer-encoding|upgrade|via|keep-alive|accept-encoding|accept-charset|sec-.*|proxy-.*)$/i;
     function buildRateScript(cfg) {
       const headers = {};
       cfg.headers.forEach(([k, v]) => { headers[k] = v; });
@@ -2400,7 +2419,7 @@
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
           hk: { serverPem: '', clientPub: '', clientPriv: '', salt: '', saltEnc: 'utf8', info: '', infoEnc: 'utf8', len: 32, secret: '', okm: '', input: '', aad: '', iv: '', output: '', token: '', parts: '', error: '' },
           hookCopied: false, hookMsg: '',
-          rl: { curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '' },
+          rl: { curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -2414,6 +2433,14 @@
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
         rateScript() { return this.rl.url.trim() ? buildRateScript(this.rl) : ''; },
         rateBookmarklet() { return this.rateScript ? 'javascript:' + encodeURIComponent(this.rateScript) : ''; },
+        rateCounts() {
+          const c = {};
+          this.rl.results.forEach(r => {
+            const key = r.status === 'error' ? 'error' : r.status === 429 ? '429' : r.status >= 500 ? '5xx' : r.status >= 400 ? '4xx' : '2xx/3xx';
+            c[key] = (c[key] || 0) + 1;
+          });
+          return Object.entries(c).map(([k, n]) => k + ':' + n).join('  ');
+        },
         activeItems() { return this.items.filter(it => it.enabled); },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
@@ -2451,6 +2478,29 @@
           navigator.clipboard.writeText(this.rateScript)
             .then(() => { this.rl.copied = true; setTimeout(() => { this.rl.copied = false; }, 2000); })
             .catch(() => { this.rl.msg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
+        },
+        async runRateDirect() {
+          const rl = this.rl, headers = {};
+          rl.headers.forEach(([k, v]) => { if (!RATE_FORBIDDEN_HDR.test(k)) headers[k] = v; });
+          const noBody = rl.method === 'GET' || rl.method === 'HEAD' || !rl.body;
+          rl.busy = true; rl.stop = false; rl.results = [];
+          for (let i = 1; i <= rl.count && !rl.stop; i++) {
+            const t0 = performance.now();
+            try {
+              const res = await fetch(rl.url, { method: rl.method, headers, body: noBody ? undefined : rl.body, credentials: 'omit' });
+              rl.results.push({ i, status: res.status, ms: Math.round(performance.now() - t0), retryAfter: res.headers.get('retry-after') });
+            } catch (e) {
+              rl.results.push({ i, status: 'error', ms: Math.round(performance.now() - t0), error: e.message });
+            }
+            if (i < rl.count && rl.delay && !rl.stop) await new Promise(r => setTimeout(r, rl.delay));
+          }
+          rl.busy = false;
+        },
+        copyRateCsv() {
+          const lines = ['index,status,ms,retry_after', ...this.rl.results.map(r => [r.i, r.status, r.ms, r.retryAfter || ''].join(','))];
+          navigator.clipboard.writeText(lines.join('\n'))
+            .then(() => { this.rl.csvCopied = true; setTimeout(() => { this.rl.csvCopied = false; }, 2000); })
+            .catch(() => { this.rl.msg = 'Gagal menyalin ke clipboard.'; });
         },
         async genHkKeys() {
           try {
