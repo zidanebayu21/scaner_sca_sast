@@ -79,7 +79,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.25</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.26</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -345,6 +345,23 @@
           <pre class="json">{{ dbg.res.headerText }}</pre>
           <pre class="json" style="margin-top:8px">{{ dbg.res.pretty }}</pre>
         </template>
+
+        <h2 style="margin-top:28px">Hook tab lain (live, mudah dibaca)</h2>
+        <p class="muted">Untuk endpoint yang memakai enkripsi sekali pakai per-request (ECDH ephemeral), curl lama <b>tidak bisa dipakai ulang</b> walau header lengkap — kuncinya hanya hidup sesaat di memori tab asli. Cara yang benar: pasang skrip ini di tab aplikasi target; panel kecil muncul di sana dan mencatat tiap request/response apa adanya, saat Anda memakai aplikasinya seperti biasa.</p>
+        <ol class="muted" style="margin:0 0 10px 18px;padding:0">
+          <li>Buka tab aplikasi target, tekan F12 → tab <b>Console</b>, tempel skrip di bawah lalu Enter.</li>
+          <li>Atau seret tombol <b>📌 Seret ke bookmark</b> ke bilah bookmark sekali saja; setelah itu tinggal klik dari bilah bookmark saat berada di tab target, bisa dipakai berkali-kali tanpa buka Console.</li>
+          <li>Panel muncul di pojok kanan bawah tab target. Tiap request tercatat otomatis; klik ✕ di panel untuk berhenti.</li>
+        </ol>
+        <textarea readonly :value="hookScript" style="min-height:90px;font-size:11px"></textarea>
+        <div class="actions">
+          <button class="btn gray" @click="copyHookScript">{{ hookCopied ? 'Tersalin' : 'Salin skrip' }}</button>
+          <a class="btn blue" :href="hookBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="hookMsg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">📌 Seret ke bookmark</a>
+        </div>
+        <div class="muted" v-if="hookMsg" style="color:#f59e0b">{{ hookMsg }}</div>
+        <div class="muted" style="margin-top:6px">
+          Panel punya centang "samarkan" untuk menyembunyikan nilai panjang mirip token/secret (ditampilkan ringkas, bisa dibuka lagi) supaya enak dibaca sekaligus aman saat berbagi layar. Semua murni di tab target; tidak ada yang dikirim ke tab scanner ini atau ke server mana pun.
+        </div>
 
         <h2 style="margin-top:28px">Lab HKDF (ECDH P-256 → HKDF-SHA256 → AES-GCM)</h2>
         <p class="muted">Semua dihitung di browser (WebCrypto). Isi parameter <i>salt</i> / <i>info</i> sesuai implementasi aplikasi Anda; kunci hasil turunan bisa diedit/ditempel untuk uji enkripsi dan dekripsi.</p>
@@ -2188,6 +2205,97 @@
       return lines.join('\n');
     }
 
+    // ============================================================
+    //  Skrip "Hook tab lain": dipasang lewat console/bookmarklet DI TAB TARGET (bukan di sini).
+    //  Menyadap fetch/XHR + SubtleCrypto.decrypt supaya request & hasil dekripsi asli terbaca
+    //  apa adanya, sesaat setelah aplikasi target memanggilnya sendiri dengan key ephemeral-nya.
+    //  Jalan di console: CSP halaman target tidak berlaku untuk kode yang dieksekusi dari sana.
+    // ============================================================
+    const HOOK_SCRIPT = [
+      '(function () {',
+      '  if (window.__apiHook) window.__apiHook.close();',
+      "  var MASK_RE = /[A-Za-z0-9_-]{24,}/g;",
+      '  function mask(s, on) { return on ? String(s).replace(MASK_RE, function (m) { return m.slice(0, 6) + "…(" + m.length + ")"; }) : s; }',
+      '  function pretty(t) { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (e) { return t; } }',
+      '  function mkBtn(label, fn) {',
+      '    var b = document.createElement("button"); b.textContent = label;',
+      '    Object.assign(b.style, { background: "#334155", color: "#e2e8f0", border: "none", borderRadius: "4px", padding: "3px 8px", cursor: "pointer", fontSize: "11px" });',
+      '    b.onclick = fn; return b;',
+      '  }',
+      '  var panel = document.createElement("div");',
+      '  Object.assign(panel.style, { position: "fixed", right: "12px", bottom: "12px", width: "420px", maxHeight: "70vh", background: "#0f172a", color: "#e2e8f0", font: "12px/1.4 Consolas,monospace", border: "1px solid #334155", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,.4)", zIndex: 2147483647, display: "flex", flexDirection: "column" });',
+      '  var head = document.createElement("div");',
+      '  Object.assign(head.style, { display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderBottom: "1px solid #334155", background: "#1e293b", borderRadius: "8px 8px 0 0" });',
+      '  var title = document.createElement("b"); title.textContent = "API Hook"; title.style.flex = "1";',
+      '  var maskChk = document.createElement("input"); maskChk.type = "checkbox"; maskChk.checked = true;',
+      '  var maskLbl = document.createElement("label"); maskLbl.append(maskChk, document.createTextNode(" samarkan"));',
+      '  var body = document.createElement("div");',
+      '  Object.assign(body.style, { overflow: "auto", padding: "8px 10px" });',
+      '  var allRecs = [];',
+      '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); allRecs.length = 0; count = 0; });',
+      '  var closeBtn = mkBtn(String.fromCharCode(10005), function () { restore(); panel.remove(); });',
+      '  maskChk.onchange = function () { allRecs.forEach(render); };',
+      '  head.append(title, maskLbl, clearBtn, closeBtn);',
+      '  panel.append(head, body);',
+      '  document.body.appendChild(panel);',
+      '  var count = 0;',
+      '  function addEntry(method, url) {',
+      '    count++;',
+      '    var box = document.createElement("div");',
+      '    Object.assign(box.style, { marginBottom: "8px", padding: "6px 8px", background: "#111c33", borderRadius: "6px", border: "1px solid #1e293b" });',
+      '    var h = document.createElement("div"); h.style.color = "#60a5fa"; h.style.marginBottom = "4px";',
+      '    h.textContent = "#" + count + " " + method + " " + String(url).replace(location.origin, "");',
+      '    var pre = document.createElement("pre");',
+      '    Object.assign(pre.style, { whiteSpace: "pre-wrap", wordBreak: "break-all", margin: "0", color: "#94a3b8" });',
+      '    pre.textContent = "menunggu" + String.fromCharCode(8230);',
+      '    box.append(h, pre);',
+      '    body.insertBefore(box, body.firstChild);',
+      '    return pre;',
+      '  }',
+      '  function render(rec) {',
+      '    var parts = [];',
+      '    if (rec.reqBody) parts.push("» kirim: " + mask(String(rec.reqBody), maskChk.checked));',
+      '    if (rec.plain) parts.push("« dekripsi: " + mask(pretty(rec.plain), maskChk.checked));',
+      '    else if (rec.resBody != null) parts.push("« respons: " + mask(pretty(rec.resBody), maskChk.checked).slice(0, 4000));',
+      '    rec.slot.textContent = parts.join("\\n") || "(tidak ada body)";',
+      '  }',
+      '  var pending = [];',
+      '  var origFetch = window.fetch;',
+      '  window.fetch = function (input, init) {',
+      '    var url = typeof input === "string" ? input : input.url;',
+      '    var method = (init && init.method) || "GET";',
+      '    var rec = { url: url, slot: addEntry(method, url), reqBody: init && init.body, plain: null };',
+      '    pending.push(rec); allRecs.push(rec);',
+      '    var p = origFetch.apply(this, arguments);',
+      '    p.then(function (res) { try { res.clone().text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }); } catch (e) {} });',
+      '    return p;',
+      '  };',
+      '  var OrigOpen = XMLHttpRequest.prototype.open, OrigSend = XMLHttpRequest.prototype.send;',
+      '  XMLHttpRequest.prototype.open = function (method, url) { this.__hookUrl = url; this.__hookMethod = method; return OrigOpen.apply(this, arguments); };',
+      '  XMLHttpRequest.prototype.send = function (reqBody) {',
+      '    var self = this;',
+      '    var rec = { url: this.__hookUrl, slot: addEntry(this.__hookMethod, this.__hookUrl), reqBody: reqBody, plain: null };',
+      '    pending.push(rec); allRecs.push(rec);',
+      '    this.addEventListener("loadend", function () { try { if (!rec.plain) { rec.resBody = self.responseText; render(rec); } } catch (e) {} });',
+      '    return OrigSend.apply(this, arguments);',
+      '  };',
+      '  var protoSubtle = SubtleCrypto.prototype, origDecrypt = protoSubtle.decrypt;',
+      '  protoSubtle.decrypt = function () {',
+      '    var args = arguments;',
+      '    return origDecrypt.apply(this, args).then(function (r) {',
+      '      try {',
+      '        var text = new TextDecoder().decode(r);',
+      '        var rec = pending[pending.length - 1];',
+      '        if (rec && text) { rec.plain = text; render(rec); }',
+      '      } catch (e) {}',
+      '      return r;',
+      '    });',
+      '  };',
+      '  function restore() { window.fetch = origFetch; XMLHttpRequest.prototype.open = OrigOpen; XMLHttpRequest.prototype.send = OrigSend; protoSubtle.decrypt = origDecrypt; }',
+      '  window.__apiHook = { close: function () { restore(); panel.remove(); } };',
+      '})();'
+    ].join('\n');
+
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
     const DEFAULT_PROJECT = 'Tanpa nama';
@@ -2243,6 +2351,7 @@
           dbgMethods: DBG_METHODS,
           dbg: { curl: '', method: 'GET', url: '', headers: [], body: '', mode: 'proxy', proxy: 'http://127.0.0.1:8788', insecure: true, busy: false, error: '', sent: null, res: null, copied: false },
           hk: { serverPem: '', clientPub: '', clientPriv: '', salt: '', saltEnc: 'utf8', info: '', infoEnc: 'utf8', len: 32, secret: '', okm: '', input: '', aad: '', iv: '', output: '', token: '', parts: '', error: '' },
+          hookCopied: false, hookMsg: '',
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -2252,6 +2361,8 @@
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
         jwt() { return decodeJwt(this.jwtText); },
+        hookScript() { return HOOK_SCRIPT; },
+        hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
         dbgPublicKey() {
           try { return JSON.parse(this.dbg.res.body).public_key || ''; } catch (e) { return ''; }
         },
@@ -2279,6 +2390,11 @@
       methods: {
         log(m) { this.logs.push(m); },
         dbgBlocked(name) { return FORBIDDEN_HDR.test(name.trim()); },
+        copyHookScript() {
+          navigator.clipboard.writeText(HOOK_SCRIPT)
+            .then(() => { this.hookCopied = true; setTimeout(() => { this.hookCopied = false; }, 2000); })
+            .catch(() => { this.hookMsg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
+        },
         parseDbgCurl() {
           if (!/^\s*curl\b/.test(this.dbg.curl)) return;
           const r = parseCurl(this.dbg.curl);
