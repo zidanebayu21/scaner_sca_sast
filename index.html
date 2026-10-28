@@ -114,7 +114,14 @@
 
       <!-- SCA + Docker -->
       <section v-if="tab === 'sca'">
-        <div class="drop" :class="{ over: over }"
+        <div class="row" style="margin-bottom:10px">
+          <input type="text" v-model="project" list="project-names" placeholder="Nama project (mis. aplikasi-hrd). Kosong = nama repo untuk link, atau 'Tanpa nama'" />
+          <datalist id="project-names"><option v-for="p in projectNames" :key="p" :value="p"></option></datalist>
+        </div>
+        <div class="muted" style="margin:-4px 0 10px">
+          File tersimpan di browser ini (localStorage). Mengunggah file yang sama untuk nama project yang sama akan menggantikan yang lama.
+        </div>
+        <div class="drop":class="{ over: over }"
              @dragover.prevent="over = true" @dragleave.prevent="over = false"
              @drop.prevent="onDrop" @click="$refs.file.click()">
           <div><b>Seret &amp; lepas file di sini</b> atau klik untuk memilih</div>
@@ -142,9 +149,11 @@
         </div>
 
         <table v-if="items.length">
-          <thead><tr><th>File</th><th>Jenis</th><th>Ukuran</th><th></th></tr></thead>
+          <thead><tr><th title="Ikut di-scan">Scan</th><th>Project</th><th>File</th><th>Jenis</th><th>Ukuran</th><th></th></tr></thead>
           <tbody>
-            <tr v-for="(it, i) in items" :key="it.id">
+            <tr v-for="(it, i) in items" :key="it.id" :style="it.enabled ? '' : 'opacity:.5'">
+              <td><input type="checkbox" v-model="it.enabled" :title="it.enabled ? 'Nonaktifkan (tidak di-scan, tidak dihapus)' : 'Aktifkan'" /></td>
+              <td>{{ it.project }}</td>
               <td>{{ it.name }}</td>
               <td>
                 <select v-model="it.type">
@@ -199,7 +208,7 @@
         </div>
 
         <div class="actions">
-          <button class="btn" :disabled="scanning || !items.length" @click="runScan">{{ scanning ? 'Memindai...' : 'Scan & buka laporan' }}</button>
+          <button class="btn" :disabled="scanning || !activeItems.length" @click="runScan">{{ scanning ? 'Memindai...' : 'Scan & buka laporan' + (activeItems.length < items.length ? ' (' + activeItems.length + ' aktif)' : '') }}</button>
           <a v-if="reportUrl" class="btn blue" :href="reportUrl" target="_blank">Buka laporan lagi</a>
           <a v-if="reportUrl" class="btn gray" :href="reportUrl" :download="reportName">Unduh HTML</a>
           <span class="bad" v-if="error">{{ error }}</span>
@@ -1839,13 +1848,23 @@
       { token: 'http://', rule: 'URL tanpa HTTPS', severity: 'LOW', fix: 'Gunakan https:// agar lalu lintas terenkripsi.' }
     ];
 
+    const ITEMS_KEY = 'scaItems';
+    const DEFAULT_PROJECT = 'Tanpa nama';
+    // Nama project dari link repo: segmen terakhir sebelum /-/, /blob/, atau /tree/.
+    function projectFromLink(link) {
+      try {
+        const path = new URL(link).pathname.split(/\/(?:-\/|blob\/|tree\/)/)[0];
+        return path.split('/').filter(Boolean).pop().replace(/\.git$/, '') || DEFAULT_PROJECT;
+      } catch (e) { return DEFAULT_PROJECT; }
+    }
+
     createApp({
       data() {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
-          pasteName: '', pasteText: '', omitDev: false, enrich: true,
+          project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false
@@ -1853,11 +1872,24 @@
       },
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
+        activeItems() { return this.items.filter(it => it.enabled); },
+        projectNames() { return [...new Set(this.items.map(it => it.project))]; },
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
       },
       created() {
         // Hapus token Sonatype yang pernah tersimpan oleh versi sebelumnya.
         try { localStorage.removeItem('scaSonatype'); } catch (e) { /* localStorage tidak tersedia: abaikan */ }
+        try {
+          const saved = JSON.parse(localStorage.getItem(ITEMS_KEY) || '[]');
+          if (Array.isArray(saved)) {
+            this.items = saved.filter(it => it && it.name && typeof it.text === 'string')
+              .map(it => ({ ...it, project: it.project || DEFAULT_PROJECT, enabled: it.enabled !== false }));
+            this.nextId = this.items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
+          }
+        } catch (e) { /* data rusak / localStorage tidak tersedia: mulai kosong */ }
+      },
+      watch: {
+        items: { deep: true, handler() { this.saveItems(); } }
       },
       methods: {
         log(m) { this.logs.push(m); },
@@ -1933,15 +1965,24 @@
             try {
               log('== ' + link);
               const files = await fetchFromUrl(link, this.token.trim(), log);
-              files.forEach(f => { this.addItem(f.name, f.text); added++; });
+              files.forEach(f => { this.addItem(f.name, f.text, this.project.trim() || projectFromLink(link)); added++; });
             } catch (e) { log('GAGAL: ' + e.message); }
           }
           log(added ? added + ' file ditambahkan ke daftar. Klik "Scan & buka laporan".' : 'Tidak ada file yang ditambahkan.');
           if (added) this.urlText = '';
           this.urlBusy = false;
         },
-        addItem(name, text) {
-          this.items.push({ id: this.nextId++, name, text, type: detectType(name, text) });
+        // Kunci unik = project + nama file (tanpa beda huruf besar/kecil); duplikat menggantikan yang lama.
+        addItem(name, text, project) {
+          const proj = (project || this.project).trim() || DEFAULT_PROJECT;
+          const same = x => x.project.toLowerCase() === proj.toLowerCase() && x.name.toLowerCase() === name.toLowerCase();
+          const old = this.items.find(same);
+          const fresh = { id: old ? old.id : this.nextId++, project: proj, name, text, type: detectType(name, text), enabled: old ? old.enabled : true };
+          if (old) Object.assign(old, fresh); else this.items.push(fresh);
+        },
+        saveItems() {
+          try { localStorage.setItem(ITEMS_KEY, JSON.stringify(this.items)); }
+          catch (e) { this.error = 'Gagal menyimpan ke localStorage (penyimpanan penuh?). Hapus file yang tidak dipakai.'; }
         },
         async readFiles(list) {
           for (const f of Array.from(list)) {
@@ -1957,11 +1998,12 @@
         },
         onPick(e) { this.error = ''; this.readFiles(e.target.files); e.target.value = ''; },
         addPaste() {
-          this.addItem(this.pasteName.trim() || 'tempelan-' + this.nextId, this.pasteText);
+          const name = this.pasteName.trim();
+          this.addItem(name || 'tempelan', this.pasteText);
           this.pasteText = ''; this.pasteName = '';
         },
         async scanItem(it, opts) {
-          const res = { name: it.name, type: it.type, entries: [], skipped: 0 };
+          const res = { name: it.project + ' / ' + it.name, type: it.type, entries: [], skipped: 0 };
           const log = m => this.log(m);
           try {
             if (it.type === 'docker') { res.docker = await analyzeDocker(it.text, log, opts); return res; }
@@ -1984,7 +2026,7 @@
           const opts = { omitDev: this.omitDev, enrich: this.enrich, sonatype: null };
           try {
             const results = [];
-            for (const it of this.items) { this.log('== ' + it.name); results.push(await this.scanItem(it, opts)); }
+            for (const it of this.activeItems) { this.log('== ' + it.project + ' / ' + it.name); results.push(await this.scanItem(it, opts)); }
             const html = buildReport(results, opts);
             if (this.reportUrl) URL.revokeObjectURL(this.reportUrl);
             this.reportUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
