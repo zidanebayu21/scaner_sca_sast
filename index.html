@@ -79,7 +79,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.32</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.33</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -121,7 +121,7 @@
         <button :class="{ active: tab === 'dast' }" @click="tab = 'dast'">DAST pasif (URL)</button>
         <button :class="{ active: tab === 'sast' }" @click="tab = 'sast'">SAST (Kode)</button>
         <button :class="{ active: tab === 'jwt' }" @click="tab = 'jwt'">JWT Decode</button>
-        <button :class="{ active: tab === 'dbg' }" @click="tab = 'dbg'">API Debug (HKDF)</button>
+        <button :class="{ active: tab === 'dbg' }" @click="tab = 'dbg'">Hook Debug</button>
         <button :class="{ active: tab === 'rate' }" @click="tab = 'rate'">Rate Limiter (dari curl)</button>
       </div>
 
@@ -297,7 +297,7 @@
         </template>
       </section>
 
-      <!-- API Debug (Hook) + HKDF -->
+      <!-- Hook Debug -->
       <section v-else-if="tab === 'dbg'">
         <h2 style="margin-top:0">Hook tab lain (live, mudah dibaca)</h2>
         <p class="muted">Seperti Postman, untuk endpoint yang memakai enkripsi sekali pakai per-request (ECDH ephemeral) — curl lama <b>tidak bisa dipakai ulang</b> walau header lengkap, karena kuncinya hanya hidup sesaat di memori tab asli. Pasang skrip ini di tab aplikasi target; panel kecil muncul di sana dan mencatat tiap request apa adanya saat Anda memakai aplikasinya seperti biasa: <b>payload sebelum dienkripsi</b> (hasil sadapan <code>crypto.subtle.encrypt</code>), apa yang benar-benar dikirim lewat jaringan, dan hasil dekripsi response-nya.</p>
@@ -315,43 +315,6 @@
         <div class="muted" style="margin-top:6px">
           Isinya ditampilkan apa adanya, tidak dipotong. Semua murni di tab target; tidak ada yang dikirim ke tab scanner ini atau ke server mana pun.
         </div>
-
-        <h2 style="margin-top:28px">Lab HKDF (ECDH P-256 → HKDF-SHA256 → AES-GCM)</h2>
-        <p class="muted">Semua dihitung di browser (WebCrypto). Isi parameter <i>salt</i> / <i>info</i> sesuai implementasi aplikasi Anda; kunci hasil turunan bisa diedit/ditempel untuk uji enkripsi dan dekripsi.</p>
-        <textarea v-model="hk.serverPem" style="min-height:70px" placeholder="Public key server (PEM atau SPKI base64/base64url)"></textarea>
-        <div class="actions"><button class="btn gray" @click="genHkKeys">Buat key pair klien (ECDH P-256)</button></div>
-        <input type="text" v-model="hk.clientPub" placeholder="Public key klien (SPKI base64url)" style="margin-top:6px" />
-        <textarea v-model="hk.clientPriv" style="min-height:70px;margin-top:6px" placeholder="Private key klien (JWK, hanya untuk debug)"></textarea>
-        <div class="row" style="margin-top:8px">
-          <input type="text" v-model="hk.salt" placeholder="Salt (boleh kosong)" />
-          <select v-model="hk.saltEnc" style="max-width:100px"><option>utf8</option><option>hex</option><option>b64url</option></select>
-          <input type="text" v-model="hk.info" placeholder="Info (mis. nama konteks)" />
-          <select v-model="hk.infoEnc" style="max-width:100px"><option>utf8</option><option>hex</option><option>b64url</option></select>
-          <input type="number" v-model.number="hk.len" min="1" max="255" style="max-width:90px" title="Panjang kunci (byte)" />
-        </div>
-        <div class="actions"><button class="btn" @click="runHkdf">Turunkan kunci</button></div>
-        <div class="bad" v-if="hk.error">{{ hk.error }}</div>
-        <div class="muted" style="margin-top:6px">Shared secret ECDH (hex)</div>
-        <pre class="json">{{ hk.secret || '-' }}</pre>
-        <div class="muted" style="margin-top:6px">Kunci hasil HKDF (hex, bisa diedit)</div>
-        <input type="text" v-model="hk.okm" placeholder="Kunci AES (hex, 16/24/32 byte)" />
-
-        <h3>Enkripsi / dekripsi AES-GCM</h3>
-        <textarea v-model="hk.input" style="min-height:70px" placeholder="Plaintext (enkripsi) atau data base64url iv||ciphertext||tag (dekripsi)"></textarea>
-        <div class="row" style="margin-top:6px">
-          <input type="text" v-model="hk.aad" placeholder="AAD (opsional, utf8)" />
-          <input type="text" v-model="hk.iv" placeholder="IV hex (kosong = acak saat enkripsi / 12 byte pertama saat dekripsi)" />
-        </div>
-        <div class="actions">
-          <button class="btn" @click="hkCrypt(true)">Enkripsi</button>
-          <button class="btn gray" @click="hkCrypt(false)">Dekripsi</button>
-        </div>
-        <pre class="json" v-if="hk.output">{{ hk.output }}</pre>
-
-        <h3>Bedah token <code>data=</code></h3>
-        <textarea v-model="hk.token" style="min-height:70px" placeholder="1.MFkwEwYH....ciphertext  (boleh seluruh nilai data=, dipecah di titik)"></textarea>
-        <div class="actions"><button class="btn gray" @click="splitToken">Bedah</button></div>
-        <pre class="json" v-if="hk.parts">{{ hk.parts }}</pre>
       </section>
 
       <!-- Rate Limiter (dari curl) -->
@@ -2061,64 +2024,6 @@
     }
 
     // ============================================================
-    //  Helper HKDF (WebCrypto)
-    // ============================================================
-    const hexOf = b => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
-    function b64ToBytes(str) {
-      let b = str.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
-      b += '='.repeat((4 - b.length % 4) % 4);
-      return Uint8Array.from(atob(b), c => c.charCodeAt(0));
-    }
-    function b64urlOf(bytes) {
-      let s = '';
-      bytes.forEach(x => { s += String.fromCharCode(x); });
-      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-    function toBytes(str, enc) {
-      if (!str) return new Uint8Array(0);
-      if (enc === 'hex') return Uint8Array.from(str.replace(/^0x|\s+/g, '').match(/../g) || [], h => parseInt(h, 16));
-      if (enc === 'b64url') return b64ToBytes(str);
-      return new TextEncoder().encode(str);
-    }
-    const ECDH_P256 = { name: 'ECDH', namedCurve: 'P-256' };
-    async function hkdfDerive(p) {
-      const sub = crypto.subtle;
-      const pub = await sub.importKey('spki', b64ToBytes(p.serverPem), ECDH_P256, false, []);
-      const priv = await sub.importKey('jwk', JSON.parse(p.clientPriv), ECDH_P256, false, ['deriveBits']);
-      const secret = new Uint8Array(await sub.deriveBits({ name: 'ECDH', public: pub }, priv, 256));
-      const base = await sub.importKey('raw', secret, 'HKDF', false, ['deriveBits']);
-      const params = { name: 'HKDF', hash: 'SHA-256', salt: toBytes(p.salt, p.saltEnc), info: toBytes(p.info, p.infoEnc) };
-      const okm = new Uint8Array(await sub.deriveBits(params, base, p.len * 8));
-      return { secret: hexOf(secret), okm: hexOf(okm) };
-    }
-    async function aesGcm(encrypt, p) {
-      const key = await crypto.subtle.importKey('raw', toBytes(p.okm, 'hex'), 'AES-GCM', false, ['encrypt', 'decrypt']);
-      const ad = p.aad ? { additionalData: toBytes(p.aad, 'utf8') } : {};
-      if (encrypt) {
-        const iv = p.iv ? toBytes(p.iv, 'hex') : crypto.getRandomValues(new Uint8Array(12));
-        const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, ...ad }, key, toBytes(p.input, 'utf8')));
-        const all = new Uint8Array(iv.length + ct.length); all.set(iv); all.set(ct, iv.length);
-        return 'IV (hex)        : ' + hexOf(iv) + '\nCiphertext+tag  : ' + b64urlOf(ct) + '\niv||ct+tag      : ' + b64urlOf(all);
-      }
-      const raw = b64ToBytes(p.input);
-      const iv = p.iv ? toBytes(p.iv, 'hex') : raw.slice(0, 12);
-      const ct = p.iv ? raw : raw.slice(12);
-      return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv, ...ad }, key, ct));
-    }
-    async function describeToken(token) {
-      const v = token.trim().replace(/^.*[?&]data=/, '');
-      const lines = [];
-      for (const [i, part] of v.split('.').entries()) {
-        let bytes;
-        try { bytes = b64ToBytes(part); } catch (e) { lines.push('#' + (i + 1) + ' (' + part.length + ' karakter) bukan base64url: ' + part.slice(0, 40)); continue; }
-        let kind = '';
-        try { await crypto.subtle.importKey('spki', bytes, ECDH_P256, false, []); kind = ' = public key ECDH P-256 (SPKI)'; } catch (e) { /* bukan SPKI */ }
-        lines.push('#' + (i + 1) + ' ' + bytes.length + ' byte' + kind + '\n    ' + hexOf(bytes.slice(0, 24)) + (bytes.length > 24 ? '...' : ''));
-      }
-      return lines.join('\n');
-    }
-
-    // ============================================================
     //  Skrip "Hook tab lain": dipasang lewat console/bookmarklet DI TAB TARGET (bukan di sini).
     //  Menyadap fetch/XHR + SubtleCrypto.decrypt supaya request & hasil dekripsi asli terbaca
     //  apa adanya, sesaat setelah aplikasi target memanggilnya sendiri dengan key ephemeral-nya.
@@ -2151,10 +2056,40 @@
       '    expandBtn.textContent = open ? "tutup semua" : "buka semua";',
       '  });',
       '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); entries.length = 0; count = 0; expandBtn.textContent = "buka semua"; });',
+      '  var minimized = false, prevHeight = "";',
+      '  var minBtn = mkBtn(String.fromCharCode(8211), function () {',
+      '    minimized = !minimized;',
+      '    body.style.display = minimized ? "none" : "block";',
+      '    if (minimized) { prevHeight = panel.style.height; panel.style.height = "auto"; panel.style.resize = "none"; }',
+      '    else { panel.style.height = prevHeight || "420px"; panel.style.resize = "both"; }',
+      '    minBtn.textContent = minimized ? String.fromCharCode(9633) : String.fromCharCode(8211);',
+      '    minBtn.title = minimized ? "Tampilkan" : "Kecilkan";',
+      '  });',
+      '  minBtn.title = "Kecilkan";',
       '  var closeBtn = mkBtn(String.fromCharCode(10005), function () { restore(); panel.remove(); });',
-      '  head.append(title, expandBtn, clearBtn, closeBtn);',
+      '  head.append(title, minBtn, expandBtn, clearBtn, closeBtn);',
       '  panel.append(head, body);',
       '  document.body.appendChild(panel);',
+      '  head.style.cursor = "move";',
+      '  var dragging = false, dragDx = 0, dragDy = 0;',
+      '  head.addEventListener("mousedown", function (e) {',
+      '    if (e.target !== head && e.target !== title) return;',
+      '    dragging = true;',
+      '    var rect = panel.getBoundingClientRect();',
+      '    dragDx = e.clientX - rect.left; dragDy = e.clientY - rect.top;',
+      '    panel.style.right = "auto"; panel.style.bottom = "auto";',
+      '    panel.style.left = rect.left + "px"; panel.style.top = rect.top + "px";',
+      '    e.preventDefault();',
+      '  });',
+      '  function onDragMove(e) {',
+      '    if (!dragging) return;',
+      '    var x = Math.min(Math.max(0, e.clientX - dragDx), window.innerWidth - panel.offsetWidth);',
+      '    var y = Math.min(Math.max(0, e.clientY - dragDy), window.innerHeight - panel.offsetHeight);',
+      '    panel.style.left = x + "px"; panel.style.top = y + "px";',
+      '  }',
+      '  function onDragEnd() { dragging = false; }',
+      '  window.addEventListener("mousemove", onDragMove);',
+      '  window.addEventListener("mouseup", onDragEnd);',
       '  var count = 0;',
       '  function addEntry(method, url) {',
       '    count++;',
@@ -2233,7 +2168,7 @@
       '    try { plain = new TextDecoder().decode(data); } catch (e) {}',
       '    return origEncrypt.apply(this, args).then(function (r) { if (plain) pendingPlain.push(plain); return r; });',
       '  };',
-      '  function restore() { window.fetch = origFetch; XMLHttpRequest.prototype.open = OrigOpen; XMLHttpRequest.prototype.send = OrigSend; protoSubtle.decrypt = origDecrypt; protoSubtle.encrypt = origEncrypt; }',
+      '  function restore() { window.fetch = origFetch; XMLHttpRequest.prototype.open = OrigOpen; XMLHttpRequest.prototype.send = OrigSend; protoSubtle.decrypt = origDecrypt; protoSubtle.encrypt = origEncrypt; window.removeEventListener("mousemove", onDragMove); window.removeEventListener("mouseup", onDragEnd); }',
       '  window.__apiHook = { close: function () { restore(); panel.remove(); } };',
       '})();'
     ].join('\n');
@@ -2417,7 +2352,6 @@
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
-          hk: { serverPem: '', clientPub: '', clientPriv: '', salt: '', saltEnc: 'utf8', info: '', infoEnc: 'utf8', len: 32, secret: '', okm: '', input: '', aad: '', iv: '', output: '', token: '', parts: '', error: '' },
           hookCopied: false, hookMsg: '',
           rl: { curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
@@ -2502,24 +2436,6 @@
             .then(() => { this.rl.csvCopied = true; setTimeout(() => { this.rl.csvCopied = false; }, 2000); })
             .catch(() => { this.rl.msg = 'Gagal menyalin ke clipboard.'; });
         },
-        async genHkKeys() {
-          try {
-            const kp = await crypto.subtle.generateKey(ECDH_P256, true, ['deriveBits']);
-            this.hk.clientPub = b64urlOf(new Uint8Array(await crypto.subtle.exportKey('spki', kp.publicKey)));
-            this.hk.clientPriv = JSON.stringify(await crypto.subtle.exportKey('jwk', kp.privateKey));
-            this.hk.error = '';
-          } catch (e) { this.hk.error = 'Gagal membuat key pair: ' + e.message; }
-        },
-        // Jalankan fungsi kripto async; hasil ke target(), galat ke hk.error.
-        async hkRun(fn, target) {
-          this.hk.error = '';
-          try { target(await fn()); } catch (e) { this.hk.error = 'Gagal: ' + (e.message || e.name); }
-        },
-        runHkdf() {
-          return this.hkRun(() => hkdfDerive(this.hk), r => { this.hk.secret = r.secret; this.hk.okm = r.okm; });
-        },
-        hkCrypt(encrypt) { return this.hkRun(() => aesGcm(encrypt, this.hk), r => { this.hk.output = r; }); },
-        splitToken() { return this.hkRun(() => describeToken(this.hk.token), r => { this.hk.parts = r; }); },
         setSideW(w) {
           this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, Math.round(w)));
           try { localStorage.setItem(SIDE_KEY, String(this.sideW)); } catch (e) { /* abaikan */ }
