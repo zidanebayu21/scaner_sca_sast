@@ -46,7 +46,7 @@
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tabs button { padding: 8px 16px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; }
     .tabs button.active { background: #2563eb; border-color: #2563eb; }
-    td input[type=text] { width: 100%; }
+    td input[type=text], section > input[type=text] { width: 100%; box-sizing: border-box; }
     pre.json { margin: 0; padding: 12px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
     textarea { width: 100%; min-height: 160px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
     input[type=text], select { padding: 7px 10px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
@@ -79,7 +79,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.24</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.25</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
