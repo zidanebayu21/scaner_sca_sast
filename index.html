@@ -72,7 +72,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.19</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.20</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -1863,7 +1863,7 @@
           return String(d.name || (d.packages && d.packages[''] && d.packages[''].name) || '').trim();
         }
         if (type === 'maven-pom') m = text.replace(/<parent>[\s\S]*?<\/parent>/, '').match(/<artifactId>\s*([^<\s]+)\s*<\/artifactId>/);
-        else if (type === 'cargo-toml') m = text.match(/\[package\][^[]*?name\s*=\s*"([^"]+)"/);
+        else if (type === 'cargo-toml') m = text.match(/\[package\][^[]*?\bname\s*=\s*"([^"]+)"/);
         else if (type === 'go-mod') m = text.match(/^module\s+(\S+)/m);
       } catch (e) { return ''; }
       return m ? m[1].split('/').pop() : '';
