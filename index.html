@@ -79,7 +79,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.29</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.30</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -312,7 +312,7 @@
         </div>
         <div class="muted" v-if="hookMsg" style="color:#f59e0b">{{ hookMsg }}</div>
         <div class="muted" style="margin-top:6px">
-          Panel punya centang "samarkan" untuk menyembunyikan nilai panjang mirip token/secret (ditampilkan ringkas, bisa dibuka lagi) supaya enak dibaca sekaligus aman saat berbagi layar. Semua murni di tab target; tidak ada yang dikirim ke tab scanner ini atau ke server mana pun.
+          Isinya ditampilkan apa adanya, tidak dipotong. Semua murni di tab target; tidak ada yang dikirim ke tab scanner ini atau ke server mana pun.
         </div>
 
         <h2 style="margin-top:28px">Lab HKDF (ECDH P-256 → HKDF-SHA256 → AES-GCM)</h2>
@@ -2083,8 +2083,6 @@
     const HOOK_SCRIPT = [
       '(function () {',
       '  if (window.__apiHook) window.__apiHook.close();',
-      "  var MASK_RE = /[A-Za-z0-9_-]{24,}/g;",
-      '  function mask(s, on) { return on ? String(s).replace(MASK_RE, function (m) { return m.slice(0, 6) + "…(" + m.length + ")"; }) : s; }',
       '  function pretty(t) { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (e) { return t; } }',
       '  function mkBtn(label, fn) {',
       '    var b = document.createElement("button"); b.textContent = label;',
@@ -2096,20 +2094,17 @@
       '  var head = document.createElement("div");',
       '  Object.assign(head.style, { display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderBottom: "1px solid #334155", background: "#1e293b", borderRadius: "8px 8px 0 0", flexShrink: "0" });',
       '  var title = document.createElement("b"); title.textContent = "API Hook"; title.style.flex = "1";',
-      '  var maskChk = document.createElement("input"); maskChk.type = "checkbox"; maskChk.checked = true;',
-      '  var maskLbl = document.createElement("label"); maskLbl.style.whiteSpace = "nowrap"; maskLbl.append(maskChk, document.createTextNode(" samarkan"));',
       '  var body = document.createElement("div");',
       '  Object.assign(body.style, { overflow: "auto", padding: "8px 10px", flex: "1" });',
-      '  var allRecs = [], entries = [];',
+      '  var entries = [];',
       '  var expandBtn = mkBtn("buka semua", function () {',
       '    var open = expandBtn.textContent === "buka semua";',
       '    entries.forEach(function (en) { en.pre.style.display = open ? "block" : "none"; en.arrow.textContent = open ? String.fromCharCode(9662) : String.fromCharCode(9656); });',
       '    expandBtn.textContent = open ? "tutup semua" : "buka semua";',
       '  });',
-      '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); allRecs.length = 0; entries.length = 0; count = 0; expandBtn.textContent = "buka semua"; });',
+      '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); entries.length = 0; count = 0; expandBtn.textContent = "buka semua"; });',
       '  var closeBtn = mkBtn(String.fromCharCode(10005), function () { restore(); panel.remove(); });',
-      '  maskChk.onchange = function () { allRecs.forEach(render); };',
-      '  head.append(title, maskLbl, expandBtn, clearBtn, closeBtn);',
+      '  head.append(title, expandBtn, clearBtn, closeBtn);',
       '  panel.append(head, body);',
       '  document.body.appendChild(panel);',
       '  var count = 0;',
@@ -2147,10 +2142,10 @@
       '  }',
       '  function render(rec) {',
       '    var parts = [];',
-      '    if (rec.reqPlain) parts.push("» sebelum dienkripsi: " + mask(pretty(rec.reqPlain), maskChk.checked));',
-      '    if (rec.reqBody) parts.push("» dikirim: " + mask(String(rec.reqBody), maskChk.checked).slice(0, 2000));',
-      '    if (rec.plain) parts.push("« dekripsi: " + mask(pretty(rec.plain), maskChk.checked));',
-      '    else if (rec.resBody != null) parts.push("« respons: " + mask(pretty(rec.resBody), maskChk.checked).slice(0, 4000));',
+      '    if (rec.reqPlain) parts.push("» sebelum dienkripsi: " + pretty(rec.reqPlain));',
+      '    if (rec.reqBody) parts.push("» dikirim: " + String(rec.reqBody));',
+      '    if (rec.plain) parts.push("« dekripsi: " + pretty(rec.plain));',
+      '    else if (rec.resBody != null) parts.push("« respons: " + pretty(rec.resBody));',
       '    rec.slot.textContent = parts.join("\\n") || "(tidak ada body)";',
       '  }',
       '  var pending = [], pendingPlain = [];',
@@ -2159,7 +2154,7 @@
       '    var url = typeof input === "string" ? input : input.url;',
       '    var method = (init && init.method) || "GET";',
       '    var rec = { url: url, slot: addEntry(method, url), reqBody: init && init.body, reqPlain: pendingPlain.shift() || null, plain: null };',
-      '    pending.push(rec); allRecs.push(rec); render(rec);',
+      '    pending.push(rec); render(rec);',
       '    var p = origFetch.apply(this, arguments);',
       '    p.then(function (res) { try { res.clone().text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }); } catch (e) {} });',
       '    return p;',
@@ -2169,7 +2164,7 @@
       '  XMLHttpRequest.prototype.send = function (reqBody) {',
       '    var self = this;',
       '    var rec = { url: this.__hookUrl, slot: addEntry(this.__hookMethod, this.__hookUrl), reqBody: reqBody, reqPlain: pendingPlain.shift() || null, plain: null };',
-      '    pending.push(rec); allRecs.push(rec); render(rec);',
+      '    pending.push(rec); render(rec);',
       '    this.addEventListener("loadend", function () { try { if (!rec.plain) { rec.resBody = self.responseText; render(rec); } } catch (e) {} });',
       '    return OrigSend.apply(this, arguments);',
       '  };',
