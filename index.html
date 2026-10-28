@@ -156,11 +156,14 @@
               <td>{{ it.project }}</td>
               <td>{{ it.name }}</td>
               <td>
-                <select v-model="it.type">
+                <select v-model="it.type" :disabled="it.compact" :title="it.compact ? 'Sudah dipadatkan menjadi daftar package' : ''">
                   <option v-for="(label, key) in typeLabels" :key="key" :value="key">{{ label }}</option>
                 </select>
               </td>
-              <td>{{ (it.text.length / 1024).toFixed(1) }} KB</td>
+              <td>
+                {{ (it.text.length / 1024).toFixed(1) }} KB<span v-if="it.compact" class="muted"> (dipadatkan)</span>
+                <div v-if="unsavedIds.includes(it.id)" style="color:#f59e0b">tidak tersimpan: penyimpanan penuh</div>
+              </td>
               <td><button class="btn gray" @click="items.splice(i, 1)">Hapus</button></td>
             </tr>
           </tbody>
@@ -1850,6 +1853,27 @@
 
     const ITEMS_KEY = 'scaItems';
     const DEFAULT_PROJECT = 'Tanpa nama';
+    // Batas aman ~5 juta karakter localStorage (disisakan untuk kunci lain).
+    const STORAGE_BUDGET = 4500000;
+
+    // Lockfile besar dipadatkan menjadi daftar package saja: [nama, versi, ekosistem, dev, direct].
+    // File non-package (mis. Dockerfile) atau yang gagal diparse disimpan apa adanya.
+    function toStoredForm(type, text) {
+      const parse = PARSERS[type];
+      if (!parse) return { text, compact: false };
+      try {
+        const pkgs = parse(text);
+        if (!pkgs.length) return { text, compact: false };
+        const rows = pkgs.map(p => [p.name, p.version, p.eco, p.dev ? 1 : 0, p.direct == null ? null : +!!p.direct]);
+        return { text: JSON.stringify({ unpinned: pkgs.unpinned || 0, pkgs: rows }), compact: true };
+      } catch (e) { return { text, compact: false }; }
+    }
+    function expandCompact(text) {
+      const d = JSON.parse(text);
+      const out = d.pkgs.map(r => ({ name: r[0], version: r[1], eco: r[2], dev: !!r[3], direct: r[4] == null ? null : !!r[4] }));
+      out.unpinned = d.unpinned;
+      return out;
+    }
     // Nama project dari link repo: segmen terakhir sebelum /-/, /blob/, atau /tree/.
     function projectFromLink(link) {
       try {
@@ -1864,7 +1888,7 @@
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
-          project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
+          persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false
@@ -1883,7 +1907,8 @@
           const saved = JSON.parse(localStorage.getItem(ITEMS_KEY) || '[]');
           if (Array.isArray(saved)) {
             this.items = saved.filter(it => it && it.name && typeof it.text === 'string')
-              .map(it => ({ ...it, project: it.project || DEFAULT_PROJECT, enabled: it.enabled !== false }));
+              .map(it => ({ ...it, project: it.project || DEFAULT_PROJECT, enabled: it.enabled !== false, ...(it.compact ? {} : toStoredForm(it.type, it.text)) }));
+            this.persistedIds = this.items.map(it => it.id);
             this.nextId = this.items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
           }
         } catch (e) { /* data rusak / localStorage tidak tersedia: mulai kosong */ }
@@ -1977,12 +2002,25 @@
           const proj = (project || this.project).trim() || DEFAULT_PROJECT;
           const same = x => x.project.toLowerCase() === proj.toLowerCase() && x.name.toLowerCase() === name.toLowerCase();
           const old = this.items.find(same);
-          const fresh = { id: old ? old.id : this.nextId++, project: proj, name, text, type: detectType(name, text), enabled: old ? old.enabled : true };
+          const type = detectType(name, text);
+          const fresh = { id: old ? old.id : this.nextId++, project: proj, name, type, ...toStoredForm(type, text), enabled: old ? old.enabled : true };
           if (old) Object.assign(old, fresh); else this.items.push(fresh);
         },
+        // Yang sudah tersimpan diprioritaskan; file baru yang tidak muat tetap dipakai di sesi ini tetapi hilang saat halaman dimuat ulang.
         saveItems() {
-          try { localStorage.setItem(ITEMS_KEY, JSON.stringify(this.items)); }
-          catch (e) { this.error = 'Gagal menyimpan ke localStorage (penyimpanan penuh?). Hapus file yang tidak dipakai.'; }
+          const kept = new Set(this.persistedIds);
+          const ordered = [...this.items].sort((a, b) => (kept.has(b.id) - kept.has(a.id)) || a.id - b.id);
+          const chosen = [];
+          let used = 2;
+          for (const it of ordered) {
+            const n = JSON.stringify(it).length + 1;
+            if (used + n <= STORAGE_BUDGET) { chosen.push(it); used += n; }
+          }
+          const write = list => { try { localStorage.setItem(ITEMS_KEY, JSON.stringify(list)); return true; } catch (e) { return false; } };
+          while (chosen.length && !write(chosen)) chosen.pop(); // kuota nyata lebih kecil dari perkiraan
+          this.persistedIds = chosen.map(it => it.id);
+          const saved = new Set(this.persistedIds);
+          this.unsavedIds = this.items.filter(it => !saved.has(it.id)).map(it => it.id);
         },
         async readFiles(list) {
           for (const f of Array.from(list)) {
@@ -2009,7 +2047,7 @@
             if (it.type === 'docker') { res.docker = await analyzeDocker(it.text, log, opts); return res; }
             const parse = PARSERS[it.type];
             if (!parse) throw new Error('Jenis file tidak dikenali. Pilih jenis secara manual.');
-            let pkgs = parse(it.text);
+            let pkgs = it.compact ? expandCompact(it.text) : parse(it.text);
             res.note = TYPE_NOTES[it.type] || '';
             if (pkgs.unpinned) res.note += ' ' + pkgs.unpinned + ' baris tidak dipin dan dilewati.';
             if (opts.omitDev) { const n = pkgs.length; pkgs = pkgs.filter(p => !p.dev); res.skipped = n - pkgs.length; }

@@ -16,7 +16,7 @@ Buka `index.html` di browser (tidak perlu build / server).
 
 **Dockerfile**: status EOL base image (endoflife.date), temuan konfigurasi (tanpa USER, secret di ENV, `curl | sh`, `:latest`, dll.), serta kerentanan paket yang dipin (`apk`, `apt`, `npm`, `pip`). Pemindaian image penuh (paket OS di dalam image) butuh Docker dan tidak bisa dilakukan di browser.
 
-**Project tersimpan**: file yang diimpor disimpan di localStorage per nama project, jadi scan berikutnya tidak perlu mengunggah ulang. Mengunggah file dengan project + nama file yang sama menggantikan yang lama. Centang kolom **Scan** untuk menonaktifkan file tanpa menghapusnya.
+**Project tersimpan**: file yang diimpor dipadatkan (lockfile hanya disimpan sebagai daftar package) lalu disimpan di localStorage per nama project; bila penuh, file baru tidak ikut tersimpan dan hilang saat halaman dimuat ulang, jadi scan berikutnya tidak perlu mengunggah ulang. Mengunggah file dengan project + nama file yang sama menggantikan yang lama. Centang kolom **Scan** untuk menonaktifkan file tanpa menghapusnya.
 
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
 
