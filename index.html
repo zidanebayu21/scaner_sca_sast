@@ -79,7 +79,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.33</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.34</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -303,13 +303,13 @@
         <p class="muted">Seperti Postman, untuk endpoint yang memakai enkripsi sekali pakai per-request (ECDH ephemeral) — curl lama <b>tidak bisa dipakai ulang</b> walau header lengkap, karena kuncinya hanya hidup sesaat di memori tab asli. Pasang skrip ini di tab aplikasi target; panel kecil muncul di sana dan mencatat tiap request apa adanya saat Anda memakai aplikasinya seperti biasa: <b>payload sebelum dienkripsi</b> (hasil sadapan <code>crypto.subtle.encrypt</code>), apa yang benar-benar dikirim lewat jaringan, dan hasil dekripsi response-nya.</p>
         <ol class="muted" style="margin:0 0 10px 18px;padding:0">
           <li>Buka tab aplikasi target, tekan F12 → tab <b>Console</b>, tempel skrip di bawah lalu Enter.</li>
-          <li>Atau seret tombol <b>📌 Seret ke bookmark</b> ke bilah bookmark sekali saja; setelah itu tinggal klik dari bilah bookmark saat berada di tab target, bisa dipakai berkali-kali tanpa buka Console.</li>
+          <li>Atau seret tombol <b>🪝 Hoox</b> ke bilah bookmark sekali saja; setelah itu tinggal klik dari bilah bookmark saat berada di tab target, bisa dipakai berkali-kali tanpa buka Console.</li>
           <li>Panel muncul di pojok kanan bawah tab target. Tiap request tercatat otomatis; klik ✕ di panel untuk berhenti.</li>
         </ol>
         <textarea readonly :value="hookScript" style="min-height:90px;font-size:11px"></textarea>
         <div class="actions">
           <button class="btn gray" @click="copyHookScript">{{ hookCopied ? 'Tersalin' : 'Salin skrip' }}</button>
-          <a class="btn blue" :href="hookBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="hookMsg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">📌 Seret ke bookmark</a>
+          <a class="btn blue" :href="hookBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="hookMsg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">🪝 Hoox</a>
         </div>
         <div class="muted" v-if="hookMsg" style="color:#f59e0b">{{ hookMsg }}</div>
         <div class="muted" style="margin-top:6px">
