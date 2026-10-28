@@ -296,58 +296,10 @@
         </template>
       </section>
 
-      <!-- API Debug + HKDF -->
+      <!-- API Debug (Hook) + HKDF -->
       <section v-else-if="tab === 'dbg'">
-        <p class="muted">Seperti Postman, untuk debugging. Tempel perintah <code>curl</code> (mis. "Copy as cURL" dari DevTools), ubah bila perlu, lalu kirim. Request yang benar-benar dikirim dan response-nya tampil di bawah. Isi tab ini <b>tidak disimpan</b> (header/cookie sering berisi token).</p>
-        <textarea v-model="dbg.curl" @input="parseDbgCurl" placeholder="curl --url 'https://host/api/...' -H 'Accept: application/json' -b 'sid=...'"></textarea>
-        <div class="row" style="margin-top:8px">
-          <select v-model="dbg.method" style="max-width:110px"><option v-for="m in dbgMethods" :key="m">{{ m }}</option></select>
-          <input type="text" v-model="dbg.url" placeholder="https://host:port/path?query" />
-        </div>
-        <table style="margin-top:8px">
-          <thead><tr><th>Aktif</th><th>Header</th><th>Nilai</th><th></th></tr></thead>
-          <tbody>
-            <tr v-for="(h, i) in dbg.headers" :key="i" :style="h.on ? '' : 'opacity:.5'">
-              <td><input type="checkbox" v-model="h.on" /></td>
-              <td><input type="text" v-model="h.k" /></td>
-              <td><input type="text" v-model="h.v" /><div v-if="dbg.mode === 'direct' && h.on && dbgBlocked(h.k)" class="muted" style="color:#f59e0b">tidak bisa dikirim browser (mode langsung)</div></td>
-              <td><button class="btn gray" @click="dbg.headers.splice(i, 1)">Hapus</button></td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="actions"><button class="btn gray" @click="dbg.headers.push({ on: true, k: '', v: '' })">+ Header</button></div>
-        <textarea v-model="dbg.body" style="min-height:70px;margin-top:8px" placeholder="Body (opsional)"></textarea>
-        <div class="row" style="margin-top:8px">
-          <select v-model="dbg.mode" style="max-width:260px">
-            <option value="proxy">Lewat proxy lokal (header &amp; cookie bebas)</option>
-            <option value="direct">Langsung dari browser (butuh CORS)</option>
-          </select>
-          <input v-if="dbg.mode === 'proxy'" type="text" v-model="dbg.proxy" style="max-width:240px" />
-          <label v-if="dbg.mode === 'proxy'"><input type="checkbox" v-model="dbg.insecure" /> Abaikan error sertifikat</label>
-        </div>
-        <div class="muted" style="margin-top:6px">
-          Dari halaman https, <i>fetch</i> langsung ke API lain hanya jalan bila server mengirim header CORS; browser juga memblokir <code>Cookie</code>, <code>User-Agent</code>, <code>Referer</code>, <code>Sec-*</code>. Untuk itu pakai proxy lokal: <code>node debug-proxy.js</code> (hanya 127.0.0.1:8788).
-        </div>
-        <div class="actions">
-          <button class="btn" :disabled="dbg.busy || !dbg.url.trim()" @click="sendDbg">{{ dbg.busy ? 'Mengirim...' : 'Kirim' }}</button>
-          <span class="bad" v-if="dbg.error">{{ dbg.error }}</span>
-        </div>
-
-        <template v-if="dbg.sent">
-          <h3>Request yang dikirim <button class="lnk" @click="copyDbgCurl">{{ dbg.copied ? 'Tersalin' : 'Salin sebagai curl' }}</button></h3>
-          <pre class="json">{{ dbg.sent.text }}</pre>
-          <div v-if="dbg.sent.dropped.length" class="muted" style="color:#f59e0b">Header dibuang browser: {{ dbg.sent.dropped.join(', ') }}</div>
-        </template>
-        <template v-if="dbg.res">
-          <h3>Response <span :class="dbg.res.status < 400 ? 'ok' : 'bad'">{{ dbg.res.status }} {{ dbg.res.statusText }}</span>
-            <span class="muted"> · {{ dbg.res.ms }} ms · {{ dbg.res.size }} byte</span>
-            <button class="lnk" v-if="dbgPublicKey" @click="hk.serverPem = dbgPublicKey">Pakai public_key ini di HKDF</button></h3>
-          <pre class="json">{{ dbg.res.headerText }}</pre>
-          <pre class="json" style="margin-top:8px">{{ dbg.res.pretty }}</pre>
-        </template>
-
-        <h2 style="margin-top:28px">Hook tab lain (live, mudah dibaca)</h2>
-        <p class="muted">Untuk endpoint yang memakai enkripsi sekali pakai per-request (ECDH ephemeral), curl lama <b>tidak bisa dipakai ulang</b> walau header lengkap — kuncinya hanya hidup sesaat di memori tab asli. Cara yang benar: pasang skrip ini di tab aplikasi target; panel kecil muncul di sana dan mencatat tiap request/response apa adanya, saat Anda memakai aplikasinya seperti biasa.</p>
+        <h2 style="margin-top:0">Hook tab lain (live, mudah dibaca)</h2>
+        <p class="muted">Seperti Postman, untuk endpoint yang memakai enkripsi sekali pakai per-request (ECDH ephemeral) — curl lama <b>tidak bisa dipakai ulang</b> walau header lengkap, karena kuncinya hanya hidup sesaat di memori tab asli. Pasang skrip ini di tab aplikasi target; panel kecil muncul di sana dan mencatat tiap request apa adanya saat Anda memakai aplikasinya seperti biasa: <b>payload sebelum dienkripsi</b> (hasil sadapan <code>crypto.subtle.encrypt</code>), apa yang benar-benar dikirim lewat jaringan, dan hasil dekripsi response-nya.</p>
         <ol class="muted" style="margin:0 0 10px 18px;padding:0">
           <li>Buka tab aplikasi target, tekan F12 → tab <b>Console</b>, tempel skrip di bawah lalu Enter.</li>
           <li>Atau seret tombol <b>📌 Seret ke bookmark</b> ke bilah bookmark sekali saja; setelah itu tinggal klik dari bilah bookmark saat berada di tab target, bisa dipakai berkali-kali tanpa buka Console.</li>
@@ -2065,91 +2017,8 @@
     }
 
     // ============================================================
-    //  API Debug: parser curl, kirim request, dan helper HKDF (WebCrypto)
+    //  Helper HKDF (WebCrypto)
     // ============================================================
-    const DBG_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-    const FORBIDDEN_HDR = /^(user-agent|referer|cookie2?|origin|host|connection|keep-alive|accept-encoding|accept-charset|content-length|date|dnt|expect|te|trailer|transfer-encoding|upgrade|via|set-cookie|sec-.*|proxy-.*|access-control-request-.*)$/i;
-    const CURL_ESC = { n: '\n', t: '\t', r: '\r' };
-
-    function readQuoted(s, i, ansi) {
-      let cur = '';
-      for (; i < s.length && s[i] !== "'"; i++) {
-        if (ansi && s[i] === '\\' && i + 1 < s.length) { i++; cur += CURL_ESC[s[i]] || s[i]; } else cur += s[i];
-      }
-      return [cur, i + 1];
-    }
-    function readDoubleQuoted(s, i) {
-      let cur = '';
-      for (; i < s.length && s[i] !== '"'; i++) {
-        if (s[i] === '\\' && i + 1 < s.length) i++;
-        cur += s[i];
-      }
-      return [cur, i + 1];
-    }
-    function tokenizeCurl(src) {
-      const s = src.replace(/\\\r?\n/g, ' ');
-      const out = [];
-      let cur = '', has = false, i = 0, r;
-      while (i < s.length) {
-        const c = s[i];
-        if (c === "'" || (c === '$' && s[i + 1] === "'")) {
-          r = readQuoted(s, c === '$' ? i + 2 : i + 1, c === '$'); cur += r[0]; i = r[1]; has = true;
-        } else if (c === '"') {
-          r = readDoubleQuoted(s, i + 1); cur += r[0]; i = r[1]; has = true;
-        } else if (/\s/.test(c)) {
-          if (has) { out.push(cur); cur = ''; has = false; }
-          i++;
-        } else if (c === '\\') { cur += s[i + 1] || ''; i += 2; has = true; }
-        else { cur += c; has = true; i++; }
-      }
-      if (has) out.push(cur);
-      return out;
-    }
-    // Flag curl -> aksi pada hasil parse; nilai flag diambil dari token berikutnya.
-    const addHeader = (r, v) => { const k = v.indexOf(':'); if (k > 0) r.headers.push({ on: true, k: v.slice(0, k).trim(), v: v.slice(k + 1).trim() }); };
-    const addCookie = (r, v) => { r.headers.push({ on: true, k: 'Cookie', v }); };
-    const addBody = (r, v) => { r.body = r.body ? r.body + '&' + v : v; };
-    const setMethod = (r, v) => { r.method = v.toUpperCase(); };
-    const CURL_FLAGS = { '--url': (r, v) => { r.url = v; } };
-    [['-X', '--request', setMethod], ['-H', '--header', addHeader], ['-b', '--cookie', addCookie]].forEach(([a, b, fn]) => { CURL_FLAGS[a] = fn; CURL_FLAGS[b] = fn; });
-    ['-d', '--data', '--data-raw', '--data-binary', '--data-urlencode', '--data-ascii'].forEach(f => { CURL_FLAGS[f] = addBody; });
-    function parseCurl(src) {
-      const t = tokenizeCurl(src), r = { method: '', url: '', headers: [], body: '', insecure: false };
-      for (let i = 0; i < t.length; i++) {
-        const a = t[i];
-        if (CURL_FLAGS[a]) CURL_FLAGS[a](r, t[++i] || '');
-        else if (a === '-k' || a === '--insecure') r.insecure = true;
-        else if (a === '-I' || a === '--head') r.method = 'HEAD';
-        else if (/^https?:\/\//i.test(a)) r.url = a;
-      }
-      r.method = r.method || (r.body ? 'POST' : 'GET');
-      return r;
-    }
-    const shQuote = v => "'" + String(v).replace(/'/g, "'\\''") + "'";
-    function buildCurl(q) {
-      const parts = ['curl --url ' + shQuote(q.url), '-X ' + q.method];
-      q.headers.forEach(h => parts.push('-H ' + shQuote(h[0] + ': ' + h[1])));
-      if (q.body) parts.push('--data-raw ' + shQuote(q.body));
-      if (q.insecure) parts.push('--insecure');
-      return parts.join(' \\\n  ');
-    }
-    async function sendDirect(q) {
-      const t0 = performance.now();
-      const noBody = q.method === 'GET' || q.method === 'HEAD';
-      const res = await fetch(q.url, { method: q.method, headers: Object.fromEntries(q.headers), body: noBody || !q.body ? undefined : q.body, cache: 'no-store', credentials: 'omit' });
-      const body = await res.text();
-      return { status: res.status, statusText: res.statusText, headers: [...res.headers.entries()], body, ms: Math.round(performance.now() - t0), size: new TextEncoder().encode(body).length };
-    }
-    async function sendViaProxy(proxy, q) {
-      const r = await fetch(proxy.replace(/\/$/, '') + '/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(q) });
-      const j = await r.json();
-      if (j.error) throw new Error(j.error);
-      return j;
-    }
-    function prettyBody(text) {
-      try { return JSON.stringify(JSON.parse(text), null, 2); } catch (e) { return text; }
-    }
-
     const hexOf = b => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
     function b64ToBytes(str) {
       let b = str.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
@@ -2254,18 +2123,19 @@
       '  }',
       '  function render(rec) {',
       '    var parts = [];',
-      '    if (rec.reqBody) parts.push("» kirim: " + mask(String(rec.reqBody), maskChk.checked));',
+      '    if (rec.reqPlain) parts.push("» sebelum dienkripsi: " + mask(pretty(rec.reqPlain), maskChk.checked));',
+      '    if (rec.reqBody) parts.push("» dikirim: " + mask(String(rec.reqBody), maskChk.checked).slice(0, 2000));',
       '    if (rec.plain) parts.push("« dekripsi: " + mask(pretty(rec.plain), maskChk.checked));',
       '    else if (rec.resBody != null) parts.push("« respons: " + mask(pretty(rec.resBody), maskChk.checked).slice(0, 4000));',
       '    rec.slot.textContent = parts.join("\\n") || "(tidak ada body)";',
       '  }',
-      '  var pending = [];',
+      '  var pending = [], pendingPlain = [];',
       '  var origFetch = window.fetch;',
       '  window.fetch = function (input, init) {',
       '    var url = typeof input === "string" ? input : input.url;',
       '    var method = (init && init.method) || "GET";',
-      '    var rec = { url: url, slot: addEntry(method, url), reqBody: init && init.body, plain: null };',
-      '    pending.push(rec); allRecs.push(rec);',
+      '    var rec = { url: url, slot: addEntry(method, url), reqBody: init && init.body, reqPlain: pendingPlain.shift() || null, plain: null };',
+      '    pending.push(rec); allRecs.push(rec); render(rec);',
       '    var p = origFetch.apply(this, arguments);',
       '    p.then(function (res) { try { res.clone().text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }); } catch (e) {} });',
       '    return p;',
@@ -2274,12 +2144,12 @@
       '  XMLHttpRequest.prototype.open = function (method, url) { this.__hookUrl = url; this.__hookMethod = method; return OrigOpen.apply(this, arguments); };',
       '  XMLHttpRequest.prototype.send = function (reqBody) {',
       '    var self = this;',
-      '    var rec = { url: this.__hookUrl, slot: addEntry(this.__hookMethod, this.__hookUrl), reqBody: reqBody, plain: null };',
-      '    pending.push(rec); allRecs.push(rec);',
+      '    var rec = { url: this.__hookUrl, slot: addEntry(this.__hookMethod, this.__hookUrl), reqBody: reqBody, reqPlain: pendingPlain.shift() || null, plain: null };',
+      '    pending.push(rec); allRecs.push(rec); render(rec);',
       '    this.addEventListener("loadend", function () { try { if (!rec.plain) { rec.resBody = self.responseText; render(rec); } } catch (e) {} });',
       '    return OrigSend.apply(this, arguments);',
       '  };',
-      '  var protoSubtle = SubtleCrypto.prototype, origDecrypt = protoSubtle.decrypt;',
+      '  var protoSubtle = SubtleCrypto.prototype, origDecrypt = protoSubtle.decrypt, origEncrypt = protoSubtle.encrypt;',
       '  protoSubtle.decrypt = function () {',
       '    var args = arguments;',
       '    return origDecrypt.apply(this, args).then(function (r) {',
@@ -2291,7 +2161,12 @@
       '      return r;',
       '    });',
       '  };',
-      '  function restore() { window.fetch = origFetch; XMLHttpRequest.prototype.open = OrigOpen; XMLHttpRequest.prototype.send = OrigSend; protoSubtle.decrypt = origDecrypt; }',
+      '  protoSubtle.encrypt = function (algo, key, data) {',
+      '    var args = arguments, plain = null;',
+      '    try { plain = new TextDecoder().decode(data); } catch (e) {}',
+      '    return origEncrypt.apply(this, args).then(function (r) { if (plain) pendingPlain.push(plain); return r; });',
+      '  };',
+      '  function restore() { window.fetch = origFetch; XMLHttpRequest.prototype.open = OrigOpen; XMLHttpRequest.prototype.send = OrigSend; protoSubtle.decrypt = origDecrypt; protoSubtle.encrypt = origEncrypt; }',
       '  window.__apiHook = { close: function () { restore(); panel.remove(); } };',
       '})();'
     ].join('\n');
@@ -2348,8 +2223,6 @@
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
-          dbgMethods: DBG_METHODS,
-          dbg: { curl: '', method: 'GET', url: '', headers: [], body: '', mode: 'proxy', proxy: 'http://127.0.0.1:8788', insecure: true, busy: false, error: '', sent: null, res: null, copied: false },
           hk: { serverPem: '', clientPub: '', clientPriv: '', salt: '', saltEnc: 'utf8', info: '', infoEnc: 'utf8', len: 32, secret: '', okm: '', input: '', aad: '', iv: '', output: '', token: '', parts: '', error: '' },
           hookCopied: false, hookMsg: '',
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
@@ -2363,9 +2236,6 @@
         jwt() { return decodeJwt(this.jwtText); },
         hookScript() { return HOOK_SCRIPT; },
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
-        dbgPublicKey() {
-          try { return JSON.parse(this.dbg.res.body).public_key || ''; } catch (e) { return ''; }
-        },
         activeItems() { return this.items.filter(it => it.enabled); },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
@@ -2389,35 +2259,10 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
-        dbgBlocked(name) { return FORBIDDEN_HDR.test(name.trim()); },
         copyHookScript() {
           navigator.clipboard.writeText(HOOK_SCRIPT)
             .then(() => { this.hookCopied = true; setTimeout(() => { this.hookCopied = false; }, 2000); })
             .catch(() => { this.hookMsg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
-        },
-        parseDbgCurl() {
-          if (!/^\s*curl\b/.test(this.dbg.curl)) return;
-          const r = parseCurl(this.dbg.curl);
-          Object.assign(this.dbg, { method: r.method, url: r.url, headers: r.headers, body: r.body });
-          if (r.insecure) this.dbg.insecure = true;
-        },
-        async sendDbg() {
-          const d = this.dbg, direct = d.mode === 'direct';
-          const all = d.headers.filter(h => h.on && h.k.trim()).map(h => [h.k.trim(), h.v]);
-          const dropped = direct ? all.filter(h => FORBIDDEN_HDR.test(h[0])).map(h => h[0]) : [];
-          const q = { method: d.method, url: d.url.trim(), headers: direct ? all.filter(h => !FORBIDDEN_HDR.test(h[0])) : all, body: d.body, insecure: !direct && d.insecure };
-          d.busy = true; d.error = ''; d.res = null; d.copied = false;
-          d.sent = { q, dropped, text: q.method + ' ' + q.url + '\n' + q.headers.map(h => h[0] + ': ' + h[1]).join('\n') + (q.body ? '\n\n' + q.body : '') };
-          try {
-            const r = direct ? await sendDirect(q) : await sendViaProxy(d.proxy, q);
-            d.res = { ...r, headerText: r.headers.map(h => h[0] + ': ' + h[1]).join('\n'), pretty: prettyBody(r.body).slice(0, 200000) };
-          } catch (e) {
-            d.error = direct ? 'Diblokir browser (CORS, sertifikat tidak tepercaya, atau server tidak terjangkau). Pakai mode proxy. (' + e.message + ')'
-              : (e instanceof TypeError ? 'Proxy tidak terjangkau di ' + d.proxy + '. Jalankan: node debug-proxy.js' : 'Gagal: ' + e.message);
-          } finally { d.busy = false; }
-        },
-        async copyDbgCurl() {
-          try { await navigator.clipboard.writeText(buildCurl(this.dbg.sent.q)); this.dbg.copied = true; } catch (e) { this.dbg.error = 'Gagal menyalin ke clipboard.'; }
         },
         async genHkKeys() {
           try {
