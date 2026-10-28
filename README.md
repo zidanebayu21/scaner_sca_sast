@@ -18,6 +18,8 @@ Buka `index.html` di browser (tidak perlu build / server).
 
 **Project tersimpan**: file yang diimpor dipadatkan (lockfile hanya disimpan sebagai daftar package) lalu disimpan di localStorage per nama project; bila penuh, file baru tidak ikut tersimpan dan hilang saat halaman dimuat ulang, jadi scan berikutnya tidak perlu mengunggah ulang. Mengunggah file dengan project + nama file yang sama menggantikan yang lama. Centang kolom **Scan** untuk menonaktifkan file tanpa menghapusnya.
 
+Lebar panel kiri bisa digeser (tarik pegangan di tepinya, klik dua kali untuk reset); ukuran diingat di browser.
+
 Tab **JWT Decode** menampilkan header, payload, dan status exp/nbf/iat token JWT langsung di browser (signature tidak diverifikasi).
 
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.

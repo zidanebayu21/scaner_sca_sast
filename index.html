@@ -12,7 +12,12 @@
     .ver { display: inline-block; vertical-align: super; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: #1d4ed8; color: #dbeafe; font-size: 11px; font-weight: 600; line-height: 18px; }
     header h1 { margin: 0; font-size: 22px; }
     header p { margin: 4px 0 0; color: #94a3b8; font-size: 14px; }
-    .layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 24px; max-width: 1480px; margin: 0 auto; padding: 0 20px; }
+    .layout { display: grid; grid-template-columns: var(--side-w, 330px) minmax(0, 1fr); gap: 24px; max-width: 1480px; margin: 0 auto; padding: 0 20px; }
+    .side { position: relative; }
+    .resizer { position: absolute; top: 0; bottom: 0; right: -18px; width: 12px; cursor: col-resize; touch-action: none; border-radius: 6px; }
+    .resizer::after { content: ''; position: absolute; top: 50%; left: 4px; width: 4px; height: 48px; margin-top: -24px; border-radius: 2px; background: #475569; }
+    .resizer:hover::after, .resizer.drag::after { background: #2563eb; }
+    @media (max-width: 960px) { .resizer { display: none; } }
     main { min-width: 0; margin: 24px 0; padding: 0 0 48px; }
     .side { margin-top: 24px; align-self: start; background: #111c33; border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; font-size: 13px; }
     .side h2 { margin: 0 0 6px; font-size: 15px; }
@@ -73,11 +78,11 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.22</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.23</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
-    <div class="layout">
+    <div class="layout" :style="{ '--side-w': sideW + 'px' }">
     <aside class="side">
       <h2>API publik yang dipakai</h2>
       <p class="muted">Semua panggilan langsung dari browser Anda ke layanan di bawah. Isi file/kode tidak diunggah ke server milik aplikasi ini; hanya data di baris "Dikirim" yang keluar.</p>
@@ -105,6 +110,8 @@
           </div>
         </div>
       </div>
+      <div class="resizer" :class="{ drag: resizing }" title="Geser untuk mengubah lebar (klik dua kali untuk reset)"
+           @pointerdown.prevent="startResize" @pointermove="doResize" @pointerup="endResize" @pointercancel="endResize" @dblclick="setSideW(330)"></div>
     </aside>
 
     <main>
@@ -1950,6 +1957,7 @@
       } catch (e) { return { error: 'Gagal mendekode token (bukan base64url/JSON yang valid).' }; }
     }
 
+    const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
     const DEFAULT_PROJECT = 'Tanpa nama';
     // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
@@ -2001,7 +2009,7 @@
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
-          jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
+          sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false
@@ -2015,6 +2023,7 @@
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
       },
       created() {
+        try { const w = parseInt(localStorage.getItem(SIDE_KEY), 10); if (w) this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, w)); } catch (e) { /* abaikan */ }
         // Hapus token Sonatype yang pernah tersimpan oleh versi sebelumnya.
         try { localStorage.removeItem('scaSonatype'); } catch (e) { /* localStorage tidak tersedia: abaikan */ }
         try {
@@ -2032,6 +2041,17 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
+        setSideW(w) {
+          this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, Math.round(w)));
+          try { localStorage.setItem(SIDE_KEY, String(this.sideW)); } catch (e) { /* abaikan */ }
+        },
+        startResize(e) { this.resizing = true; e.target.setPointerCapture(e.pointerId); },
+        doResize(e) {
+          if (!this.resizing) return;
+          // lebar panel kiri = posisi pointer dikurangi tepi kiri .layout (termasuk padding 20px)
+          this.setSideW(e.clientX - e.target.closest('.layout').getBoundingClientRect().left - 20);
+        },
+        endResize() { this.resizing = false; },
         // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
     //    sonaCfg() { return { email: this.sona.email.trim(), token: this.sona.token.trim(), proxy: this.sona.proxy.trim() }; },
     //    saveSona() {
