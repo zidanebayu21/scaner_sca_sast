@@ -9,7 +9,7 @@
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #0f172a; color: #e2e8f0; }
     header { padding: 20px 32px; background: #1e293b; border-bottom: 1px solid #334155; }
-    .ver { display: inline-block; margin-bottom: 6px; padding: 1px 8px; border-radius: 999px; background: #1d4ed8; color: #dbeafe; font-size: 11px; font-weight: 600; }
+    .ver { display: inline-block; vertical-align: super; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: #1d4ed8; color: #dbeafe; font-size: 11px; font-weight: 600; line-height: 18px; }
     header h1 { margin: 0; font-size: 22px; }
     header p { margin: 4px 0 0; color: #94a3b8; font-size: 14px; }
     .layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 24px; max-width: 1480px; margin: 0 auto; padding: 0 20px; }
@@ -72,8 +72,7 @@
 <body>
   <div id="app">
     <header>
-      <span class="ver" title="Versi = jumlah commit">^0.16</span>
-      <h1>Scanner Security</h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.17</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
