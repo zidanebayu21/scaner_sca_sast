@@ -1,4 +1,4 @@
-# Scanner SCA & SAST
+# Scanner Security
 
 Aplikasi HTML-only (Vue 3 via CDN) untuk memeriksa keamanan proyek langsung di browser:
 
