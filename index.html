@@ -73,7 +73,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.21</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.22</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -128,7 +128,7 @@
              @dragover.prevent="over = true" @dragleave.prevent="over = false"
              @drop.prevent="onDrop" @click="$refs.file.click()">
           <div><b>Seret &amp; lepas file di sini</b> atau klik untuk memilih</div>
-          <div class="muted" style="margin-top:6px">npm (package-lock, yarn.lock, pnpm-lock) · Composer · NuGet (*.csproj, packages.config) · Java (pom.xml, build.gradle, gradle.lockfile) · Rust (Cargo.lock) · Go (go.mod) · Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock) · Ruby (Gemfile.lock) · Dart (pubspec.lock) · Elixir (mix.lock) · Dockerfile</div>
+          <div class="muted" style="margin-top:6px">npm (package-lock, yarn.lock, pnpm-lock) · Composer · NuGet (*.csproj, packages.config, packages.lock.json, obj/project.assets.json) · Java (pom.xml, build.gradle, gradle.lockfile) · Rust (Cargo.lock) · Go (go.mod) · Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock) · Ruby (Gemfile.lock) · Dart (pubspec.lock) · Elixir (mix.lock) · Dockerfile</div>
           <input ref="file" type="file" multiple hidden @change="onPick" />
         </div>
 
@@ -758,6 +758,33 @@
       });
       return out;
     }
+    // obj/project.assets.json (hasil dotnet restore): memuat seluruh package transitif.
+    // Hanya dibaca sebagai data (JSON.parse + Object.keys); tidak ada eval/HTML mentah (OWASP ASVS 5.2.4, 1.5.1).
+    function parseProjectAssets(text) {
+      const j = JSON.parse(text), out = [], targets = j && j.targets;
+      if (!targets || typeof targets !== 'object') throw new Error('project.assets.json tidak valid: bagian "targets" tidak ada');
+      const fws = (j.project && j.project.frameworks) || {};
+      const directNames = new Set();
+      let isTest = false;
+      Object.keys(fws).forEach(k => {
+        const deps = fws[k].dependencies || {};
+        Object.keys(deps).forEach(n => {
+          if (n.toLowerCase() === 'microsoft.net.test.sdk') isTest = true;
+          if (!deps[n].autoReferenced) directNames.add(n.toLowerCase());
+        });
+      });
+      const keys = Object.keys(targets), plain = keys.filter(k => k.indexOf('/') < 0);
+      (plain.length ? plain : keys).forEach(tk => {
+        Object.keys(targets[tk]).forEach(nv => {
+          const x = targets[tk][nv], i = nv.lastIndexOf('/');
+          if (!x || x.type !== 'package' || i <= 0) return;
+          const name = nv.slice(0, i), ver = nv.slice(i + 1);
+          if (!startsWithDigit(ver)) return;
+          out.push({ name, version: ver, eco: 'NuGet', dev: isTest, direct: directNames.has(name.toLowerCase()) });
+        });
+      });
+      return out;
+    }
     function parseCsproj(text) {
       const doc = new DOMParser().parseFromString(text, 'application/xml');
       if (doc.querySelector('parsererror')) throw new Error('XML tidak valid');
@@ -999,13 +1026,14 @@
     }
     const PARSERS = {
       'npm-lock': parseNpmLock, 'npm-pkg': parseNpmPackageJson, 'yarn': parseYarnLock, 'pnpm': parsePnpmLock,
-      'composer': parseComposerLock, 'nuget-lock': parseNugetLock, 'nuget-proj': parseCsproj,
+      'composer': parseComposerLock, 'nuget-lock': parseNugetLock, 'nuget-assets': parseProjectAssets, 'nuget-proj': parseCsproj,
       'maven-pom': parsePomXml, 'gradle': parseGradle, 'gradle-lock': parseGradleLock,
       'cargo-lock': parseCargoLock, 'cargo-toml': parseCargoToml, 'go-mod': parseGoMod,
       'py-req': parseRequirements, 'py-toml-lock': parsePythonTomlLock, 'pipfile-lock': parsePipfileLock,
       'ruby': parseGemfileLock, 'pubspec': parsePubspecLock, 'mix': parseMixLock
     };
     const TYPE_NOTES = {
+      'nuget-proj': '.csproj hanya memuat PackageReference langsung; package transitif TIDAK terpindai, padahal kerentanan .NET umumnya ada di transitif. Jalankan dotnet restore lalu unggah obj/project.assets.json (atau packages.lock.json) untuk hasil lengkap.',
       'npm-pkg': 'package.json hanya memuat rentang versi; yang dipindai adalah versi dasarnya. Gunakan lockfile untuk versi yang benar-benar terpasang.',
       'maven-pom': 'pom.xml hanya memuat dependency langsung; dependency transitif tidak dihitung. Versi yang tidak bisa dihitung (mis. dari BOM eksternal) dilewati.',
       'gradle': 'build.gradle hanya memuat dependency langsung yang ditulis sebagai "group:artifact:versi". Untuk dependency transitif gunakan gradle.lockfile.',
@@ -1228,7 +1256,7 @@
     // ============================================================
     const TYPE_LABELS = {
       'npm-lock': 'npm — package-lock.json', 'npm-pkg': 'npm — package.json', 'composer': 'Composer — composer.lock',
-      'nuget-lock': 'NuGet — packages.lock.json', 'nuget-proj': 'NuGet — .csproj / .props / packages.config',
+      'nuget-lock': 'NuGet — packages.lock.json', 'nuget-assets': 'NuGet — obj/project.assets.json', 'nuget-proj': 'NuGet — .csproj / .props / packages.config',
       'yarn': 'npm — yarn.lock', 'pnpm': 'npm — pnpm-lock.yaml',
       'maven-pom': 'Java — Maven pom.xml', 'gradle': 'Java — build.gradle(.kts)', 'gradle-lock': 'Java — gradle.lockfile',
       'cargo-lock': 'Rust — Cargo.lock', 'cargo-toml': 'Rust — Cargo.toml', 'go-mod': 'Go — go.mod',
@@ -1241,6 +1269,7 @@
       if (n.endsWith('package-lock.json') || n.endsWith('npm-shrinkwrap.json')) return 'npm-lock';
       if (n.endsWith('composer.lock')) return 'composer';
       if (n.endsWith('packages.lock.json')) return 'nuget-lock';
+      if (n.endsWith('project.assets.json')) return 'nuget-assets';
       if (n.endsWith('package.json')) return 'npm-pkg';
       if (n.endsWith('yarn.lock')) return 'yarn';
       if (n.endsWith('pnpm-lock.yaml')) return 'pnpm';
@@ -1266,6 +1295,7 @@
           if (j.lockfileVersion !== undefined) return 'npm-lock';
           if (j['content-hash'] !== undefined || Array.isArray(j.packages)) return 'composer';
           if (j.version === 1 && j.dependencies) return 'nuget-lock';
+          if (j.version === 3 && j.targets && j.libraries) return 'nuget-assets';
           if (j._meta && (j.default || j.develop)) return 'pipfile-lock';
           if (j.dependencies || j.devDependencies) return 'npm-pkg';
         } catch (e) { /* bukan JSON */ }
