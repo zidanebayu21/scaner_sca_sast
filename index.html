@@ -79,7 +79,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.30</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.31</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -122,6 +122,7 @@
         <button :class="{ active: tab === 'sast' }" @click="tab = 'sast'">SAST (Kode)</button>
         <button :class="{ active: tab === 'jwt' }" @click="tab = 'jwt'">JWT Decode</button>
         <button :class="{ active: tab === 'dbg' }" @click="tab = 'dbg'">API Debug (HKDF)</button>
+        <button :class="{ active: tab === 'rate' }" @click="tab = 'rate'">Rate Limiter (dari curl)</button>
       </div>
 
       <!-- SCA + Docker -->
@@ -351,6 +352,32 @@
         <textarea v-model="hk.token" style="min-height:70px" placeholder="1.MFkwEwYH....ciphertext  (boleh seluruh nilai data=, dipecah di titik)"></textarea>
         <div class="actions"><button class="btn gray" @click="splitToken">Bedah</button></div>
         <pre class="json" v-if="hk.parts">{{ hk.parts }}</pre>
+      </section>
+
+      <!-- Rate Limiter (dari curl) -->
+      <section v-else-if="tab === 'rate'">
+        <h2 style="margin-top:0">Tes Rate Limiter (dari curl)</h2>
+        <p class="muted">Seperti Postman, khusus untuk cek rate limiter. Tempel curl satu endpoint (mis. login atau search), tentukan jumlah &amp; jeda, lalu pasang skrip di tab aplikasi target — sama prinsipnya dengan tab Hook, supaya request jalan <i>same-origin</i> (cookie sesi ikut otomatis, tidak kena CORS). Skrip mengulang request itu berkali-kali dan melaporkan status/waktu/header <code>Retry-After</code> tiap percobaan. <b>Pakai hanya pada sistem yang Anda berwenang menguji</b>; ini mengirim trafik sungguhan berulang.</p>
+        <textarea v-model="rl.curl" @input="parseRlCurl" placeholder="curl --url 'https://host/api/login' -X POST -H 'Content-Type: application/json' --data-raw '{...}'"></textarea>
+        <div class="row" style="margin-top:8px">
+          <input type="text" v-model="rl.method" placeholder="GET" style="max-width:90px" />
+          <input type="text" v-model="rl.url" placeholder="https://host:port/path" />
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label>Jumlah request <input type="number" v-model.number="rl.count" min="1" max="300" style="max-width:90px" /></label>
+          <label>Jeda antar request (ms) <input type="number" v-model.number="rl.delay" min="0" max="5000" style="max-width:100px" /></label>
+        </div>
+        <template v-if="rateScript">
+          <textarea readonly :value="rateScript" style="min-height:80px;font-size:11px;margin-top:8px"></textarea>
+          <div class="actions">
+            <button class="btn gray" @click="copyRateScript">{{ rl.copied ? 'Tersalin' : 'Salin skrip' }}</button>
+            <a class="btn blue" :href="rateBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="rl.msg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">📌 Seret ke bookmark</a>
+          </div>
+          <div class="muted" v-if="rl.msg" style="color:#f59e0b">{{ rl.msg }}</div>
+        </template>
+        <div class="muted" style="margin-top:6px">
+          Panel hasil muncul di pojok kiri-bawah tab target (supaya tidak bertumpuk dengan panel Hook di kanan-bawah), dengan tombol stop dan salin CSV.
+        </div>
       </section>
     </main>
     </div>
@@ -2080,15 +2107,19 @@
     //  apa adanya, sesaat setelah aplikasi target memanggilnya sendiri dengan key ephemeral-nya.
     //  Jalan di console: CSP halaman target tidak berlaku untuk kode yang dieksekusi dari sana.
     // ============================================================
-    const HOOK_SCRIPT = [
-      '(function () {',
-      '  if (window.__apiHook) window.__apiHook.close();',
-      '  function pretty(t) { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (e) { return t; } }',
+    // Baris mkBtn dipakai bersama oleh HOOK_SCRIPT dan RATE_SCRIPT (hindari duplikasi).
+    const MKBTN_LINES = [
       '  function mkBtn(label, fn) {',
       '    var b = document.createElement("button"); b.textContent = label;',
       '    Object.assign(b.style, { background: "#334155", color: "#e2e8f0", border: "none", borderRadius: "4px", padding: "3px 8px", cursor: "pointer", fontSize: "11px" });',
       '    b.onclick = fn; return b;',
-      '  }',
+      '  }'
+    ];
+    const HOOK_SCRIPT = [
+      '(function () {',
+      '  if (window.__apiHook) window.__apiHook.close();',
+      '  function pretty(t) { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (e) { return t; } }',
+      ...MKBTN_LINES,
       '  var panel = document.createElement("div");',
       '  Object.assign(panel.style, { position: "fixed", right: "12px", bottom: "12px", width: "440px", height: "420px", minWidth: "300px", minHeight: "180px", maxWidth: "90vw", maxHeight: "90vh", resize: "both", overflow: "hidden", background: "#0f172a", color: "#e2e8f0", font: "12px/1.4 Consolas,monospace", border: "1px solid #334155", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,.4)", zIndex: 2147483647, display: "flex", flexDirection: "column" });',
       '  var head = document.createElement("div");',
@@ -2190,6 +2221,131 @@
       '})();'
     ].join('\n');
 
+    // ============================================================
+    //  Parser curl ringan: dipakai di halaman ini sendiri untuk mengisi
+    //  form "Tes Rate Limiter" dari teks curl yang ditempel (mis. "Copy as cURL").
+    // ============================================================
+    const CURL_ESC = { n: '\n', t: '\t', r: '\r' };
+    function readQuoted(s, i, ansi) {
+      let cur = '';
+      for (; i < s.length && s[i] !== "'"; i++) {
+        if (ansi && s[i] === '\\' && i + 1 < s.length) { i++; cur += CURL_ESC[s[i]] || s[i]; } else cur += s[i];
+      }
+      return [cur, i + 1];
+    }
+    function readDoubleQuoted(s, i) {
+      let cur = '';
+      for (; i < s.length && s[i] !== '"'; i++) {
+        if (s[i] === '\\' && i + 1 < s.length) i++;
+        cur += s[i];
+      }
+      return [cur, i + 1];
+    }
+    function tokenizeCurl(src) {
+      const s = src.replace(/\\\r?\n/g, ' ');
+      const out = [];
+      let cur = '', has = false, i = 0, r;
+      while (i < s.length) {
+        const c = s[i];
+        if (c === "'" || (c === '$' && s[i + 1] === "'")) {
+          r = readQuoted(s, c === '$' ? i + 2 : i + 1, c === '$'); cur += r[0]; i = r[1]; has = true;
+        } else if (c === '"') {
+          r = readDoubleQuoted(s, i + 1); cur += r[0]; i = r[1]; has = true;
+        } else if (/\s/.test(c)) {
+          if (has) { out.push(cur); cur = ''; has = false; }
+          i++;
+        } else if (c === '\\') { cur += s[i + 1] || ''; i += 2; has = true; }
+        else { cur += c; has = true; i++; }
+      }
+      if (has) out.push(cur);
+      return out;
+    }
+    const addHeader = (r, v) => { const k = v.indexOf(':'); if (k > 0) r.headers.push([v.slice(0, k).trim(), v.slice(k + 1).trim()]); };
+    const addBody = (r, v) => { r.body = r.body ? r.body + '&' + v : v; };
+    const setMethod = (r, v) => { r.method = v.toUpperCase(); };
+    const CURL_FLAGS = { '--url': (r, v) => { r.url = v; } };
+    [['-X', '--request', setMethod], ['-H', '--header', addHeader], ['-b', '--cookie', (r, v) => addHeader(r, 'Cookie: ' + v)]].forEach(([a, b, fn]) => { CURL_FLAGS[a] = fn; CURL_FLAGS[b] = fn; });
+    ['-d', '--data', '--data-raw', '--data-binary', '--data-urlencode', '--data-ascii'].forEach(f => { CURL_FLAGS[f] = addBody; });
+    function parseCurl(src) {
+      const t = tokenizeCurl(src), r = { method: '', url: '', headers: [], body: '' };
+      for (let i = 0; i < t.length; i++) {
+        const a = t[i];
+        if (CURL_FLAGS[a]) CURL_FLAGS[a](r, t[++i] || '');
+        else if (a === '-I' || a === '--head') r.method = 'HEAD';
+        else if (/^https?:\/\//i.test(a)) r.url = a;
+      }
+      r.method = r.method || (r.body ? 'POST' : 'GET');
+      return r;
+    }
+
+    // ============================================================
+    //  Skrip "Tes Rate Limiter": sama prinsipnya dengan HOOK_SCRIPT -- dipasang
+    //  lewat console/bookmarklet DI TAB TARGET supaya cookie sesi ikut otomatis
+    //  (same-origin) dan tidak kena CORS seperti bila dikirim dari halaman ini.
+    //  Mengulang SATU request apa adanya sejumlah kali dengan jeda yang ditentukan,
+    //  lalu menampilkan status/waktu/header Retry-After tiap percobaan.
+    // ============================================================
+    function buildRateScript(cfg) {
+      const headers = {};
+      cfg.headers.forEach(([k, v]) => { headers[k] = v; });
+      const payload = JSON.stringify({ method: cfg.method, url: cfg.url, headers, body: cfg.body, count: cfg.count, delay: cfg.delay });
+      return [
+        '(function () {',
+        '  if (window.__rateHook) window.__rateHook.close();',
+        '  var cfg = ' + payload + ';',
+        '  var FORBIDDEN = /^(cookie2?|user-agent|referer|origin|host|connection|content-length|date|dnt|expect|te|trailer|transfer-encoding|upgrade|via|keep-alive|accept-encoding|accept-charset|sec-.*|proxy-.*)$/i;',
+        '  var hdrs = {};',
+        '  Object.keys(cfg.headers).forEach(function (k) { if (!FORBIDDEN.test(k)) hdrs[k] = cfg.headers[k]; });',
+        ...MKBTN_LINES,
+        '  var panel = document.createElement("div");',
+        '  Object.assign(panel.style, { position: "fixed", left: "12px", bottom: "12px", width: "380px", height: "360px", minWidth: "260px", minHeight: "160px", maxWidth: "90vw", maxHeight: "90vh", resize: "both", overflow: "hidden", background: "#0f172a", color: "#e2e8f0", font: "12px/1.4 Consolas,monospace", border: "1px solid #334155", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,.4)", zIndex: 2147483647, display: "flex", flexDirection: "column" });',
+        '  var head = document.createElement("div");',
+        '  Object.assign(head.style, { display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderBottom: "1px solid #334155", background: "#1e293b", borderRadius: "8px 8px 0 0", flexShrink: "0" });',
+        '  var title = document.createElement("b"); title.textContent = "Rate Limit Test"; title.style.flex = "1";',
+        '  var summary = document.createElement("div");',
+        '  Object.assign(summary.style, { padding: "6px 10px", color: "#94a3b8", borderBottom: "1px solid #1e293b", flexShrink: "0" });',
+        '  summary.textContent = "0 / " + cfg.count + " " + String.fromCharCode(183) + " bersiap...";',
+        '  var body = document.createElement("div");',
+        '  Object.assign(body.style, { overflow: "auto", padding: "6px 10px", flex: "1" });',
+        '  var stopped = false, rows = [], counts = {};',
+        '  var stopBtn = mkBtn("stop", function () { stopped = true; });',
+        '  var csvBtn = mkBtn("salin csv", function () {',
+        '    var lines = ["index,status,ms,retry_after"].concat(rows.map(function (r) { return [r.i, r.status, r.ms, r.retryAfter || ""].join(","); }));',
+        '    navigator.clipboard.writeText(lines.join("\\n"));',
+        '    var old = csvBtn.textContent; csvBtn.textContent = "tersalin"; setTimeout(function () { csvBtn.textContent = old; }, 1200);',
+        '  });',
+        '  var closeBtn = mkBtn(String.fromCharCode(10005), function () { stopped = true; panel.remove(); });',
+        '  head.append(title, stopBtn, csvBtn, closeBtn);',
+        '  panel.append(head, summary, body);',
+        '  document.body.appendChild(panel);',
+        '  function addRow(i, status, ms, retryAfter, err) {',
+        '    rows.push({ i: i, status: status, ms: ms, retryAfter: retryAfter });',
+        '    var key = err ? "error" : (status === 429 ? "429" : status >= 500 ? "5xx" : status >= 400 ? "4xx" : "2xx/3xx");',
+        '    counts[key] = (counts[key] || 0) + 1;',
+        '    var row = document.createElement("div");',
+        '    row.style.color = status === 429 ? "#fbbf24" : (err || status >= 400) ? "#f87171" : "#4ade80";',
+        '    row.textContent = "#" + i + " " + status + (err ? " (" + err + ")" : "") + " " + String.fromCharCode(183) + " " + ms + "ms" + (retryAfter ? " " + String.fromCharCode(183) + " Retry-After: " + retryAfter : "");',
+        '    body.insertBefore(row, body.firstChild);',
+        '    summary.textContent = rows.length + " / " + cfg.count + " " + String.fromCharCode(183) + " " + Object.keys(counts).map(function (k) { return k + ":" + counts[k]; }).join("  ");',
+        '  }',
+        '  function send(i) {',
+        '    var t0 = performance.now();',
+        '    var noBody = cfg.method === "GET" || cfg.method === "HEAD" || !cfg.body;',
+        '    return fetch(cfg.url, { method: cfg.method, headers: hdrs, body: noBody ? undefined : cfg.body, credentials: "include" })',
+        '      .then(function (res) { addRow(i, res.status, Math.round(performance.now() - t0), res.headers.get("retry-after")); })',
+        '      .catch(function (e) { addRow(i, "error", Math.round(performance.now() - t0), null, e.message); });',
+        '  }',
+        '  (async function run() {',
+        '    for (var i = 1; i <= cfg.count && !stopped; i++) {',
+        '      await send(i);',
+        '      if (i < cfg.count && cfg.delay) await new Promise(function (r) { setTimeout(r, cfg.delay); });',
+        '    }',
+        '  })();',
+        '  window.__rateHook = { close: function () { stopped = true; panel.remove(); } };',
+        '})();'
+      ].join('\n');
+    }
+
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
     const DEFAULT_PROJECT = 'Tanpa nama';
@@ -2244,6 +2400,7 @@
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
           hk: { serverPem: '', clientPub: '', clientPriv: '', salt: '', saltEnc: 'utf8', info: '', infoEnc: 'utf8', len: 32, secret: '', okm: '', input: '', aad: '', iv: '', output: '', token: '', parts: '', error: '' },
           hookCopied: false, hookMsg: '',
+          rl: { curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '' },
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -2255,6 +2412,8 @@
         jwt() { return decodeJwt(this.jwtText); },
         hookScript() { return HOOK_SCRIPT; },
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
+        rateScript() { return this.rl.url.trim() ? buildRateScript(this.rl) : ''; },
+        rateBookmarklet() { return this.rateScript ? 'javascript:' + encodeURIComponent(this.rateScript) : ''; },
         activeItems() { return this.items.filter(it => it.enabled); },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
@@ -2282,6 +2441,16 @@
           navigator.clipboard.writeText(HOOK_SCRIPT)
             .then(() => { this.hookCopied = true; setTimeout(() => { this.hookCopied = false; }, 2000); })
             .catch(() => { this.hookMsg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
+        },
+        parseRlCurl() {
+          if (!/^\s*curl\b/.test(this.rl.curl)) return;
+          const r = parseCurl(this.rl.curl);
+          this.rl.method = r.method; this.rl.url = r.url; this.rl.headers = r.headers; this.rl.body = r.body;
+        },
+        copyRateScript() {
+          navigator.clipboard.writeText(this.rateScript)
+            .then(() => { this.rl.copied = true; setTimeout(() => { this.rl.copied = false; }, 2000); })
+            .catch(() => { this.rl.msg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
         },
         async genHkKeys() {
           try {

@@ -24,6 +24,8 @@ Tab **API Debug (HKDF)** berisi **Hook tab lain**: untuk endpoint yang pakai enk
 
 Tab **JWT Decode** menampilkan header, payload, dan status exp/nbf/iat token JWT langsung di browser (signature tidak diverifikasi).
 
+Tab **Rate Limiter (dari curl)**: seperti Postman, khusus cek rate limiter. Tempel curl satu endpoint, tentukan jumlah & jeda, lalu pasang skrip yang dihasilkan di tab aplikasi target (sama prinsipnya dengan Hook: same-origin, cookie sesi ikut otomatis, tidak kena CORS). Panel di tab target mencatat status, waktu, dan header `Retry-After` tiap percobaan, dengan tombol stop dan salin CSV. Hanya untuk sistem yang Anda berwenang menguji.
+
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
 
 **Bahasa/ekosistem SCA yang didukung** (semua lewat OSV.dev): JavaScript (package-lock, yarn.lock, pnpm-lock.yaml, package.json), PHP (composer.lock), .NET (packages.lock.json, *.csproj, packages.config), Java (pom.xml, build.gradle(.kts), gradle.lockfile), Rust (Cargo.lock, Cargo.toml), Go (go.mod), Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock), Ruby (Gemfile.lock), Dart (pubspec.lock), Elixir (mix.lock), dan paket yang dipin di Dockerfile. File berbentuk lockfile memuat dependency transitif; pom.xml, build.gradle, Cargo.toml, dan requirements.txt hanya dependency langsung/yang dipin.
