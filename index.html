@@ -41,6 +41,7 @@
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tabs button { padding: 8px 16px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; }
     .tabs button.active { background: #2563eb; border-color: #2563eb; }
+    pre.json { margin: 0; padding: 12px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
     textarea { width: 100%; min-height: 160px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
     input[type=text], select { padding: 7px 10px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
     .actions { margin: 12px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -72,7 +73,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.20</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.21</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -111,6 +112,7 @@
         <button :class="{ active: tab === 'sca' }" @click="tab = 'sca'">SCA &amp; Dockerfile</button>
         <button :class="{ active: tab === 'dast' }" @click="tab = 'dast'">DAST pasif (URL)</button>
         <button :class="{ active: tab === 'sast' }" @click="tab = 'sast'">SAST (Kode)</button>
+        <button :class="{ active: tab === 'jwt' }" @click="tab = 'jwt'">JWT Decode</button>
       </div>
 
       <!-- SCA + Docker -->
@@ -257,6 +259,32 @@
             </tr>
           </tbody>
         </table>
+      </section>
+
+      <!-- JWT -->
+      <section v-else-if="tab === 'jwt'">
+        <p class="muted">Tempel token JWT untuk melihat header dan payload. Didekode di browser ini saja (tidak dikirim ke mana pun) dan <b>signature tidak diverifikasi</b>, jadi isi token jangan dipercaya hanya dari hasil ini.</p>
+        <textarea v-model="jwtText" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"></textarea>
+        <div class="actions"><button class="btn gray" :disabled="!jwtText" @click="jwtText = ''">Bersihkan</button></div>
+        <div class="bad" v-if="jwt && jwt.error">{{ jwt.error }}</div>
+        <template v-if="jwt && !jwt.error">
+          <div v-for="w in jwt.warnings" :key="w" class="sev-MEDIUM" style="margin:6px 0">⚠ {{ w }}</div>
+          <table v-if="jwt.claims.length">
+            <thead><tr><th>Klaim</th><th>Nilai</th><th>Waktu</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr v-for="c in jwt.claims" :key="c.key">
+                <td><code>{{ c.key }}</code> {{ c.label }}</td><td>{{ c.value }}</td><td>{{ c.date }}</td>
+                <td :class="c.ok ? 'ok' : 'sev-HIGH'">{{ c.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <h3>Header</h3>
+          <pre class="json">{{ jwt.headerText }}</pre>
+          <h3>Payload</h3>
+          <pre class="json">{{ jwt.payloadText }}</pre>
+          <h3>Signature</h3>
+          <pre class="json">{{ jwt.signature || '(kosong)' }}</pre>
+        </template>
       </section>
     </main>
     </div>
@@ -1852,6 +1880,46 @@
       { token: 'http://', rule: 'URL tanpa HTTPS', severity: 'LOW', fix: 'Gunakan https:// agar lalu lintas terenkripsi.' }
     ];
 
+    // Dekode JWT (tanpa verifikasi signature). Isi token tidak tepercaya: hanya ditampilkan sebagai teks.
+    const JWT_TIME_CLAIMS = [
+      ['iat', 'diterbitkan'], ['nbf', 'berlaku mulai'], ['exp', 'kedaluwarsa']
+    ];
+    function b64urlJson(part) {
+      const b = part.replace(/-/g, '+').replace(/_/g, '/');
+      const bin = atob(b + '='.repeat((4 - b.length % 4) % 4));
+      return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))));
+    }
+    function relTime(sec) {
+      const a = Math.abs(sec), u = a >= 86400 ? [Math.floor(a / 86400), 'hari'] : a >= 3600 ? [Math.floor(a / 3600), 'jam'] : a >= 60 ? [Math.floor(a / 60), 'menit'] : [a, 'detik'];
+      return u[0] + ' ' + u[1];
+    }
+    function jwtClaims(payload, now) {
+      return JWT_TIME_CLAIMS.filter(([k]) => typeof payload[k] === 'number').map(([k, label]) => {
+        const diff = payload[k] - now;
+        const past = diff <= 0;
+        const status = k === 'exp' ? (past ? 'Kedaluwarsa ' + relTime(diff) + ' lalu' : 'Berlaku, sisa ' + relTime(diff))
+          : k === 'nbf' ? (past ? 'Sudah berlaku' : 'Belum berlaku, ' + relTime(diff) + ' lagi')
+          : (past ? relTime(diff) + ' lalu' : 'Di masa depan (' + relTime(diff) + ')');
+        return { key: k, label, value: payload[k], date: new Date(payload[k] * 1000).toLocaleString('id-ID'), status, ok: k === 'exp' ? !past : k === 'nbf' ? past : past };
+      });
+    }
+    function decodeJwt(raw) {
+      const token = raw.trim().replace(/^bearer\s+/i, '').replace(/\s+/g, '');
+      if (!token) return null;
+      const parts = token.split('.');
+      if (parts.length < 2 || parts.length > 3) return { error: 'Format JWT tidak valid: harus berupa header.payload[.signature].' };
+      try {
+        const header = b64urlJson(parts[0]), payload = b64urlJson(parts[1]);
+        const alg = String(header.alg || '');
+        const warnings = [];
+        if (!alg || alg.toLowerCase() === 'none') warnings.push('Algoritma "none": token tidak ditandatangani.');
+        else if (!parts[2]) warnings.push('Signature kosong padahal algoritma ' + alg + '.');
+        if (/^HS/i.test(alg)) warnings.push('Algoritma ' + alg + ' memakai secret bersama; pastikan secret kuat dan tidak bocor.');
+        if (typeof payload.exp !== 'number') warnings.push('Tidak ada klaim exp: token tidak pernah kedaluwarsa.');
+        return { header, payload, headerText: JSON.stringify(header, null, 2), payloadText: JSON.stringify(payload, null, 2), signature: parts[2] || '', claims: jwtClaims(payload, Date.now() / 1000), warnings };
+      } catch (e) { return { error: 'Gagal mendekode token (bukan base64url/JSON yang valid).' }; }
+    }
+
     const ITEMS_KEY = 'scaItems';
     const DEFAULT_PROJECT = 'Tanpa nama';
     // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
@@ -1903,7 +1971,7 @@
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
-          persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
+          jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false
@@ -1911,6 +1979,7 @@
       },
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
+        jwt() { return decodeJwt(this.jwtText); },
         activeItems() { return this.items.filter(it => it.enabled); },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
