@@ -20,6 +20,8 @@ Buka `index.html` di browser (tidak perlu build / server).
 
 Lebar panel kiri bisa digeser (tarik pegangan di tepinya, klik dua kali untuk reset); ukuran diingat di browser.
 
+Tab **API Debug (HKDF)** adalah semacam Postman mini: tempel perintah curl, ubah header/body, kirim, lihat request dan response. Bawaannya lewat proxy lokal `node debug-proxy.js` (127.0.0.1:8788) supaya Cookie/User-Agent/Referer bebas dikirim dan sertifikat self-signed bisa diabaikan; mode langsung dari browser butuh CORS. Di bawahnya ada lab HKDF (ECDH P-256, HKDF-SHA256, AES-GCM) dan pembedah token `data=`. Isi tab ini tidak disimpan.
+
 Tab **JWT Decode** menampilkan header, payload, dan status exp/nbf/iat token JWT langsung di browser (signature tidak diverifikasi).
 
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
