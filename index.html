@@ -72,7 +72,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.17</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.18</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -116,7 +116,7 @@
       <!-- SCA + Docker -->
       <section v-if="tab === 'sca'">
         <div class="row" style="margin-bottom:10px">
-          <input type="text" v-model="project" list="project-names" placeholder="Nama project (mis. aplikasi-hrd). Kosong = nama repo untuk link, atau 'Tanpa nama'" />
+          <input type="text" v-model="project" list="project-names" placeholder="Nama project (mis. aplikasi-hrd). Kosong = diambil dari field name di file (package.json, pom.xml, dll.) atau nama repo untuk link" />
           <datalist id="project-names"><option v-for="p in projectNames" :key="p" :value="p"></option></datalist>
         </div>
         <div class="muted" style="margin:-4px 0 10px">
@@ -1854,6 +1854,20 @@
 
     const ITEMS_KEY = 'scaItems';
     const DEFAULT_PROJECT = 'Tanpa nama';
+    // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
+    function projectFromContent(type, text) {
+      let m = null;
+      try {
+        if (type === 'npm-pkg' || type === 'npm-lock') {
+          const d = JSON.parse(text);
+          return String(d.name || (d.packages && d.packages[''] && d.packages[''].name) || '').trim();
+        }
+        if (type === 'maven-pom') m = text.replace(/<parent>[\s\S]*?<\/parent>/, '').match(/<artifactId>\s*([^<\s]+)\s*<\/artifactId>/);
+        else if (type === 'cargo-toml') m = text.match(/\[package\][^[]*?name\s*=\s*"([^"]+)"/);
+        else if (type === 'go-mod') m = text.match(/^module\s+(\S+)/m);
+      } catch (e) { return ''; }
+      return m ? m[1].split('/').pop() : '';
+    }
     // Batas aman ~5 juta karakter localStorage (disisakan untuk kunci lain).
     const STORAGE_BUDGET = 4500000;
 
@@ -2000,10 +2014,10 @@
         },
         // Kunci unik = project + nama file (tanpa beda huruf besar/kecil); duplikat menggantikan yang lama.
         addItem(name, text, project) {
-          const proj = (project || this.project).trim() || DEFAULT_PROJECT;
+          const type = detectType(name, text);
+          const proj = (project || this.project).trim() || projectFromContent(type, text) || DEFAULT_PROJECT;
           const same = x => x.project.toLowerCase() === proj.toLowerCase() && x.name.toLowerCase() === name.toLowerCase();
           const old = this.items.find(same);
-          const type = detectType(name, text);
           const fresh = { id: old ? old.id : this.nextId++, project: proj, name, type, ...toStoredForm(type, text), enabled: old ? old.enabled : true };
           if (old) Object.assign(old, fresh); else this.items.push(fresh);
         },
