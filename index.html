@@ -117,13 +117,13 @@
       <h2>{{ t('sideApiTitle') }}</h2>
       <p class="muted">{{ t('sideApiDesc') }}</p>
       <div class="side-tools">
-        <button class="lnk" @click="apiOpen = !apiOpen">{{ apiOpen ? '▾ Sembunyikan semua API' : '▸ Tampilkan ' + apis.length + ' API' }}</button>
-        <button class="lnk" v-if="apiOpen" @click="toggleAllDetail">{{ allDetailOpen ? 'Tutup semua detail' : 'Buka semua detail' }}</button>
+        <button class="lnk" @click="apiOpen = !apiOpen">{{ apiOpen ? '▾ ' + t('api_hide_all') : '▸ ' + t('api_show') + ' ' + apis.length + ' API' }}</button>
+        <button class="lnk" v-if="apiOpen" @click="toggleAllDetail">{{ allDetailOpen ? t('api_close_details') : t('api_open_details') }}</button>
       </div>
       <div v-if="apiOpen">
         <div class="grp" v-for="g in groups" :key="g.key">
-          <div class="grp-h">{{ g.title }} <span class="pill">{{ g.none ? 'tanpa API' : groupApis(g).length + ' API' }}</span></div>
-          <div class="muted grp-d">{{ g.desc }}</div>
+          <div class="grp-h">{{ grpText(g, 'title') }} <span class="pill">{{ g.none ? t('api_none') : groupApis(g).length + ' API' }}</span></div>
+          <div class="muted grp-d">{{ grpText(g, 'desc') }}</div>
           <div class="api" v-for="a in groupApis(g)" :key="a.key">
             <div class="api-h" @click="openKeys[a.key] = !openKeys[a.key]">
               <span class="chev">{{ openKeys[a.key] ? '▾' : '▸' }}</span>
@@ -132,10 +132,10 @@
             </div>
             <div class="api-d" v-if="openKeys[a.key]">
               <code>{{ a.url }}</code>
-              <div>{{ a.use }}</div>
-              <div class="muted">Dikirim: {{ a.sends }}</div>
-              <div class="muted">Dipakai: {{ a.when }}</div>
-              <div class="bad" v-if="stats[a.key].last" style="font-size:12px">Terakhir gagal: {{ stats[a.key].last }}</div>
+              <div>{{ apiText(a, 'use') }}</div>
+              <div class="muted">{{ t('api_sent') }}: {{ apiText(a, 'sends') }}</div>
+              <div class="muted">{{ t('api_usedwhen') }}: {{ apiText(a, 'when') }}</div>
+              <div class="bad" v-if="stats[a.key].last" style="font-size:12px">{{ t('api_lastfail') }}: {{ stats[a.key].last }}</div>
             </div>
           </div>
         </div>
@@ -2759,6 +2759,12 @@
       return 'dark';
     }
     const I18N = window.APP_I18N || { id: {}, en: {} };
+    const LANG = detectLang();
+    // tr(): versi non-Vue dari t(), bisa dipakai di builder laporan, pesan error, dll.
+    function tr(key) { return (I18N[LANG] && I18N[LANG][key]) || (I18N.id && I18N.id[key]) || key; }
+    // Teks data (grup/API) yang punya default Indonesia di array: pakai terjemahan
+    // bila ada untuk bahasa aktif, selain itu jatuh ke nilai Indonesia di data.
+    function trData(key, fallback) { const d = I18N[LANG]; return (d && d[key]) || fallback; }
 
     createApp({
       data() {
@@ -2998,9 +3004,11 @@
     //    },
         statLabel(a) {
           const s = this.stats[a.key];
-          if (!s.calls) return 'belum dipanggil';
-          return s.calls + '× · ' + s.ok + ' ok' + (s.fail ? ' · ' + s.fail + ' gagal' : '');
+          if (!s.calls) return tr('stat_notcalled');
+          return s.calls + '× · ' + s.ok + ' ok' + (s.fail ? ' · ' + s.fail + ' ' + tr('stat_fail') : '');
         },
+        grpText(g, f) { return trData('grp_' + g.key + '_' + f, g[f]); },
+        apiText(a, f) { return trData('api_' + a.key + '_' + f, a[f]); },
         async runDast() {
           const links = this.dastText.split(/[\s,]+/).filter(Boolean).slice(0, 10);
           if (!links.length) return;
