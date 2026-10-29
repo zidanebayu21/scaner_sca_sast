@@ -82,7 +82,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.40</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.41</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -307,7 +307,7 @@
       <!-- Hook Debug -->
       <section v-else-if="tab === 'dbg'">
         <h2 style="margin-top:0">Hook tab lain (live, mudah dibaca)</h2>
-        <p class="muted">Seperti Postman, untuk endpoint yang memakai enkripsi sekali pakai per-request (ECDH ephemeral) — curl lama <b>tidak bisa dipakai ulang</b> walau header lengkap, karena kuncinya hanya hidup sesaat di memori tab asli. Pasang skrip ini di tab aplikasi target; panel kecil muncul di sana dan mencatat tiap request apa adanya saat Anda memakai aplikasinya seperti biasa: <b>payload sebelum dienkripsi</b> (hasil sadapan <code>crypto.subtle.encrypt</code>), apa yang benar-benar dikirim lewat jaringan, dan hasil dekripsi response-nya.</p>
+        <p class="muted">Seperti Postman, mencatat tiap request fetch/XHR saat Anda memakai aplikasi target seperti biasa — <b>bekerja untuk endpoint biasa maupun yang terenkripsi</b>. Tiap entri menampilkan <b>method, URL, header request, body, status, dan header response</b>; untuk endpoint ber-enkripsi sekali pakai per-request (ECDH ephemeral) juga ditampilkan <b>payload sebelum dienkripsi</b> (sadapan <code>crypto.subtle.encrypt</code>) dan hasil dekripsi response (sadapan <code>crypto.subtle.decrypt</code>) — berguna karena curl lama tak bisa dipakai ulang (kunci hanya hidup sesaat di memori tab). Karena merekam semua panggilan, panel ini sekaligus seperti <b>crawler</b>: tombol <b>export json</b> mengunduh seluruh daftar (link, method, header, body, status) sebagai satu file JSON.</p>
         <ol class="muted" style="margin:0 0 10px 18px;padding:0">
           <li>Buka tab aplikasi target, tekan F12 → tab <b>Console</b>, tempel skrip di bawah lalu Enter.</li>
           <li>Atau seret tombol <b>🪝 Hoox</b> ke bilah bookmark sekali saja; setelah itu tinggal klik dari bilah bookmark saat berada di tab target, bisa dipakai berkali-kali tanpa buka Console.</li>
@@ -2129,6 +2129,16 @@
       '(function () {',
       '  if (window.__apiHook) window.__apiHook.close();',
       '  function pretty(t) { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (e) { return t; } }',
+      '  function bodyToText(b) {',
+      '    if (b == null) return null;',
+      '    if (typeof b === "string") return b;',
+      '    try { if (b instanceof URLSearchParams) return b.toString(); } catch (e) {}',
+      '    try { if (b instanceof FormData) { var o = {}; b.forEach(function (v, k) { o[k] = typeof v === "string" ? v : "[file]"; }); return JSON.stringify(o); } } catch (e) {}',
+      '    try { return String(b); } catch (e) { return "[tak terbaca]"; }',
+      '  }',
+      '  function parseHeaders(raw) {',
+      '    var o = {}; String(raw || "").trim().split(/\\r?\\n/).forEach(function (line) { var i = line.indexOf(":"); if (i > 0) o[line.slice(0, i).trim()] = line.slice(i + 1).trim(); }); return o;',
+      '  }',
       ...MKBTN_LINES,
       '  var panel = document.createElement("div");',
       '  Object.assign(panel.style, { position: "fixed", right: "12px", bottom: "12px", width: "440px", height: "420px", minWidth: "300px", minHeight: "180px", maxWidth: "90vw", maxHeight: "90vh", resize: "both", overflow: "hidden", background: "#0f172a", color: "#e2e8f0", font: "12px/1.4 Consolas,monospace", border: "1px solid #334155", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,.4)", zIndex: 2147483647, display: "flex", flexDirection: "column" });',
@@ -2137,13 +2147,20 @@
       '  var title = document.createElement("b"); title.textContent = "API Hook"; title.style.flex = "1";',
       '  var body = document.createElement("div");',
       '  Object.assign(body.style, { overflow: "auto", padding: "8px 10px", flex: "1" });',
-      '  var entries = [];',
+      '  var entries = [], records = [];',
+      '  var exportBtn = mkBtn("export json", function () {',
+      '    var data = records.map(function (r) { return { method: r.method, url: r.url, reqHeaders: r.reqHeaders || {}, reqBody: bodyToText(r.reqBody), reqPlain: r.reqPlain || null, status: r.status != null ? r.status : null, resHeaders: r.resHeaders || {}, plain: r.plain || null, resBody: r.resBody != null ? r.resBody : null, resend: !!r.resend }; });',
+      '    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });',
+      '    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "api-hook-" + location.hostname + "-" + Date.now() + ".json";',
+      '    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);',
+      '  });',
+      '  exportBtn.title = "Unduh semua request tercatat sebagai JSON (link, method, header, body, status)";',
       '  var expandBtn = mkBtn("buka semua", function () {',
       '    var open = expandBtn.textContent === "buka semua";',
       '    entries.forEach(function (en) { en.pre.style.display = open ? "block" : "none"; en.arrow.textContent = open ? String.fromCharCode(9662) : String.fromCharCode(9656); });',
       '    expandBtn.textContent = open ? "tutup semua" : "buka semua";',
       '  });',
-      '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); entries.length = 0; count = 0; expandBtn.textContent = "buka semua"; });',
+      '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); entries.length = 0; records.length = 0; count = 0; expandBtn.textContent = "buka semua"; });',
       '  var minimized = false, prevHeight = "";',
       '  var minBtn = mkBtn(String.fromCharCode(8211), function () {',
       '    minimized = !minimized;',
@@ -2155,7 +2172,7 @@
       '  });',
       '  minBtn.title = "Kecilkan";',
       '  var closeBtn = mkBtn(String.fromCharCode(10005), function () { restore(); panel.remove(); });',
-      '  head.append(title, minBtn, expandBtn, clearBtn, closeBtn);',
+      '  head.append(title, minBtn, exportBtn, expandBtn, clearBtn, closeBtn);',
       '  panel.append(head, body);',
       '  document.body.appendChild(panel);',
       '  head.style.cursor = "move";',
@@ -2259,6 +2276,7 @@
       '    box.append(h, pre);',
       '    body.insertBefore(box, body.firstChild);',
       '    entries.push({ pre: pre, arrow: arrow });',
+      '    records.push(rec);',
       '    rec.slot = pre;',
       '    return pre;',
       '  }',
@@ -2268,13 +2286,18 @@
       '    var rec = { url: url, method: method, reqBody: noBody ? null : bodyText, reqHeaders: hdrs, reqPlain: null, plain: null, resend: true };',
       '    addEntry(rec); pending.push(rec); render(rec);',
       '    origFetch(url, { method: method, headers: hdrs, body: noBody ? undefined : bodyText, credentials: "include" })',
-      '      .then(function (res) { return res.text().then(function (t) { if (!rec.plain) { rec.resBody = "[" + res.status + "] " + t; render(rec); } }); })',
+      '      .then(function (res) { rec.status = res.status; var rh = {}; try { res.headers.forEach(function (v, k) { rh[k] = v; }); } catch (e) {} rec.resHeaders = rh; return res.text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }); })',
       '      .catch(function (err) { rec.resBody = "error: " + err.message; render(rec); });',
       '  }',
       '  function render(rec) {',
       '    var parts = [];',
+      '    parts.push(String.fromCharCode(9656) + " " + rec.method + " " + rec.url);',
+      '    if (rec.reqHeaders && Object.keys(rec.reqHeaders).length) parts.push("» header req: " + pretty(JSON.stringify(rec.reqHeaders)));',
       '    if (rec.reqPlain) parts.push("» sebelum dienkripsi: " + pretty(rec.reqPlain));',
-      '    if (rec.reqBody) parts.push("» dikirim: " + String(rec.reqBody));',
+      '    var bt = bodyToText(rec.reqBody);',
+      '    if (bt) parts.push("» body req: " + bt);',
+      '    if (rec.status != null) parts.push("« status: " + rec.status);',
+      '    if (rec.resHeaders && Object.keys(rec.resHeaders).length) parts.push("« header res: " + pretty(JSON.stringify(rec.resHeaders)));',
       '    if (rec.plain) parts.push("« dekripsi: " + pretty(rec.plain));',
       '    else if (rec.resBody != null) parts.push("« respons: " + pretty(rec.resBody));',
       '    rec.slot.textContent = parts.join("\\n") || "(tidak ada body)";',
@@ -2288,7 +2311,10 @@
       '    var rec = { url: url, method: method, reqBody: init && init.body, reqHeaders: hdrs, reqPlain: pendingPlain.shift() || null, plain: null };',
       '    addEntry(rec); pending.push(rec); render(rec);',
       '    var p = origFetch.apply(this, arguments);',
-      '    p.then(function (res) { try { res.clone().text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }); } catch (e) {} });',
+      '    p.then(function (res) {',
+      '      try { rec.status = res.status; var rh = {}; res.headers.forEach(function (v, k) { rh[k] = v; }); rec.resHeaders = rh; render(rec); } catch (e) {}',
+      '      try { res.clone().text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }); } catch (e) {}',
+      '    });',
       '    return p;',
       '  };',
       '  var OrigOpen = XMLHttpRequest.prototype.open, OrigSend = XMLHttpRequest.prototype.send, OrigSetHdr = XMLHttpRequest.prototype.setRequestHeader;',
@@ -2298,7 +2324,7 @@
       '    var self = this;',
       '    var rec = { url: this.__hookUrl, method: this.__hookMethod, reqBody: reqBody, reqHeaders: this.__hookHdrs || {}, reqPlain: pendingPlain.shift() || null, plain: null };',
       '    addEntry(rec); pending.push(rec); render(rec);',
-      '    this.addEventListener("loadend", function () { try { if (!rec.plain) { rec.resBody = self.responseText; render(rec); } } catch (e) {} });',
+      '    this.addEventListener("loadend", function () { try { rec.status = self.status; rec.resHeaders = parseHeaders(self.getAllResponseHeaders()); if (!rec.plain) rec.resBody = self.responseText; render(rec); } catch (e) {} });',
       '    return OrigSend.apply(this, arguments);',
       '  };',
       '  var protoSubtle = SubtleCrypto.prototype, origDecrypt = protoSubtle.decrypt, origEncrypt = protoSubtle.encrypt;',
