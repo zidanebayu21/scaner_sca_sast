@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.14"></script>
+  <script src="i18n/i18n.js?v=1.15"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -591,8 +591,17 @@
         <p class="muted" v-html="t('mw_intro')"></p>
         <div class="row" style="margin-top:8px">
           <input type="text" v-model="mw.method" style="max-width:90px" />
-          <input type="text" v-model="mw.url" placeholder="https://host:port/path" />
+          <input type="text" v-model="mw.url" list="mw_examples" placeholder="https://host:port/path" />
         </div>
+        <!-- Contoh endpoint publik yang menerima POST (echo request) untuk mencoba alat; ganti ke target milik sendiri yang berwenang diuji. -->
+        <datalist id="mw_examples">
+          <option value="https://httpbin.org/post"></option>
+          <option value="http://httpbin.org/post"></option>
+          <option value="https://postman-echo.com/post"></option>
+          <option value="http://postman-echo.com/post"></option>
+          <option value="https://dummyjson.com/auth/login"></option>
+          <option value="https://reqres.in/api/login"></option>
+        </datalist>
         <div class="row" style="margin-top:8px">
           <label>{{ t('mw_delay') }} <input type="number" v-model.number="mw.delayMs" min="0" max="5000" style="max-width:100px" /></label>
           <label>{{ t('mw_sizes') }}
@@ -712,7 +721,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.14';
+    const APP_VERSION = '1.15';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -5101,7 +5110,7 @@
           rl: { err: '', curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
           rto: { err: '', curl: '', method: 'POST', url: '', headers: [], body: '', kbps: 8, sizeKb: 64, count: 1, delay: 500, copied: false, csvCopied: false, msg: '', busy: false, stop: false, ctl: null, results: [] },
           // Cek Basic Middleware: target punya user sendiri; default dapat diedit.
-          mw: { url: 'https://34.101.205.225:8002/auth/login', method: 'POST', delayMs: 150, sizesKb: [2, 10, 500], busy: false, stop: false, copied: false, csvCopied: false, jsonCopied: false, msg: '', editor: { method: 'POST', url: 'https://34.101.205.225:8002/auth/login', headers: 'Content-Type: application/json', body: '{"username":"test","password":"test"}', busy: false, status: null, respHeaders: '', respBody: '', error: '', msg: '' } },
+          mw: { url: 'https://httpbin.org/post', method: 'POST', delayMs: 150, sizesKb: [2, 10, 500], busy: false, stop: false, copied: false, csvCopied: false, jsonCopied: false, msg: '', editor: { method: 'POST', url: 'https://httpbin.org/post', headers: 'Content-Type: application/json', body: '{"username":"test","password":"test"}', busy: false, status: null, respHeaders: '', respBody: '', error: '', msg: '' } },
           mwResults: [],
           sideW: 330, resizing: false, persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
