@@ -466,7 +466,10 @@
     //  Util
     // ============================================================
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
-    const SEV_ID = { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' };
+    const SEV_LABEL = {
+      id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
+      en: { CRITICAL: 'Critical', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low', UNKNOWN: 'N/A' }
+    };
 
     function esc(s) {
       return String(s == null ? '' : s)
@@ -1620,6 +1623,7 @@
     // ============================================================
     // Penjelasan yang muncul saat kursor diarahkan ke judul kolom / kartu / label tingkat di laporan
     const TIPS = {
+      id: {
       'No': 'Nomor urut. Pada tabel SCA, satu baris = satu package yang perlu diperbarui.',
       'Package': 'Nama package beserta ekosistemnya (npm, Maven, PyPI, crates.io, Go, dll.).',
       'Terpasang → Update ke': 'Versi yang terpasang sekarang → versi aman minimal. Versi aman dihitung dari data OSV lalu dicek ulang ke OSV. Baris merah berarti belum ada versi yang bersih.',
@@ -1658,17 +1662,58 @@
       'tanpa versi aman': 'Package yang belum punya versi perbaikan. Pantau rilis upstream, ganti package, atau catat sebagai accepted risk.',
       'nilai Observatory': 'Nilai A+ sampai F dari MDN HTTP Observatory berdasarkan kelengkapan header keamanan situs.',
       'tes Observatory lulus': 'Jumlah tes header keamanan Observatory yang lulus dari total tes.'
+      },
+      en: {
+      'No': 'Row number. In the SCA table, one row = one package that needs updating.',
+      'Package': 'Package name with its ecosystem (npm, Maven, PyPI, crates.io, Go, etc.).',
+      'Installed → Update to': 'Currently installed version → minimum safe version. The safe version is computed from OSV data then re-checked against OSV. A red row means no clean version exists yet.',
+      'Bump': 'How big the version jump is. patch (x.y.Z): small fix, usually safe. minor (x.Y.0): new but compatible features. major (X.0.0): may change behavior, test before updating.',
+      'Severity': 'Highest severity among all advisories for this package, by CVSS score: Critical 9.0-10, High 7.0-8.9, Medium 4.0-6.9, Low 0.1-3.9.',
+      'CVE': 'Common Vulnerabilities and Exposures: standard public ID for a single vulnerability (CVE-year-number). Click to read details on NVD.',
+      'CWE': 'Common Weakness Enumeration: the underlying weakness type, e.g. CWE-79 = XSS, CWE-1321 = prototype pollution, CWE-400 = uncontrolled resource consumption. Click for the definition.',
+      'Advisory': 'A vulnerability report from a security database (GHSA = GitHub Security Advisory, etc.) with a summary and fixed version. Click the count to see the list.',
+      'EPSS': 'Exploit Prediction Scoring System (FIRST.org): estimated probability this vulnerability is exploited in the next 30 days. The highest across all CVEs of this package. Above 10% should be prioritized.',
+      'KEV': 'CISA Known Exploited Vulnerabilities: YES means this vulnerability is proven exploited by attackers in the wild. Prioritize fixing it.',
+      'Scope': 'prod = used in the running app, dev = only for development/test. Direct = a dependency you declared yourself, transitive = pulled in by another package.',
+      'Line': 'Line number in the source file (Dockerfile).',
+      'Stage': 'Multi-stage build name (FROM ... AS name). A - means an unnamed stage.',
+      'Image': 'Base image name used in the FROM instruction.',
+      'Tag': 'Image version/variant. The latest tag or no tag is mutable and not reproducible.',
+      'Support status (endoflife.date)': 'Whether this version still gets security patches. EOL (End Of Life) = no longer maintained by the vendor, bump the version.',
+      'Rule': 'The Dockerfile security/best-practice rule that was violated.',
+      'Detail': 'The value/code snippet that triggered the finding.',
+      'Suggestion': 'The recommended remediation step.',
+      'Header': 'Name of the response HTTP header checked.',
+      'Finding': 'The problem found on that header.',
+      'Group': 'The kind of check that uses this API (SCA, Dockerfile, passive DAST, etc.).',
+      'API': 'The public service called from your browser.',
+      'Endpoint': 'The API address called.',
+      'Purpose': 'What this API is used for.',
+      'Data sent': 'Data leaving your browser to this service. File contents are not sent, only the data in this column.',
+      'Calls': 'Number of requests this session (success / failure).',
+      'packages scanned': 'Number of unique packages (name + version) checked.',
+      'vulnerable packages': 'Packages with at least one advisory.',
+      'unique advisories': 'Number of distinct vulnerability reports (duplicates across packages counted once).',
+      'Critical': 'CVSS 9.0-10.0. Exploitable with very high impact; fix immediately.',
+      'High': 'CVSS 7.0-8.9. High impact; schedule a quick fix.',
+      'Medium': 'CVSS 4.0-6.9. Needs certain conditions to be exploited.',
+      'Low': 'CVSS 0.1-3.9. Small impact or hard to exploit.',
+      'in CISA KEV': 'Number of advisories whose CVE is on the CISA KEV list (already exploited in the wild).',
+      'no safe version': 'Packages with no fixed version yet. Watch upstream releases, replace the package, or record as accepted risk.',
+      'Observatory grade': 'A+ to F grade from MDN HTTP Observatory based on how complete the site security headers are.',
+      'Observatory tests passed': 'Number of Observatory security-header tests passed out of the total.'
+      }
     };
     function tipify(html) {
-      const attr = t => esc(t);
+      const attr = t => esc(t), T = tips();
       return html
-        .replace(/<th>([^<]*)<\/th>/g, (all, label) => (TIPS[label] ? '<th data-tip="' + attr(TIPS[label]) + '">' + label + '</th>' : all))
+        .replace(/<th>([^<]*)<\/th>/g, (all, label) => (T[label] ? '<th data-tip="' + attr(T[label]) + '">' + label + '</th>' : all))
         .replace(/(<div class="card[^"]*"[^>]*)>(<b[^>]*>[^<]*<\/b><span>)([^<]+)(<\/span>)/g, (all, a, b, label, c) => {
           const key = label.replace(/\s*\(\d+\/100\)\s*$/, '');
-          return TIPS[key] ? a + ' data-tip="' + attr(TIPS[key]) + '">' + b + label + c : all;
+          return T[key] ? a + ' data-tip="' + attr(T[key]) + '">' + b + label + c : all;
         });
     }
-    const HINT = '<div class="cap">Arahkan kursor ke judul kolom, kartu, atau label tingkat untuk melihat artinya.</div>';
+    function hint() { return '<div class="cap">' + tr('rep_hint') + '</div>'; }
 
     const REPORT_CSS = `
       body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#0f172a;background:#f8fafc}
@@ -1700,7 +1745,9 @@
       th[data-tip]:nth-last-child(-n+3):hover::after{left:auto;right:0}
       .card[data-tip],.b[data-tip]{position:relative;cursor:help}
     `;
-    function badge(sev) { return '<span class="b ' + sev + '"' + (TIPS[SEV_ID[sev]] ? ' data-tip="' + esc(TIPS[SEV_ID[sev]]) + '"' : '') + '>' + esc(SEV_ID[sev] || sev) + '</span>'; }
+    function sevL(sev) { return (SEV_LABEL[LANG] || SEV_LABEL.id)[sev] || sev; }
+    function tips() { return TIPS[LANG] || TIPS.id; }
+    function badge(sev) { const lbl = sevL(sev), tip = tips()[lbl]; return '<span class="b ' + sev + '"' + (tip ? ' data-tip="' + esc(tip) + '"' : '') + '>' + esc(lbl) + '</span>'; }
     function advLink(id, url) {
       const u = url || (id.startsWith('CVE-') ? 'https://nvd.nist.gov/vuln/detail/' + id : 'https://osv.dev/vulnerability/' + id);
       return '<a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(id) + '</a>';
@@ -1744,14 +1791,14 @@
         g.kev = g.items.some(i => i.vulns.some(v => v.kev));
         return g;
       }).sort((a, b) => SEV_ORDER[b.sev] - SEV_ORDER[a.sev] || (b.kev - a.kev) || a.name.localeCompare(b.name));
-      if (!groups.length) return '<p class="cap">Tidak ada kerentanan yang ditemukan di ' + esc(label) + '.</p>';
+      if (!groups.length) return '<p class="cap">' + tr('rep_no_vuln') + esc(label) + '.</p>';
 
-      let html = '<table><thead><tr><th>No</th><th>Package</th><th>Terpasang → Update ke</th><th>Jenis</th><th>Tingkat</th><th>CVE</th><th>CWE</th><th>Advisory</th><th>EPSS</th><th>KEV</th><th>Tipe</th></tr></thead><tbody>';
+      let html = '<table><thead><tr>' + ['rep_th_no', 'rep_th_package', 'rep_th_installed', 'rep_th_bump', 'rep_th_sev', 'rep_th_cve', 'rep_th_cwe', 'rep_th_adv', 'rep_th_epss', 'rep_th_kev', 'rep_th_scope'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
       const listCell = (arr, mk) => !arr.length ? '-' : arr.length <= 3 ? arr.map(x => '<div>' + mk(x) + '</div>').join('') : '<details><summary>' + arr.length + ' item</summary>' + arr.map(x => '<div>' + mk(x) + '</div>').join('') + '</details>';
       const cveLink = c => '<a class="mono" href="https://nvd.nist.gov/vuln/detail/' + esc(c) + '" target="_blank" rel="noopener noreferrer">' + esc(c) + '</a>';
       const cweLink = c => '<a class="mono" href="https://cwe.mitre.org/data/definitions/' + esc(String(c).replace('CWE-', '')) + '.html" target="_blank" rel="noopener noreferrer">' + esc(c) + '</a>';
       groups.forEach((g, idx) => {
-        const verCol = g.items.map(i => '<div class="mono nums">' + esc(i.version) + ' → ' + (i.updateTo ? '<b>' + esc(i.updateTo) + '</b>' : '<b style="color:#b91c1c">' + (i.vulns.every(v => v.src === 'Sonatype') ? 'versi aman tidak diketahui (data Sonatype tanpa rentang versi)' : 'BELUM ADA versi aman') + '</b>') + (i.partial && i.updateTo ? ' <span title="Sebagian advisory belum punya perbaikan">⚠</span>' : '') + '</div>').join('');
+        const verCol = g.items.map(i => '<div class="mono nums">' + esc(i.version) + ' → ' + (i.updateTo ? '<b>' + esc(i.updateTo) + '</b>' : '<b style="color:#b91c1c">' + (i.vulns.every(v => v.src === 'Sonatype') ? tr('rep_no_safe_unknown') : tr('rep_no_safe')) + '</b>') + (i.partial && i.updateTo ? ' <span title="' + tr('rep_partial_tip') + '">⚠</span>' : '') + '</div>').join('');
         const kindCol = g.items.map(i => '<div>' + esc(i.kind || '-') + '</div>').join('');
         const seenAdv = new Set();
         let advList = '', advN = 0, maxEpss = null;
@@ -1762,22 +1809,22 @@
             ' — ' + esc(String(v.summary).slice(0, 140)) + (v.cwes.length ? ' <span class="mono">[' + esc(v.cwes.join(', ')) + ']</span>' : '') + (v.src ? ' <span class="mono">[' + esc(v.src) + ']</span>' : v.alsoSonatype ? ' <span class="mono">[+Sonatype]</span>' : '') +
             (v.fixed ? ' <span class="mono">fix ' + esc(v.fixed) + '</span>' : ' <span class="mono" style="color:#b91c1c">no fix</span>') + '</div>';
         }));
-        const tipe = g.items.map(i => '<div>' + (i.dev ? 'dev' : 'prod') + (i.direct === true ? ', langsung' : i.direct === false ? ', transitif' : '') + '</div>').join('');
-        const still = g.items.filter(i => i.still.length).map(i => '<div class="mono" style="color:#b91c1c">' + esc(i.updateTo) + ' masih terdampak: ' + esc(i.still.join(', ')) + '</div>').join('');
+        const tipe = g.items.map(i => '<div>' + (i.dev ? 'dev' : 'prod') + (i.direct === true ? tr('rep_direct') : i.direct === false ? tr('rep_transitive') : '') + '</div>').join('');
+        const still = g.items.filter(i => i.still.length).map(i => '<div class="mono" style="color:#b91c1c">' + esc(i.updateTo) + tr('rep_still') + esc(i.still.join(', ')) + '</div>').join('');
         const cveAll = [], cweAll = [];
         g.items.forEach(i => i.vulns.forEach(v => { v.cves.forEach(c => { if (cveAll.indexOf(c) < 0) cveAll.push(c); }); v.cwes.forEach(c => { if (cweAll.indexOf(c) < 0) cweAll.push(c); }); }));
         cweAll.sort((a, b) => parseInt(String(a).replace(/\D/g, ''), 10) - parseInt(String(b).replace(/\D/g, ''), 10));
         html += '<tr class="' + (g.nofix ? 'nofix' : '') + '"><td>' + (idx + 1) + '</td><td><b>' + esc(g.name) + '</b><div class="mono">' + esc(g.eco) + '</div></td><td>' + verCol + still + '</td><td>' + kindCol + '</td><td>' + badge(g.sev) + '</td>' +
           '<td>' + listCell(cveAll, cveLink) + '</td><td>' + listCell(cweAll, cweLink) + '</td>' +
-          '<td><details><summary>' + advN + ' advisory</summary>' + advList + '</details></td><td>' + (maxEpss === null ? '-' : (maxEpss * 100).toFixed(1) + '%') + '</td><td>' + (g.kev ? '<b style="color:#b91c1c">YA</b>' : '-') + '</td><td>' + tipe + '</td></tr>';
+          '<td><details><summary>' + advN + tr('rep_advN') + '</summary>' + advList + '</details></td><td>' + (maxEpss === null ? '-' : (maxEpss * 100).toFixed(1) + '%') + '</td><td>' + (g.kev ? '<b style="color:#b91c1c">' + tr('rep_yes') + '</b>' : '-') + '</td><td>' + tipe + '</td></tr>';
       });
       html += '</tbody></table>';
-      if (groups.some(g => g.nofix)) html += '<div class="note">Baris merah = package yang belum punya versi aman di data OSV. Pantau rilis upstream, ganti/hapus package, atau catat sebagai accepted risk.</div>';
+      if (groups.some(g => g.nofix)) html += '<div class="note">' + tr('rep_nofix_note') + '</div>';
 
       const cmds = [];
       groups.forEach(g => g.items.forEach(i => { if (i.updateTo) { const c = fixCommand(g, i); if (c && cmds.indexOf(c) < 0) cmds.push(c); } }));
-      if (cmds.length) html += '<h3>Perintah perbaikan</h3><pre>' + esc(cmds.join('\n')) + '</pre>';
-      if (groups.some(g => g.eco.startsWith('Alpine') || g.eco.startsWith('Debian'))) html += '<div class="note">Paket OS (Alpine/Debian): versi "Update ke" dihitung dari data OSV dan belum tentu tersedia di repo distro yang dipakai image. Jika base image sudah EOL atau versi tidak ditemukan saat build, naikkan tag base image.</div>';
+      if (cmds.length) html += '<h3>' + tr('rep_fix_cmds') + '</h3><pre>' + esc(cmds.join('\n')) + '</pre>';
+      if (groups.some(g => g.eco.startsWith('Alpine') || g.eco.startsWith('Debian'))) html += '<div class="note">' + tr('rep_os_note') + '</div>';
       return html;
     }
     function cards(entries) {
@@ -1785,15 +1832,15 @@
       const vulnPk = groupByName(entries.filter(e => e.vulns.length)).length;
       const nofix = groupByName(entries.filter(e => e.vulns.length && !e.updateTo)).length;
       return '<div class="cards">' +
-        '<div class="card"><b>' + entries.length + '</b><span>package dipindai</span></div>' +
-        '<div class="card"><b>' + vulnPk + '</b><span>package rentan</span></div>' +
-        '<div class="card"><b>' + a.total + '</b><span>advisory unik</span></div>' +
-        '<div class="card c"><b>' + a.c.CRITICAL + '</b><span>Kritis</span></div>' +
-        '<div class="card h"><b>' + a.c.HIGH + '</b><span>Tinggi</span></div>' +
-        '<div class="card m"><b>' + a.c.MEDIUM + '</b><span>Sedang</span></div>' +
-        '<div class="card l"><b>' + a.c.LOW + '</b><span>Rendah</span></div>' +
-        '<div class="card"><b>' + a.kev + '</b><span>di CISA KEV</span></div>' +
-        '<div class="card"><b>' + nofix + '</b><span>tanpa versi aman</span></div></div>';
+        '<div class="card"><b>' + entries.length + '</b><span>' + tr('rep_c_scanned') + '</span></div>' +
+        '<div class="card"><b>' + vulnPk + '</b><span>' + tr('rep_c_vuln') + '</span></div>' +
+        '<div class="card"><b>' + a.total + '</b><span>' + tr('rep_c_adv') + '</span></div>' +
+        '<div class="card c"><b>' + a.c.CRITICAL + '</b><span>' + sevL('CRITICAL') + '</span></div>' +
+        '<div class="card h"><b>' + a.c.HIGH + '</b><span>' + sevL('HIGH') + '</span></div>' +
+        '<div class="card m"><b>' + a.c.MEDIUM + '</b><span>' + sevL('MEDIUM') + '</span></div>' +
+        '<div class="card l"><b>' + a.c.LOW + '</b><span>' + sevL('LOW') + '</span></div>' +
+        '<div class="card"><b>' + a.kev + '</b><span>' + tr('rep_c_kev') + '</span></div>' +
+        '<div class="card"><b>' + nofix + '</b><span>' + tr('rep_c_nofix') + '</span></div></div>';
     }
     function csvEscape(s) { s = String(s == null ? '' : s); return '"' + s.replace(/"/g, '""') + '"'; }
     function buildCsv(results) {
@@ -1809,47 +1856,47 @@
     }
     function renderDocker(r, multi) {
       const d = r.docker;
-      let html = '<h3>Base image</h3>';
-      if (!d.bases.length) html += '<p class="cap">Tidak ada instruksi FROM.</p>';
+      let html = '<h3>' + tr('rep_base_image') + '</h3>';
+      if (!d.bases.length) html += '<p class="cap">' + tr('rep_no_from') + '</p>';
       else {
-        html += '<table><thead><tr><th>Baris</th><th>Stage</th><th>Image</th><th>Tag</th><th>Status dukungan (endoflife.date)</th></tr></thead><tbody>';
+        html += '<table><thead><tr>' + ['rep_th_line', 'rep_th_stage', 'rep_th_image', 'rep_th_tag', 'rep_th_support'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
         d.bases.forEach(b => {
-          const chk = b.checks.length ? b.checks.map(c => '<div><span class="b ' + (c.status === 'eol' ? 'eolb' : c.status === 'soon' ? 'soonb' : c.status === 'ok' ? 'okb' : 'UNKNOWN') + '">' + esc(c.label + ' ' + c.ver) + '</span> ' + esc(c.note) + '</div>').join('') : '<span class="cap">Produk tidak dikenali / tag tidak memuat versi</span>';
+          const chk = b.checks.length ? b.checks.map(c => '<div><span class="b ' + (c.status === 'eol' ? 'eolb' : c.status === 'soon' ? 'soonb' : c.status === 'ok' ? 'okb' : 'UNKNOWN') + '">' + esc(c.label + ' ' + c.ver) + '</span> ' + esc(c.note) + '</div>').join('') : '<span class="cap">' + tr('rep_unknown_prod') + '</span>';
           html += '<tr><td>' + b.line + '</td><td>' + esc(b.stage) + '</td><td class="mono">' + esc(b.image) + '</td><td class="mono">' + esc(b.tag) + '</td><td>' + chk + '</td></tr>';
         });
         html += '</tbody></table>';
       }
-      html += '<h3>Temuan konfigurasi Dockerfile</h3>';
-      if (!d.findings.length) html += '<p class="cap">Tidak ada temuan.</p>';
+      html += '<h3>' + tr('rep_docker_findings') + '</h3>';
+      if (!d.findings.length) html += '<p class="cap">' + tr('rep_no_findings') + '</p>';
       else {
-        html += '<table><thead><tr><th>No</th><th>Baris</th><th>Tingkat</th><th>Aturan</th><th>Detail</th><th>Saran</th></tr></thead><tbody>';
+        html += '<table><thead><tr>' + ['rep_th_no', 'rep_th_line', 'rep_th_sev', 'rep_th_rule', 'rep_th_detail', 'rep_th_suggestion'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
         d.findings.forEach((f, i) => { html += '<tr><td>' + (i + 1) + '</td><td>' + f.line + '</td><td>' + badge(f.severity) + '</td><td>' + esc(f.rule) + '</td><td class="mono">' + esc(f.detail) + '</td><td>' + esc(f.fix) + '</td></tr>'; });
         html += '</tbody></table>';
       }
-      html += '<h3>Paket yang dipin di Dockerfile (' + d.pinned + ' paket diperiksa via OSV)</h3>';
-      html += d.entries.length ? (multi ? cards(d.entries) : '') + renderVulnTable(d.entries, 'paket Dockerfile') : '<p class="cap">Tidak ada paket berversi persis yang bisa diperiksa. Paket tanpa versi tidak dapat dicocokkan ke advisory.</p>';
-      html += '<div class="note">Batasan: pemindaian ini bersifat statis atas isi Dockerfile. Paket OS dan library yang ikut terpasang di dalam image (yang muncul di tab Vulnerabilities Harbor) hanya bisa diketahui setelah image dibangun. Untuk itu jalankan <span class="mono">scan_sca_docker.ps1 --path=&lt;Dockerfile&gt;</span>.</div>';
+      html += '<h3>' + tr('rep_pinned_pre') + d.pinned + tr('rep_pinned_post') + '</h3>';
+      html += d.entries.length ? (multi ? cards(d.entries) : '') + renderVulnTable(d.entries, tr('rep_pinned_pkg')) : '<p class="cap">' + tr('rep_no_pinned') + '</p>';
+      html += '<div class="note">' + tr('rep_docker_limit') + '</div>';
       return html;
     }
     function buildReport(results, opts) {
-      const now = new Date().toLocaleString('id-ID');
-      let body = '<h1>Laporan Scan SCA &amp; Dockerfile</h1><div class="sub">Dibuat ' + esc(now) + ' · ' + results.length + ' file · sumber: OSV.dev' + (opts.enrich ? ', FIRST EPSS, CISA KEV' : '') + ', endoflife.date' + (opts.sonatype ? ' · Sonatype Guide aktif' : '') + (opts.omitDev ? ' · devDependencies diabaikan' : '') + '</div>';
+      const now = new Date().toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID');
+      let body = '<h1>' + tr('rep_h1') + '</h1><div class="sub">' + tr('rep_created') + ' ' + esc(now) + ' · ' + results.length + ' ' + tr('rep_files') + ' · ' + tr('rep_source') + ': OSV.dev' + (opts.enrich ? ', FIRST EPSS, CISA KEV' : '') + ', endoflife.date' + (opts.sonatype ? ' · ' + tr('rep_sona_active') : '') + (opts.omitDev ? ' · ' + tr('rep_omitdev') : '') + '</div>';
       const all = results.reduce((a, r) => a.concat(r.entries || [], r.docker ? r.docker.entries : []), []);
       body += cards(all);
       results.forEach(r => {
         body += '<h2>' + esc(r.name) + ' <span class="mono">(' + esc(TYPE_LABELS[r.type] || r.type) + ')</span></h2>';
-        if (r.error) { body += '<div class="note">Gagal diproses: ' + esc(r.error) + '</div>'; return; }
+        if (r.error) { body += '<div class="note">' + tr('rep_fail_process') + esc(r.error) + '</div>'; return; }
         if (r.docker) { body += renderDocker(r, results.length > 1); return; }
-        body += '<div class="cap">' + r.entries.length + ' package unik' + (r.skipped ? ' · ' + r.skipped + ' dilewati (dev)' : '') + '</div>' + (r.note ? '<div class="note">' + esc(r.note) + '</div>' : '') + (results.length > 1 ? cards(r.entries) : '') + renderVulnTable(r.entries, r.name);
+        body += '<div class="cap">' + r.entries.length + ' ' + tr('rep_unique_pkg') + (r.skipped ? ' · ' + r.skipped + ' ' + tr('rep_skipped_dev') : '') + '</div>' + (r.note ? '<div class="note">' + esc(r.note) + '</div>' : '') + (results.length > 1 ? cards(r.entries) : '') + renderVulnTable(r.entries, r.name);
       });
       const csv = buildCsv(results);
-      const gname = Object.fromEntries(API_GROUPS.map(g => [g.key, g.title]));
+      const gname = Object.fromEntries(API_GROUPS.map(g => [g.key, trData('grp_' + g.key + '_title', g.title)]));
       const used = API_LIST.filter(a => apiStats[a.key].calls && a.group !== 'app');
-      body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>Kelompok</th><th>API</th><th>Endpoint</th><th>Tujuan</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
-        used.map(a => '<tr><td>' + esc(gname[a.group]) + '</td><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.use) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
-      body += '<div class="note">Sumber CVE/CWE: data OSV (GHSA dan alias NVD). Temuan yang hanya ada di database berbayar/privat (mis. Sonatype) tidak ikut; untuk itu gunakan <span class="mono">scan_sca.ps1</span>.</div>';
-      body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">Unduh CSV</a></p>';
-      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Scan SCA</title><style>' + REPORT_CSS + '</style></head><body>' + HINT + tipify(body) + '</body></html>';
+      body += '<h2>' + tr('rep_api_title') + '</h2><table><thead><tr>' + ['rep_th_group', 'rep_th_api', 'rep_th_endpoint', 'rep_th_purpose', 'rep_th_datasent', 'rep_th_calls'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>' +
+        used.map(a => '<tr><td>' + esc(gname[a.group]) + '</td><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(trData('api_' + a.key + '_use', a.use)) + '</td><td>' + esc(trData('api_' + a.key + '_sends', a.sends)) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' ' + tr('failed').toLowerCase() : '') + ')</td></tr>').join('') + '</tbody></table>';
+      body += '<div class="note">' + tr('rep_note_osv') + '</div>';
+      body += '<p style="margin-top:28px"><a download="laporan_scan.csv" href="data:text/csv;charset=utf-8,' + encodeURIComponent(csv) + '">' + tr('rep_dl_csv') + '</a></p>';
+      return '<!DOCTYPE html><html lang="' + LANG + '"><head><meta charset="UTF-8"><title>' + tr('rep_report_title') + '</title><style>' + REPORT_CSS + '</style></head><body>' + hint() + tipify(body) + '</body></html>';
     }
 
     // ============================================================
@@ -2259,7 +2306,7 @@
       const used = API_LIST.filter(a => a.group === 'dast' && apiStats[a.key].calls);
       body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
         used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
-      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan DAST Pasif</title><style>' + REPORT_CSS + '</style></head><body>' + HINT + tipify(body) + '</body></html>';
+      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan DAST Pasif</title><style>' + REPORT_CSS + '</style></head><body>' + hint() + tipify(body) + '</body></html>';
     }
 
     // ============================================================
