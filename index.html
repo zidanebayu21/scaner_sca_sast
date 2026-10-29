@@ -631,7 +631,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.12';
+    const APP_VERSION = '1.13';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -742,8 +742,8 @@
     // ============================================================
     // Kelompok API: tiap sumber hanya muncul di satu kelompok supaya tidak tercampur
     const API_GROUPS = [
-      { key: 'sca', title: 'SCA — cek kerentanan package', desc: 'Dipakai saat memindai lockfile / package.json / .csproj dan paket yang dipin di Dockerfile.' },
-      { key: 'docker', title: 'Dockerfile — status EOL image', desc: 'Hanya dipakai saat memindai Dockerfile.' },
+      { key: 'sca', title: 'SCA — cek kerentanan package', desc: 'Dipakai saat scan lockfile / package.json / .csproj dan paket yang dipin di Dockerfile.' },
+      { key: 'docker', title: 'Dockerfile — status EOL image', desc: 'Hanya dipakai saat scan Dockerfile.' },
       { key: 'scrape', title: 'Scraping — ambil file dari link', desc: 'Hanya dipakai saat memasukkan link repo/file GitHub, GitLab, atau URL. Hasilnya diteruskan ke scan SCA/Dockerfile.' },
       { key: 'dast', title: 'DAST pasif — cek header situs', desc: 'Hanya dipakai di tab DAST pasif. URL yang Anda masukkan dikirim ke layanan ini; keduanya hanya membaca respons publik situs, tidak menyerang.' },
       { key: 'sast', title: 'SAST — pemeriksaan kode', desc: 'Tidak memakai API apa pun: kode dicek lokal di browser dan tidak dikirim ke mana pun.', none: true },
@@ -756,14 +756,14 @@
       { key: 'kev', group: 'sca', name: 'CISA KEV (mirror GitHub)', url: 'GET https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json', use: 'Daftar CVE yang sudah dieksploitasi di dunia nyata.', sends: 'tidak ada (hanya mengunduh daftar)', when: 'Opsi "EPSS & CISA KEV"' },
       { key: 'depsdev', group: 'sca', name: 'deps.dev (Open Source Insights)', url: 'GET https://api.deps.dev/v3/systems/{sistem}/packages/{nama}/versions/{versi}', use: 'Lisensi (SPDX) tiap dependency untuk matriks risiko lisensi & SBOM, bila lockfile tidak memuat lisensinya.', sends: 'nama package, versi, ekosistem', when: 'Opsi "Cek lisensi dependency"' },
       { key: 'eol', group: 'docker', name: 'endoflife.date', url: 'GET https://endoflife.date/api/{produk}.json', use: 'Status EOL base image Docker dan runtime/framework (Node, Go, .NET, PHP, Angular, Vue, Laravel, …).', sends: 'nama produk, mis. nodejs', when: 'Scan Dockerfile & tab EOL' },
-      { key: 'gh-api', group: 'scrape', name: 'GitHub REST API', url: 'GET https://api.github.com/repos/{owner}/{repo}[/git/trees/{ref}]', use: 'Mencari file yang bisa dipindai di repo GitHub.', sends: 'owner/repo, branch; token bila diisi', when: 'Ambil dari link GitHub' },
+      { key: 'gh-api', group: 'scrape', name: 'GitHub REST API', url: 'GET https://api.github.com/repos/{owner}/{repo}[/git/trees/{ref}]', use: 'Mencari file yang bisa di-scan di repo GitHub.', sends: 'owner/repo, branch; token bila diisi', when: 'Ambil dari link GitHub' },
       { key: 'gh-raw', group: 'scrape', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
       { key: 'gl-api', group: 'scrape', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
-      { key: 'url', group: 'scrape', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
+      { key: 'url', group: 'scrape', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file raw dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
       { key: 'obs', group: 'dast', name: 'MDN HTTP Observatory', url: 'POST https://observatory-api.mdn.mozilla.net/api/v2/scan?host={host}', use: 'Nilai (A–F), skor, dan jumlah tes keamanan header yang lulus/gagal (CSP, HSTS, cookie, redirect, dll.).', sends: 'nama host situs (tanpa path)', when: 'Tab DAST pasif' },
       { key: 'ht', group: 'dast', name: 'HackerTarget — httpheaders', url: 'GET https://api.hackertarget.com/httpheaders/?q={url}', use: 'Mengambil header respons situs, lalu dianalisis di browser (HSTS, CSP, cookie, dll.). Batas gratis ±50 request/hari.', sends: 'URL yang dicek', when: 'Tab DAST pasif' },
       { key: 'dns', group: 'dast', name: 'Google DNS-over-HTTPS', url: 'GET https://dns.google/resolve?name={host}&type={A,AAAA,MX,NS,TXT}', use: 'Resolusi DNS pasif: IP (A/AAAA), name server, MX, dan TXT domain.', sends: 'nama host/domain', when: 'Tab DAST pasif — opsi domain & port' },
-      { key: 'idb', group: 'dast', name: 'Shodan InternetDB', url: 'GET https://internetdb.shodan.io/{ip}', use: 'Data pasif per-IP: port terbuka, CVE diketahui, teknologi (CPE), dan tag — hasil pindai Shodan sebelumnya, bukan scan nmap langsung.', sends: 'alamat IP hasil resolusi DNS', when: 'Tab DAST pasif — opsi domain & port' },
+      { key: 'idb', group: 'dast', name: 'Shodan InternetDB', url: 'GET https://internetdb.shodan.io/{ip}', use: 'Data pasif per-IP: port terbuka, CVE diketahui, teknologi (CPE), dan tag — hasil scan Shodan sebelumnya, bukan nmap langsung.', sends: 'alamat IP hasil resolusi DNS', when: 'Tab DAST pasif — opsi domain & port' },
       { key: 'cdn', group: 'app', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
     ];
     const apiStats = Vue.reactive({});
@@ -1327,12 +1327,12 @@
       'ruby': parseGemfileLock, 'pubspec': parsePubspecLock, 'mix': parseMixLock
     };
     const TYPE_NOTES = {
-      'nuget-proj': '.csproj hanya memuat PackageReference langsung; package transitif TIDAK terpindai, padahal kerentanan .NET umumnya ada di transitif. Jalankan dotnet restore lalu unggah obj/project.assets.json (atau packages.lock.json) untuk hasil lengkap.',
-      'npm-pkg': 'package.json hanya memuat rentang versi; yang dipindai adalah versi dasarnya. Gunakan lockfile untuk versi yang benar-benar terpasang.',
+      'nuget-proj': '.csproj hanya memuat PackageReference langsung; package transitif TIDAK ikut di-scan, padahal kerentanan .NET umumnya ada di transitif. Jalankan dotnet restore lalu unggah obj/project.assets.json (atau packages.lock.json) untuk hasil lengkap.',
+      'npm-pkg': 'package.json hanya memuat rentang versi; yang di-scan adalah versi dasarnya. Gunakan lockfile untuk versi yang benar-benar terpasang.',
       'maven-pom': 'pom.xml hanya memuat dependency langsung; dependency transitif tidak dihitung. Versi yang tidak bisa dihitung (mis. dari BOM eksternal) dilewati.',
       'gradle': 'build.gradle hanya memuat dependency langsung yang ditulis sebagai "group:artifact:versi". Untuk dependency transitif gunakan gradle.lockfile.',
-      'cargo-toml': 'Cargo.toml memuat rentang versi; yang dipindai adalah versi dasarnya. Gunakan Cargo.lock untuk versi yang terpasang.',
-      'py-req': 'Hanya baris yang dipin dengan == yang bisa dipindai.'
+      'cargo-toml': 'Cargo.toml memuat rentang versi; yang di-scan adalah versi dasarnya. Gunakan Cargo.lock untuk versi yang terpasang.',
+      'py-req': 'Hanya baris yang dipin dengan == yang bisa di-scan.'
     };
     Object.keys(TYPE_NOTES).forEach(k => { TYPE_NOTES[k] = L(TYPE_NOTES[k]); });
 
@@ -1596,7 +1596,7 @@
         } else if (i.cmd === 'RUN') {
           cur.runs.push({ line: i.line, text: i.args });
           const a = i.args;
-          if (/(curl|wget)[^|]*\|\s*(sudo\s+)?(ba|z)?sh\b/.test(a)) add(i.line, 'Pipe unduhan langsung ke shell', 'HIGH', a.slice(0, 120), 'Unduh ke file, verifikasi checksum/GPG, baru jalankan.');
+          if (/(curl|wget)[^|]*\|\s*(sudo\s+)?(ba|z)?sh\b/.test(a)) add(i.line, 'Download langsung di-pipe ke shell', 'HIGH', a.slice(0, 120), 'Unduh ke file, verifikasi checksum/GPG, baru jalankan.');
           if (/chmod\s+(-R\s+)?0?777/.test(a)) add(i.line, 'chmod 777', 'MEDIUM', a.slice(0, 120), 'Beri izin minimal yang dibutuhkan.');
           if (/(--no-check-certificate|curl\s[^|;&]*\s-k\b|--insecure)/.test(a)) add(i.line, 'Verifikasi TLS dimatikan', 'MEDIUM', a.slice(0, 120), 'Hapus opsi yang menonaktifkan verifikasi sertifikat.');
           if (/\bsudo\b/.test(a)) add(i.line, 'Penggunaan sudo di RUN', 'LOW', a.slice(0, 120), 'Build sebagai root lalu turunkan dengan USER; tidak perlu sudo.');
@@ -1745,7 +1745,7 @@
       id: {
       'No': 'Nomor urut. Pada tabel SCA, satu baris = satu package yang perlu diperbarui.',
       'Package': 'Nama package beserta ekosistemnya (npm, Maven, PyPI, crates.io, Go, dll.).',
-      'Terpasang → Update ke': 'Versi yang terpasang sekarang → versi aman minimal. Versi aman dihitung dari data OSV lalu dicek ulang ke OSV. Baris merah berarti belum ada versi yang bersih.',
+      'Terpasang → Update ke': 'Versi yang terpasang sekarang → versi aman minimal. Versi aman dihitung dari data OSV lalu dicek ulang ke OSV. Baris merah berarti belum ada versi yang aman.',
       'Jenis': 'Seberapa besar lompatan versinya. patch (x.y.Z): perbaikan kecil, biasanya aman. minor (x.Y.0): fitur baru yang masih kompatibel. major (X.0.0): bisa mengubah perilaku, uji dulu sebelum update.',
       'Tingkat': 'Keparahan tertinggi di antara semua advisory package ini, berdasarkan skor CVSS: Kritis 9.0-10, Tinggi 7.0-8.9, Sedang 4.0-6.9, Rendah 0.1-3.9.',
       'CVE': 'Common Vulnerabilities and Exposures: nomor ID publik standar untuk satu kerentanan (format CVE-tahun-nomor). Klik untuk membaca detailnya di NVD.',
@@ -1755,10 +1755,10 @@
       'KEV': 'CISA Known Exploited Vulnerabilities: YA berarti kerentanan ini sudah terbukti dieksploitasi penyerang di dunia nyata. Prioritaskan perbaikannya.',
       'Tipe': 'prod = dipakai di aplikasi yang berjalan, dev = hanya untuk development/test. Langsung = dependency yang Anda tulis sendiri, transitif = ikut terbawa package lain.',
       'Baris': 'Nomor baris di file sumber (Dockerfile).',
-      'Stage': 'Nama tahap build bertingkat (FROM ... AS nama). Tanda - berarti tahap tanpa nama.',
+      'Stage': 'Nama stage pada multi-stage build (FROM ... AS nama). Tanda - berarti stage tanpa nama.',
       'Image': 'Nama base image yang dipakai pada instruksi FROM.',
       'Tag': 'Versi/varian image. Tag latest atau tanpa tag berubah-ubah dan tidak bisa direproduksi.',
-      'Status dukungan (endoflife.date)': 'Apakah versi ini masih mendapat patch keamanan. EOL (End Of Life) = sudah tidak dirawat vendor, naikkan versinya.',
+      'Status dukungan (endoflife.date)': 'Apakah versi ini masih mendapat patch keamanan. EOL (End Of Life) = sudah tidak di-maintain vendor, naikkan versinya.',
       'Aturan': 'Aturan keamanan/praktik terbaik Dockerfile yang dilanggar.',
       'Detail': 'Potongan nilai/kode yang memicu temuan.',
       'Saran': 'Langkah perbaikan yang disarankan.',
@@ -1770,7 +1770,7 @@
       'Tujuan': 'Untuk apa API ini dipakai.',
       'Data yang dikirim': 'Data yang keluar dari browser Anda ke layanan ini. Isi file tidak dikirim, hanya data pada kolom ini.',
       'Panggilan': 'Jumlah request pada sesi ini (berhasil / gagal).',
-      'package dipindai': 'Jumlah package unik (nama + versi) yang diperiksa.',
+      'package di-scan': 'Jumlah package unik (nama + versi) yang diperiksa.',
       'package rentan': 'Package yang punya minimal satu advisory.',
       'advisory unik': 'Jumlah laporan kerentanan berbeda (duplikat antar-package dihitung sekali).',
       'Kritis': 'CVSS 9.0-10.0. Bisa dieksploitasi dengan dampak sangat besar; perbaiki segera.',
@@ -1781,7 +1781,7 @@
       'tanpa versi aman': 'Package yang belum punya versi perbaikan. Pantau rilis upstream, ganti package, atau catat sebagai accepted risk.',
       'nilai Observatory': 'Nilai A+ sampai F dari MDN HTTP Observatory berdasarkan kelengkapan header keamanan situs.',
       'tes Observatory lulus': 'Jumlah tes header keamanan Observatory yang lulus dari total tes.',
-      'Keyakinan': 'Seberapa yakin deteksi ini: yakin = struktur/penanda cocok persis, sedang = cocok sebagian, tebakan = hanya dari panjang/entropi.',
+      'Keyakinan': 'Tingkat keyakinan deteksi: valid = struktur/penanda cocok persis, kemungkinan = cocok sebagian, tebakan = hanya dari panjang/entropi.',
       'Entropi': 'Entropi Shannon (0-8 bit per byte). Teks biasa ~4-5; data terkompresi/terenkripsi/acak mendekati 8 (untuk data pendek maksimum log2(panjang)).',
       'Panjang': 'Jumlah byte hasil langkah ini. Kelipatan 16 sering menandakan blok AES (CBC/ECB).'
       },
@@ -1824,7 +1824,7 @@
       'no safe version': 'Packages with no fixed version yet. Watch upstream releases, replace the package, or record as accepted risk.',
       'Observatory grade': 'A+ to F grade from MDN HTTP Observatory based on how complete the site security headers are.',
       'Observatory tests passed': 'Number of Observatory security-header tests passed out of the total.',
-      'Confidence': 'How sure this detection is: confident = structure/marker matches exactly, medium = partial match, guess = from length/entropy only.',
+      'Confidence': 'Detection confidence: valid = structure/marker matches exactly, likely = partial match, guess = based on length/entropy only.',
       'Entropy': 'Shannon entropy (0-8 bits per byte). Plain text ~4-5; compressed/encrypted/random data approaches 8 (short data maxes at log2(length)).',
       'Length': 'Number of bytes produced by this step. Multiples of 16 often indicate AES blocks (CBC/ECB).'
       }
@@ -2516,7 +2516,7 @@
       { re: /\bdangerouslySetInnerHTML\b/, view: 'code', rule: 'dangerouslySetInnerHTML (XSS)', severity: 'MEDIUM', fix: 'Render sebagai teks/komponen React; jika HTML wajib, sanitasi dulu (DOMPurify).' },
       { re: /\blocalStorage\.setItem\s*\(/, view: 'code', rule: 'Simpan data di localStorage', severity: 'LOW', fix: 'Jangan simpan token/data sensitif di localStorage (terbaca skrip XSS); pakai cookie HttpOnly + Secure + SameSite.' },
       { re: /(?<!\b(?:child_process['"`]?\)?|cp))\.exec\s*\(/, view: 'text', rule: 'RegExp.exec() (konvensi proyek)', severity: 'LOW', fix: 'Sesuai konvensi kode proyek, ambil kecocokan dengan matchAll()/rx1() alih-alih RegExp.exec (hindari bug lastIndex pada regex /g).' },
-      { re: /http:\/\/(?!localhost\b|127\.0\.0\.1\b|www\.w3\.org\/)/, view: 'text', rule: 'URL tanpa HTTPS', severity: 'LOW', fix: 'Gunakan https:// agar lalu lintas terenkripsi.' },
+      { re: /http:\/\/(?!localhost\b|127\.0\.0\.1\b|www\.w3\.org\/)/, view: 'text', rule: 'URL tanpa HTTPS', severity: 'LOW', fix: 'Gunakan https:// agar traffic terenkripsi.' },
       { re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/, view: 'raw', rule: 'AWS access key ter-hardcode', severity: 'HIGH', fix: 'Cabut (rotate) key ini di AWS IAM, lalu ambil kredensial dari environment/secret manager.' },
       { re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/, view: 'raw', rule: 'Private key ter-hardcode', severity: 'HIGH', fix: 'Keluarkan private key dari kode, ganti (rotate) kuncinya, simpan di secret manager.' },
       { re: /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{30,}|xox[abposr]-[A-Za-z0-9-]{10,}|sk_live_[0-9A-Za-z]{16,}|AIza[0-9A-Za-z_-]{35})/, view: 'raw', rule: 'Token/API key ter-hardcode', severity: 'HIGH', fix: 'Cabut token ini di penyedia layanan, lalu baca dari environment/secret manager.' },
@@ -2597,7 +2597,7 @@
         if (/^HS/i.test(alg)) warnings.push(Lf('Algoritma {x} memakai secret bersama; pastikan secret kuat dan tidak bocor.', { x: alg }));
         if (typeof payload.exp !== 'number') warnings.push(L('Tidak ada klaim exp: token tidak pernah kedaluwarsa.'));
         return { header, payload, headerText: JSON.stringify(header, null, 2), payloadText: JSON.stringify(payload, null, 2), signature: parts[2] || '', claims: jwtClaims(payload, Date.now() / 1000), warnings };
-      } catch (e) { return { error: L('Gagal mendekode token (bukan base64url/JSON yang valid).') }; }
+      } catch (e) { return { error: L('Gagal decode token (bukan base64url/JSON yang valid).') }; }
     }
 
     // ============================================================
@@ -2610,59 +2610,59 @@
     const DECODE_I18N = {
       id: {
         tab_decode: 'Smart Decode', dec_title: 'Smart Decode',
-        dec_intro: 'Tempel string apa pun (token, cookie, parameter, payload). Lapisan encoding dibuka otomatis bertingkat (maks 5), format token/container dikenali dari strukturnya, dan ciphertext mentah ditebak dari panjang + entropi. Semua diproses di browser; key/IV hanya disimpan di memori.',
+        dec_intro: 'Tempel string apa pun (token, cookie, parameter, payload). Encoding berlapis di-decode otomatis (maks 5 level), format token/container dikenali dari strukturnya, dan raw ciphertext ditebak dari panjang + entropi. Semua diproses di browser; key/IV hanya disimpan di memori.',
         dec_ph: 'Tempel string di sini, mis. %48%34%73... / eyJhbGciOi... / U2FsdGVkX1... / gAAAAA...',
         dec_samples: 'Contoh:', dec_clear: 'Bersihkan', dec_input: 'Input', dec_found: 'Terdeteksi',
-        dec_conf_high: 'yakin', dec_conf_med: 'sedang', dec_conf_low: 'tebakan',
+        dec_conf_high: 'valid', dec_conf_med: 'kemungkinan', dec_conf_low: 'tebakan',
         dec_lbl_conf: 'Keyakinan', dec_lbl_ent: 'Entropi', dec_lbl_len: 'Panjang',
         dec_copy: 'salin', dec_download: 'unduh', dec_more_bytes: '... (+{n} byte lagi)', dec_more_text: '... (dipotong, salin untuk teks lengkap)',
-        dec_no_more: 'Tidak ada lapisan encoding lain yang dikenali.', dec_max_depth: 'Batas 5 tingkat tercapai; dekode dihentikan.',
+        dec_no_more: 'Tidak ada encoding lain yang dikenali.', dec_max_depth: 'Sudah 5 level (batas maksimum); decode dihentikan.',
         dec_fmt_url: 'URL-encoding (%xx)', dec_fmt_html: 'HTML entity', dec_fmt_esc: 'Escape \\uXXXX / \\xXX', dec_fmt_qp: 'Quoted-printable',
-        dec_err_generic: 'Gagal memproses: {e}', dec_err_inflate: 'Data terkompresi rusak / tidak bisa dibuka: {e}',
-        dec_err_toobig: 'Hasil dekompresi melebihi 20 MB; dihentikan (cegah decompression bomb).',
+        dec_err_generic: 'Gagal memproses: {e}', dec_err_inflate: 'Data kompresi rusak / gagal di-decompress: {e}',
+        dec_err_toobig: 'Hasil decompress lebih dari 20 MB; dihentikan (cegah decompression bomb).',
         dec_err_nodecomp: 'Browser tidak mendukung DecompressionStream.', dec_err_nosubtle: 'WebCrypto (crypto.subtle) tidak tersedia; buka lewat https:// atau file lokal.',
         dec_err_op: 'Gagal: key/IV salah, padding tidak valid, atau tag autentikasi tidak cocok.',
-        dec_err_keylen: 'Key dibaca sebagai {enc} = {n} byte, padahal {mode} butuh {want} byte. Ubah pilihan format key (hex/base64/utf8) atau periksa panjangnya.',
-        dec_fmt_quotes: 'Tanda kutip dibuang', dec_fmt_prefix: 'Awalan "{x}" dibuang', dec_fmt_cookie: 'Nilai cookie/parameter (nama= dan atribut dibuang)',
+        dec_err_keylen: 'Key terbaca sebagai {enc} = {n} byte, padahal {mode} butuh {want} byte. Ganti format key (hex/base64/utf8) atau cek panjangnya.',
+        dec_fmt_quotes: 'Tanda kutip dihapus', dec_fmt_prefix: 'Prefix "{x}" dihapus', dec_fmt_cookie: 'Nilai cookie/parameter (nama= dan atribut dihapus)',
         dec_jwt_broken: 'JWT rusak', dec_uuid_note: 'UUID hanya penanda unik, bukan data terenkripsi; v1/v6/v7 menyimpan waktu pembuatan.', dec_d_uuid_ver: 'Versi', dec_d_uuid_time: 'Waktu dibuat', dec_err_enc: 'Nilai bukan {enc} yang valid.',
         dec_err_iv: 'IV dibutuhkan: isi IV atau centang "IV di depan ciphertext".', dec_err_block: 'Panjang ciphertext bukan kelipatan 16 byte.',
         dec_err_mac: 'MAC tidak cocok: APP_KEY salah atau payload diubah.', dec_err_fernet_mac: 'HMAC Fernet tidak cocok: key salah atau token diubah.',
         dec_err_pem: 'Isi PEM bukan base64 yang valid.', dec_mac_bad_but_ok: 'Peringatan: MAC tidak cocok walau dekripsi berhasil (payload mungkin diubah).',
-        dec_bad_plain: 'Terdekripsi tetapi hasilnya bukan teks/JSON/format dikenal (kemungkinan key/IV/mode salah).',
+        dec_bad_plain: 'Berhasil didekripsi, tapi hasilnya bukan teks/JSON/format yang dikenal (mungkin key/IV/mode salah).',
         dec_ok_json: 'Berhasil: JSON valid', dec_ok_text: 'Berhasil: teks UTF-8 valid', dec_ok_file: 'Berhasil: data biner berformat dikenal',
-        dec_file_note: 'File biner dikenali dari magic bytes; isi tidak ditampilkan, gunakan tombol unduh (buka dengan hati-hati).',
-        dec_bin_unknown: 'Biner tidak dikenali', dec_guess_title: 'Kemungkinan ciphertext mentah (TEBAKAN)',
-        dec_guess_warn: 'Ini TEBAKAN dari panjang + entropi, bukan kepastian. Tanpa key yang benar data tidak bisa dibuka.',
-        dec_guess_digest: 'Panjang ini juga cocok untuk digest hash (MD5 16, SHA-1 20, SHA-256 32, SHA-512 64 byte) atau key mentah.',
+        dec_file_note: 'File biner dikenali dari magic bytes. Isi tidak ditampilkan; pakai tombol unduh (hati-hati saat membukanya).',
+        dec_bin_unknown: 'Biner tidak dikenali', dec_guess_title: 'Mungkin raw ciphertext (TEBAKAN)',
+        dec_guess_warn: 'Ini hanya TEBAKAN dari panjang + entropi. Tanpa key yang benar, data tidak bisa didekripsi.',
+        dec_guess_digest: 'Panjang ini juga cocok untuk digest hash (MD5 16, SHA-1 20, SHA-256 32, SHA-512 64 byte) atau raw key.',
         dec_guess_cbc: 'Kelipatan 16 byte: kemungkinan AES-CBC/ECB (key 16/24/32 byte; CBC butuh IV 16 byte, sering ditaruh di 16 byte pertama).',
-        dec_guess_ecb: 'Ada blok 16 byte yang berulang: kemungkinan mode ECB (lemah, pola plaintext bocor) - OWASP ASVS V6.2.',
+        dec_guess_ecb: 'Ada blok 16 byte yang berulang: kemungkinan mode ECB (lemah, pola plaintext terlihat) - OWASP ASVS V6.2.',
         dec_guess_gcm: 'Bukan kelipatan 16 dan >= 28 byte: kemungkinan AES-GCM dengan IV 12 byte di depan dan tag 16 byte di belakang.',
         dec_guess_ctr: 'Bukan kelipatan 16: bisa juga cipher stream (AES-CTR / ChaCha20).',
         dec_guess_lowent: 'Entropi rendah: kemungkinan bukan ciphertext (data biner terstruktur / encoding lain).',
-        dec_salted_note: 'Format OpenSSL enc / CryptoJS.AES.encrypt(teks, passphrase): cukup passphrase (key & IV diturunkan via EVP_BytesToKey).',
-        dec_java_warn: 'Objek Java serialized: jangan pernah deserialisasi data tak tepercaya (risiko RCE gadget chain) - OWASP A08:2021, ASVS V5.5.',
+        dec_salted_note: 'Format OpenSSL enc / CryptoJS.AES.encrypt(teks, passphrase): cukup passphrase (key & IV dibentuk dari passphrase via EVP_BytesToKey).',
+        dec_java_warn: 'Objek Java serialized: jangan deserialize data dari sumber tidak tepercaya (risiko RCE gadget chain) - OWASP A08:2021, ASVS V5.5.',
         dec_d_classes: 'Kelas', dec_fernet_note: 'Token Fernet (Python cryptography): butuh key Fernet 32 byte base64url (16 byte HMAC + 16 byte AES-128).',
         dec_d_time: 'Waktu dibuat', dec_ec_unc: 'Kemungkinan public key EC tidak terkompresi (0x04 || X || Y) untuk ECDH/ECDSA.',
         dec_ec_comp: 'Kemungkinan public key EC P-256 terkompresi (0x02/0x03 || X).',
-        dec_jwt_note: 'Didekode tanpa verifikasi signature. Jangan percaya isi klaim sebelum signature diverifikasi di server (RFC 7519, RFC 8725).',
-        dec_jwe_note: 'JWE terenkripsi (RFC 7516): butuh key sesuai alg={alg} / enc={enc} (dir = key simetris langsung; RSA-OAEP = private key RSA; ECDH-ES = private key EC; A*KW = key AES pembungkus).',
+        dec_jwt_note: 'Di-decode tanpa verifikasi signature. Jangan langsung percaya isi klaim sebelum signature diverifikasi di server (RFC 7519, RFC 8725).',
+        dec_jwe_note: 'JWE terenkripsi (RFC 7516): butuh key sesuai alg={alg} / enc={enc} (dir = key simetris langsung; RSA-OAEP = private key RSA; ECDH-ES = private key EC; A*KW = key AES untuk key wrapping).',
         dec_aspnet_note: 'ASP.NET Core Data Protection: dienkripsi dengan key ring di server (purpose + key id). Tidak bisa didekripsi di browser tanpa salinan key ring + algoritma server.',
-        dec_php_warn: 'PHP serialize(): jangan unserialize() data tak tepercaya (object injection / POP chain) - OWASP A08:2021, ASVS V5.5.',
-        dec_pwhash_note: 'Hash satu arah: tidak bisa didekripsi, hanya bisa diuji dengan tebakan (cracking). Pastikan password di-hash dengan algoritma lambat (ASVS V2.4).',
-        dec_hexhash_note: 'Identifikasi dari panjang saja; bisa juga key/IV/ciphertext mentah dalam hex. Hash tidak bisa didekripsi.',
-        dec_pem_enc: 'Kunci privat terenkripsi (butuh passphrase).', dec_pem_priv: 'Berisi KUNCI PRIVAT: jangan dibagikan / di-commit (ASVS V6.4).',
+        dec_php_warn: 'PHP serialize(): jangan unserialize() data dari sumber tidak tepercaya (object injection / POP chain) - OWASP A08:2021, ASVS V5.5.',
+        dec_pwhash_note: 'Hash satu arah: tidak bisa didekripsi, hanya bisa ditebak lewat cracking. Pastikan password di-hash dengan algoritma lambat (ASVS V2.4).',
+        dec_hexhash_note: 'Identifikasi dari panjang saja; bisa juga raw key/IV/ciphertext dalam hex. Hash tidak bisa didekripsi.',
+        dec_pem_enc: 'Private key terenkripsi (butuh passphrase).', dec_pem_priv: 'Berisi PRIVATE KEY: jangan dibagikan / di-commit (ASVS V6.4).',
         dec_asn_cert: 'Sertifikat X.509', dec_asn_csr: 'Certificate Signing Request (CSR)', dec_asn_spki: 'Public key (SubjectPublicKeyInfo)',
         dec_asn_pkcs8: 'Private key (PKCS#8)', dec_asn_epkcs8: 'Private key terenkripsi (PKCS#8)', dec_asn_rsapriv: 'Private key RSA (PKCS#1)',
         dec_asn_rsapub: 'Public key RSA (PKCS#1)', dec_asn_ecpriv: 'Private key EC (SEC1)', dec_asn_generic: 'struktur SEQUENCE (jenis tidak dikenali)',
         dec_d_subject: 'Subject', dec_d_issuer: 'Issuer', dec_d_from: 'Berlaku mulai', dec_d_to: 'Berlaku sampai', dec_d_expired: 'KEDALUWARSA',
-        dec_d_serial: 'Serial', dec_d_key: 'Kunci', dec_d_sigalg: 'Algoritma tanda tangan', dec_d_alg: 'Algoritma', dec_d_der: 'Panjang DER',
+        dec_d_serial: 'Serial', dec_d_key: 'Key', dec_d_sigalg: 'Algoritma signature', dec_d_alg: 'Algoritma', dec_d_der: 'Panjang DER',
         dec_d_salt: 'Salt', dec_d_ct: 'Ciphertext', dec_d_cipher: 'Cipher', dec_d_iv: 'IV', dec_d_cost: 'Cost',
         dec_laravel_note: 'Payload Laravel encrypt()/Crypt: butuh APP_KEY (base64:...). CBC diverifikasi dengan MAC HMAC-SHA256(iv+value); GCM bila ada tag.',
         dec_smp_pass: 'Contoh CryptoJS - passphrase demo: {p}', dec_smp_key: 'Contoh AES-256-GCM (IV 12 byte di depan) - key demo (hex): {k}',
         dec_smp_appkey: 'Contoh Laravel - APP_KEY demo: {k}', dec_smp_fernet: 'Contoh Fernet - key demo: {k}',
         dec_smp_bcrypt: 'Contoh hash bcrypt publik (hanya identifikasi, tidak bisa didekripsi).', dec_smp_chain: 'Contoh rantai urlencode(base64(gzip(JSON))).',
         dec_smp_jwt: 'Contoh JWT dummy (signature palsu).', dec_smp_hash: 'Contoh SHA-256 (hex) dari teks "contoh".',
-        dec_chain_title: 'Hasil dekripsi ({v}) - didekode ulang', dec_form_title: 'Dekripsi',
+        dec_chain_title: 'Hasil dekripsi ({v}) - di-decode lagi', dec_form_title: 'Dekripsi',
         dec_type_cryptojs: 'CryptoJS / OpenSSL passphrase', dec_type_laravel: 'Laravel encrypt()', dec_type_fernet: 'Fernet', dec_type_aes: 'AES (tebakan)',
         dec_f_key: 'Key', dec_f_iv: 'IV', dec_f_mode: 'Mode', dec_f_pass: 'Passphrase', dec_f_tag: 'Tag (GCM)', dec_f_aad: 'AAD (teks)',
         dec_f_ivprefix: 'IV di depan ciphertext', dec_f_auto: 'auto',
@@ -2674,7 +2674,7 @@
         dec_intro: 'Paste any string (token, cookie, parameter, payload). Encoding layers are unwrapped automatically (up to 5 levels), token/container formats are recognized by structure, and raw ciphertext is guessed from length + entropy. Everything runs in the browser; keys/IVs stay in memory only.',
         dec_ph: 'Paste a string here, e.g. %48%34%73... / eyJhbGciOi... / U2FsdGVkX1... / gAAAAA...',
         dec_samples: 'Samples:', dec_clear: 'Clear', dec_input: 'Input', dec_found: 'Detected',
-        dec_conf_high: 'confident', dec_conf_med: 'medium', dec_conf_low: 'guess',
+        dec_conf_high: 'valid', dec_conf_med: 'likely', dec_conf_low: 'guess',
         dec_lbl_conf: 'Confidence', dec_lbl_ent: 'Entropy', dec_lbl_len: 'Length',
         dec_copy: 'copy', dec_download: 'download', dec_more_bytes: '... (+{n} more bytes)', dec_more_text: '... (truncated, copy for the full text)',
         dec_no_more: 'No further encoding layer recognized.', dec_max_depth: '5-level limit reached; decoding stopped.',
@@ -3039,8 +3039,9 @@
       if (m) return wrapStep(dtr('dec_fmt_prefix', { x: m[1] }), m[2]);
       m = rx1(WRAP_HEADER_RE, s);
       if (m) return wrapStep(dtr('dec_fmt_prefix', { x: m[1] + ':' }), m[2].trim());
-      // Bukan bila seluruhnya sudah berbentuk base64 (padding "=" di akhir bukan pemisah nama=nilai).
-      m = !/^[A-Za-z0-9+/_-]+={0,2}$/.test(s) && rx1(WRAP_COOKIE_RE, s);
+      // Bukan bila seluruhnya sudah berbentuk base64 (padding "=" di akhir bukan pemisah nama=nilai),
+      // dan bukan hash format $id$... (Argon2/bcrypt/crypt memuat "=" seperti $v=19$m=65536).
+      m = !/^[A-Za-z0-9+/_-]+={0,2}$/.test(s) && !/^\$[a-z0-9-]+\$/i.test(s) && rx1(WRAP_COOKIE_RE, s);
       return m ? wrapStep(tr('dec_fmt_cookie'), m[1]) : null;
     }
     // JSON -> tampil rapi; objek {iv, value, mac[, tag]} = payload Laravel encrypt().
@@ -3494,7 +3495,7 @@
         fi_drop: '<b>Seret file ke sini</b> atau klik untuk memilih (bisa banyak sekaligus, maks 256 MB per file)',
         fi_busy: 'Menganalisis…', fi_export: 'Unduh hasil (JSON)', fi_clear: 'Bersihkan', fi_copy: 'salin', fi_copied: 'tersalin',
         fi_v_ok: 'Aman', fi_v_warn: 'Perlu dicek', fi_v_danger: 'Berbahaya',
-        fi_id_name: 'Nama', fi_id_size: 'Ukuran', fi_id_modified: 'Diubah (menurut sistem)', fi_id_browser: 'MIME dari browser',
+        fi_id_name: 'Nama', fi_id_size: 'Ukuran', fi_id_modified: 'Terakhir diubah (sistem)', fi_id_browser: 'MIME dari browser',
         fi_id_detected: 'Jenis asli (magic bytes)', fi_id_expect: 'Ekstensi yang cocok', fi_id_magic: 'Byte awal (hex)', fi_id_entropy: 'Entropi',
         fi_unknown: 'tidak dikenali', fi_none: '(tanpa ekstensi)',
         fi_hash_title: 'Hash & verifikasi checksum',
@@ -3506,17 +3507,17 @@
         fi_integ_title: 'Integritas struktur', fi_find_title: 'Temuan keamanan', fi_find_none: 'Tidak ada temuan.', fi_th_finding: 'Temuan',
         fi_meta_title: 'Metadata', fi_map: 'Buka lokasi di OpenStreetMap', fi_sev_info: 'Info',
         fi_note: 'Batasan: analisis statis tanpa antivirus — "Aman" berarti tidak ada pola berbahaya yang dikenali, bukan jaminan bebas malware. Objek PDF yang terkompresi dibuka bila memungkinkan; file terenkripsi tidak bisa diperiksa isinya.',
-        fi_err_big: 'File lebih dari 256 MB — dilewati.', fi_err_empty: 'File kosong (0 byte) — unduhan/salinan gagal atau file rusak.', fi_err_read: 'Gagal membaca file: {x}',
+        fi_err_big: 'File lebih dari 256 MB — dilewati.', fi_err_empty: 'File kosong (0 byte) — kemungkinan download/copy gagal atau file rusak.', fi_err_read: 'Gagal membaca file: {x}',
         // integritas
         fi_i_ok_struct: 'Struktur {x} utuh.', fi_i_trunc: 'File terpotong/rusak: {x}.',
         fi_i_pdf_eof: 'penanda akhir %%EOF tidak ada', fi_i_pdf_xref: 'startxref tidak ditemukan (tabel referensi silang hilang)',
         fi_i_png_iend: 'chunk IEND tidak ada', fi_i_png_crc: '{x} chunk dengan CRC salah', fi_i_jpeg_eoi: 'penanda akhir JPEG (FFD9) tidak ada',
         fi_i_gif_end: 'byte trailer GIF (0x3B) tidak ada', fi_i_size_decl: 'ukuran di header {x} byte, file sebenarnya lebih kecil',
         fi_i_zip_eocd: 'End of Central Directory ZIP tidak ditemukan', fi_i_zip_cd: 'central directory ZIP tidak lengkap/rusak', fi_i_zip_local: '{x} entri ZIP menunjuk ke header lokal yang salah',
-        fi_i_zip64: 'ZIP64 — daftar isi tidak diurai',
+        fi_i_zip64: 'ZIP64 — daftar isi tidak di-parse',
         fi_i_box: 'box "{x}" melewati akhir file', fi_i_moov: 'box moov (indeks video) tidak ada — rekaman tidak selesai atau rusak',
         fi_i_pe: 'header PE tidak valid', fi_i_json: 'JSON tidak valid: {x}', fi_i_xml: 'XML tidak valid', fi_i_text_ok: 'Teks valid ({x}).',
-        fi_i_img_ok: 'Gambar berhasil didekode browser ({x}).', fi_i_img_fail: 'Browser gagal mendekode gambar — kemungkinan rusak atau format tidak didukung.',
+        fi_i_img_ok: 'Gambar berhasil dibuka browser ({x}).', fi_i_img_fail: 'Browser gagal membuka gambar — mungkin rusak atau formatnya tidak didukung.',
         fi_i_media_ok: 'Media berhasil dibaca browser (durasi {x}).', fi_i_media_fail: 'Browser tidak bisa membaca media — rusak, terpotong, atau codec tidak didukung Chrome.',
         fi_i_unknown: 'Format tidak dikenali — integritas struktur tidak bisa dicek (hash tetap bisa dipakai).',
         fi_i_nosubtle: 'WebCrypto tidak tersedia (halaman bukan HTTPS/file lokal) — hanya MD5 yang dihitung.',
@@ -3526,23 +3527,23 @@
         fi_s_double_ext: 'Ekstensi ganda/menipu: "{x}".', fi_s_rtlo: 'Nama file memakai karakter kontrol arah (RTLO) untuk menyamarkan ekstensi.',
         fi_s_exec: 'File executable ({x}) — jangan dijalankan bila sumbernya tidak tepercaya.',
         fi_s_polyglot: 'Kode skrip "{x}" ditemukan di dalam file biner (offset {y}) — kemungkinan polyglot/webshell.',
-        fi_s_appended_zip: 'Ada arsip ZIP yang ditempel setelah akhir {x} (polyglot/steganografi).',
+        fi_s_appended_zip: 'Ada arsip ZIP yang disisipkan setelah akhir {x} (polyglot/steganografi).',
         fi_s_trailing: '{x} byte data tambahan setelah penanda akhir file.',
-        fi_s_svg_script: 'SVG berisi \x3Cscript> — dieksekusi bila SVG dibuka langsung/disajikan dari domain Anda (stored XSS).',
+        fi_s_svg_script: 'SVG berisi \x3Cscript> — ikut jalan bila SVG dibuka langsung/di-serve dari domain Anda (stored XSS).',
         fi_s_svg_event: 'SVG/HTML berisi event handler ({x}) yang bisa menjalankan JavaScript.',
         fi_s_js_uri: 'Ada URI javascript: di dalam file.', fi_s_foreign: 'SVG memakai <foreignObject> (bisa menyisipkan HTML).',
-        fi_s_xxe: 'Deklarasi DOCTYPE/ENTITY — berisiko XXE bila diurai server (CWE-611).', fi_s_ext_ref: '{x} referensi ke sumber eksternal (http/https).',
-        fi_s_html: 'File HTML — bila diunggah lalu disajikan dari domain Anda, script di dalamnya ikut berjalan.',
+        fi_s_xxe: 'Deklarasi DOCTYPE/ENTITY — berisiko XXE bila di-parse server (CWE-611).', fi_s_ext_ref: '{x} referensi ke sumber eksternal (http/https).',
+        fi_s_html: 'File HTML — bila diunggah lalu di-serve dari domain Anda, script di dalamnya ikut berjalan.',
         fi_s_php: 'Kode PHP{x} — berpotensi webshell bila diunggah ke server.', fi_s_script: 'Skrip shell/interpreter (shebang {x}).',
         fi_s_pdf_js: 'PDF berisi JavaScript (/JavaScript atau /JS).', fi_s_pdf_open: 'PDF punya aksi otomatis saat dibuka (/OpenAction).',
         fi_s_pdf_aa: 'PDF punya aksi tambahan otomatis (/AA) pada halaman/field.', fi_s_pdf_launch: 'PDF bisa menjalankan program eksternal (/Launch).',
         fi_s_pdf_embed: 'PDF berisi file tertanam (/EmbeddedFile).', fi_s_pdf_rich: 'PDF berisi konten RichMedia/Flash.',
         fi_s_pdf_submit: 'PDF berisi form yang mengirim data (/SubmitForm).', fi_s_pdf_xfa: 'PDF memakai formulir XFA.',
         fi_s_pdf_hexname: 'Nama objek PDF disamarkan dengan escape hex (mis. /J#61vaScript) — teknik umum PDF berbahaya.',
-        fi_s_pdf_uri: '{x} tautan (/URI) di dalam PDF.', fi_s_pdf_enc: 'PDF terenkripsi — sebagian isi tidak bisa diperiksa.',
+        fi_s_pdf_uri: '{x} link (/URI) di dalam PDF.', fi_s_pdf_enc: 'PDF terenkripsi — sebagian isi tidak bisa diperiksa.',
         fi_s_macro: 'Dokumen berisi macro VBA ({x}).{y}', fi_s_macro_ext: ' Ekstensi .{x} biasanya tanpa macro — mencurigakan.',
         fi_s_activex: 'Dokumen berisi kontrol ActiveX.', fi_s_ole_embed: '{x} objek OLE tertanam.',
-        fi_s_remote_tpl: 'Relasi eksternal "{x}" → {y} (template/objek jarak jauh, teknik CVE-2017-0199/Follina).',
+        fi_s_remote_tpl: 'Relasi eksternal "{x}" → {y} (remote template/objek, teknik CVE-2017-0199/Follina).',
         fi_s_ext_links: '{x} hyperlink eksternal di dokumen.', fi_s_rtf_obj: 'RTF berisi objek OLE tertanam{x}.',
         fi_s_zip_slip: 'Entri arsip dengan path traversal: "{x}" (Zip Slip, CWE-22).', fi_s_zip_enc: '{x} entri arsip terenkripsi (tidak bisa diperiksa).',
         fi_s_zip_bomb: 'Rasio kompresi {x}× — indikasi zip bomb (CWE-409).', fi_s_zip_exec: 'Arsip berisi file executable/skrip: {x}.',
@@ -4306,7 +4307,7 @@
       '    if (typeof b === "string") return b;',
       '    try { if (b instanceof URLSearchParams) return b.toString(); } catch (e) {}',
       '    try { if (b instanceof FormData) { var o = {}; b.forEach(function (v, k) { o[k] = typeof v === "string" ? v : "[file]"; }); return JSON.stringify(o); } } catch (e) {}',
-      '    try { return String(b); } catch (e) { return "[tak terbaca]"; }',
+      '    try { return String(b); } catch (e) { return "[tidak terbaca]"; }',
       '  }',
       '  function parseHeaders(raw) {',
       '    var o = {}; String(raw || "").trim().split(/\\r?\\n/).forEach(function (line) { var i = line.indexOf(":"); if (i > 0) o[line.slice(0, i).trim()] = line.slice(i + 1).trim(); }); return o;',
@@ -4398,7 +4399,7 @@
       '    var bod = mkField("Body", rec.reqBody != null ? String(rec.reqBody) : "", true);',
       '    var note = document.createElement("div");',
       '    Object.assign(note.style, { color: "#f59e0b", margin: "4px 0", fontSize: "11px" });',
-      '    note.textContent = "Body data= terenkripsi tak bisa diedit manual (kunci per-sesi); ubah query/header.";',
+      '    note.textContent = "Body data= terenkripsi tidak bisa diedit manual (key per sesi); ubah query/header saja.";',
       '    var sendBtn = mkBtn("Kirim ulang", function () {',
       '      var headers = {}; try { headers = JSON.parse(hdr.field.value || "{}"); } catch (e) { note.textContent = "Headers bukan JSON valid."; return; }',
       '      resend(m.field.value.trim().toUpperCase() || "GET", u.field.value.trim(), headers, bod.field.value);',
