@@ -70,6 +70,7 @@
     .tabs button { padding: 8px 16px; border: 1px solid var(--border); background: var(--header-bg); color: var(--text); border-radius: 6px; cursor: pointer; }
     .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     td input[type=text], section > input[type=text] { width: 100%; box-sizing: border-box; }
+    td.editable { cursor: text; } .cell-edit { min-width: 120px; }
     pre.json { margin: 0; padding: 12px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
     textarea { width: 100%; min-height: 160px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
     input[type=text], input[type=password], input[type=number], select { padding: 7px 10px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
@@ -103,7 +104,7 @@
   <div id="app">
     <header>
       <div>
-        <h1>Scanner Security <span class="ver" title="v1.2">1.2</span></h1>
+        <h1>Scanner Security <span class="ver" :title="'v' + appVersion">{{ appVersion }}</span></h1>
         <p>{{ t('tagline') }}</p>
       </div>
       <div class="topbar">
@@ -147,7 +148,7 @@
           <input type="checkbox" v-model="visibleTabs[tb.key]" @change="onToggleTab(tb.key)" /> {{ t('tab_' + tb.key) }}
         </label>
       </div>
-      <div class="resizer" :class="{ drag: resizing }" title="Geser untuk mengubah lebar (klik dua kali untuk reset)"
+      <div class="resizer" :class="{ drag: resizing }" :title="L('Geser untuk mengubah lebar (klik dua kali untuk reset)')"
            @pointerdown.prevent="startResize" @pointermove="doResize" @pointerup="endResize" @pointercancel="endResize" @dblclick="setSideW(330)"></div>
     </aside>
 
@@ -156,8 +157,9 @@
         <button v-for="tb in shownTabs" :key="tb.key" :class="{ active: tab === tb.key }" @click="tab = tb.key">{{ t('tab_' + tb.key) }}</button>
       </div>
 
-      <!-- SCA + Docker -->
-      <section v-if="tab === 'sca'">
+      <!-- SCA + Docker & EOL: keduanya memakai tabel file tersimpan (localStorage) yang sama -->
+      <section v-if="tab === 'sca' || tab === 'eol'">
+        <template v-if="tab === 'sca'">
         <div class="row" style="margin-bottom:10px">
           <input type="text" v-model="project" list="project-names" :placeholder="t('sca_project_ph')" />
           <datalist id="project-names"><option v-for="p in projectNames" :key="p" :value="p"></option></datalist>
@@ -169,7 +171,6 @@
           <div v-html="t('sca_drop_title')"></div>
           <div class="muted" style="margin-top:6px" v-html="t('sca_drop_folder')"></div>
           <div class="muted" style="margin-top:4px">npm (package-lock, yarn.lock, pnpm-lock) · Composer · NuGet (*.csproj, packages.config, packages.lock.json, obj/project.assets.json) · Java (pom.xml, build.gradle, gradle.lockfile) · Rust (Cargo.lock) · Go (go.mod) · Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock) · Ruby (Gemfile.lock) · Dart (pubspec.lock) · Elixir (mix.lock) · Dockerfile</div>
-          <input ref="file" type="file" multiple hidden @change="onPick" />
         </div>
         <div class="muted" v-if="dropMsg" style="margin-top:6px;color:#4ade80">{{ dropMsg }}</div>
 
@@ -188,14 +189,31 @@
         <div class="actions" style="margin-top:6px">
           <button class="btn gray" :disabled="!pasteText.trim()" @click="addPaste">{{ t('sca_add_paste') }}</button>
         </div>
+        </template>
+        <template v-else>
+        <h2 style="margin-top:0">{{ t('eol_title') }}</h2>
+        <p class="muted" v-html="t('eol_intro')"></p>
+        <div class="actions">
+          <button class="btn blue" @click="$refs.file.click()">{{ t('it_upload') }}</button>
+          <span class="muted">{{ t('it_upload_hint') }}</span>
+        </div>
+        <div class="muted" v-if="dropMsg" style="color:#4ade80">{{ dropMsg }}</div>
+        <div class="bad" v-if="error">{{ error }}</div>
+        <h3>{{ t('it_stored_title') }} ({{ items.length }})</h3>
+        </template>
+        <input ref="file" type="file" multiple hidden @change="onPick" />
+        <input ref="reup" type="file" hidden @change="onReupload" />
 
         <table v-if="items.length">
-          <thead><tr><th :title="t('th_scan_tip')">{{ t('th_scan') }}</th><th>{{ t('th_project') }}</th><th>{{ t('th_file') }}</th><th>{{ t('th_type') }}</th><th>{{ t('th_size') }}</th><th></th></tr></thead>
+          <thead><tr><th :title="t('th_scan_tip')">{{ t('th_scan') }}</th><th :title="t('it_edit_tip')">{{ t('th_project') }}</th><th :title="t('it_edit_tip')">{{ t('th_file') }}</th><th>{{ t('th_type') }}</th><th>{{ t('th_size') }}</th><th v-if="tab === 'eol'">{{ t('it_detected') }}</th><th></th></tr></thead>
           <tbody>
             <tr v-for="(it, i) in items" :key="it.id" :style="it.enabled ? '' : 'opacity:.5'">
               <td><input type="checkbox" v-model="it.enabled" :title="it.enabled ? t('it_disable') : t('it_enable')" /></td>
-              <td>{{ it.project }}</td>
-              <td>{{ it.name }}</td>
+              <td v-for="fld in editFields" :key="fld" class="editable" :title="t('it_edit_tip')" @dblclick="startEdit(it, fld)">
+                <input v-if="isEditing(it, fld)" v-focus class="cell-edit" type="text" v-model="edit.value"
+                       @keydown.enter.prevent="commitEdit" @keydown.esc.prevent="cancelEdit" @blur="commitEdit" />
+                <template v-else>{{ L(it[fld]) }}</template>
+              </td>
               <td>
                 <select v-model="it.type" :disabled="it.compact" :title="it.compact ? t('it_compact_tip') : ''">
                   <option v-for="(label, key) in typeLabels" :key="key" :value="key">{{ label }}</option>
@@ -205,10 +223,15 @@
                 {{ (it.text.length / 1024).toFixed(1) }} KB<span v-if="it.compact" class="muted"> {{ t('it_compacted') }}</span>
                 <div v-if="unsavedIds.includes(it.id)" style="color:#f59e0b">{{ t('it_unsaved') }}</div>
               </td>
-              <td><button class="btn gray" @click="items.splice(i, 1)">{{ t('btn_delete') }}</button></td>
+              <td v-if="tab === 'eol'" class="muted" style="font-size:12px">{{ detectedText(it) }}</td>
+              <td style="white-space:nowrap">
+                <button class="btn gray" :title="t('it_reup_tip')" @click="askReupload(it)">{{ t('it_reupload') }}</button>
+                <button class="btn gray" @click="items.splice(i, 1)">{{ t('btn_delete') }}</button>
+              </td>
             </tr>
           </tbody>
         </table>
+        <template v-if="tab === 'sca'">
 
         <!-- T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
         <div class="sona">
@@ -249,22 +272,23 @@
           <!-- <label :title="sonaReady ? '' : 'Isi email dan token Sonatype dulu'"><input type="checkbox" v-model="sonaUse" :disabled="!sonaReady" /> Tambahkan data Sonatype Guide</label> -->
           <label><input type="checkbox" v-model="omitDev" /> {{ t('opt_omitdev') }}</label>
           <label><input type="checkbox" v-model="enrich" /> {{ t('opt_enrich') }}</label>
+          <label :title="t('opt_license_tip')"><input type="checkbox" v-model="license" /> {{ t('opt_license') }}</label>
         </div>
 
         <div class="actions">
           <button class="btn" :disabled="scanning || !activeItems.length" @click="runScan">{{ scanning ? t('scanning') : t('scan_btn') + (activeItems.length < items.length ? ' (' + activeItems.length + ' ' + t('active') + ')' : '') }}</button>
           <a v-if="reportUrl" class="btn blue" :href="reportUrl" target="_blank">{{ t('btn_reopen_report') }}</a>
           <a v-if="reportUrl" class="btn gray" :href="reportUrl" :download="reportName">{{ t('btn_download_html') }}</a>
+          <button class="btn gray" :disabled="sbomBusy || !activeItems.length" :title="t('sbom_tip')" @click="downloadSbom('cyclonedx')">{{ sbomBusy ? t('sbom_busy') : t('sbom_cdx') }}</button>
+          <button class="btn gray" :disabled="sbomBusy || !activeItems.length" :title="t('sbom_tip')" @click="downloadSbom('spdx')">{{ t('sbom_spdx') }}</button>
           <span class="bad" v-if="error">{{ error }}</span>
         </div>
         <div class="log" v-if="logs.length"><div v-for="(l, i) in logs" :key="i">{{ l }}</div></div>
         <p class="muted" v-html="t('sca_sources')"></p>
-      </section>
+        </template>
 
-      <!-- EOL runtime/framework -->
-      <section v-else-if="tab === 'eol'">
-        <h2 style="margin-top:0">{{ t('eol_title') }}</h2>
-        <p class="muted" v-html="t('eol_intro')"></p>
+        <!-- EOL runtime/framework -->
+        <template v-else>
         <div class="actions">
           <button class="btn" :disabled="eolBusy || !activeItems.length" @click="runEol">{{ eolBusy ? t('eol_checking') : t('eol_btn') }}</button>
           <span class="muted" v-if="!activeItems.length">{{ t('eol_nofiles') }}</span>
@@ -286,6 +310,7 @@
           </tbody>
         </table>
         <p class="muted" style="margin-top:10px" v-html="t('eol_note')"></p>
+        </template>
       </section>
 
       <!-- DAST pasif -->
@@ -463,8 +488,48 @@
 
   <script>
     // ============================================================
+    //  i18n: Bahasa Indonesia (default) + English (dipakai di path /en/).
+    //  t(key) mengembalikan teks bahasa aktif; jika belum diterjemahkan,
+    //  jatuh ke Indonesia (aplikasi tetap jalan saat terjemahan belum lengkap).
+    // ============================================================
+    const THEME_KEY = 'scaTheme', LANG_KEY = 'scaLang';
+    // Bahasa dari: query ?lang= > path /en/ > localStorage > default 'id'.
+    function detectLang() {
+      try {
+        const q = new URLSearchParams(location.search).get('lang');
+        if (q === 'en' || q === 'id') return q;
+      } catch (e) { /* abaikan */ }
+      if (/(^|\/)en(\/|$)/.test(location.pathname)) return 'en';
+      try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'id') return s; } catch (e) { /* abaikan */ }
+      return 'id';
+    }
+    function detectTheme() {
+      try { const s = localStorage.getItem(THEME_KEY); if (s === 'light' || s === 'dark') return s; } catch (e) { /* abaikan */ }
+      return 'dark';
+    }
+    const I18N = window.APP_I18N || { id: {}, en: {} };
+    const LANG = detectLang();
+    // tr(): versi non-Vue dari t(), bisa dipakai di builder laporan, pesan error, dll.
+    function tr(key) { return (I18N[LANG] && I18N[LANG][key]) || (I18N.id && I18N.id[key]) || key; }
+    // Teks data (grup/API) yang punya default Indonesia di array: pakai terjemahan
+    // bila ada untuk bahasa aktif, selain itu jatuh ke nilai Indonesia di data.
+    function trData(key, fallback) { const d = I18N[LANG]; return (d && d[key]) || fallback; }
+    // Teks berbahasa Indonesia di data/aturan (Dockerfile, DAST, SAST, JWT, skrip hook) diterjemahkan
+    // lewat kamus frasa I18N.text_en (kunci = teks Indonesia apa adanya); tanpa padanan -> teks asli.
+    const TEXT_EN = I18N.text_en || {};
+    function L(s) { return (LANG === 'en' && TEXT_EN[s]) || s; }
+    // L() + isi placeholder {nama} dari objek vars.
+    function Lf(s, vars) { return L(s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m)); }
+    // Skrip yang dipasang di tab lain: terjemahkan literal string "..." yang ada di kamus.
+    function localizeScript(src) {
+      if (LANG !== 'en') return src;
+      return src.replace(/"((?:[^"\\]|\\.)*)"/g,(m, s) => (TEXT_EN[s] ? JSON.stringify(TEXT_EN[s]) : m));
+    }
+
+    // ============================================================
     //  Util
     // ============================================================
+    const APP_VERSION = '1.3';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -587,6 +652,7 @@
       { key: 'osv-vuln', group: 'sca', name: 'OSV.dev — detail advisory', url: 'GET https://api.osv.dev/v1/vulns/{id}', use: 'Severity, CWE, ringkasan, dan versi perbaikan per advisory.', sends: 'ID advisory (GHSA-…, ALPINE-CVE-…)', when: 'Selalu bila ada temuan' },
       { key: 'epss', group: 'sca', name: 'FIRST — EPSS', url: 'GET https://api.first.org/data/v1/epss?cve=…', use: 'Probabilitas sebuah CVE dieksploitasi.', sends: 'ID CVE', when: 'Opsi "EPSS & CISA KEV"' },
       { key: 'kev', group: 'sca', name: 'CISA KEV (mirror GitHub)', url: 'GET https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json', use: 'Daftar CVE yang sudah dieksploitasi di dunia nyata.', sends: 'tidak ada (hanya mengunduh daftar)', when: 'Opsi "EPSS & CISA KEV"' },
+      { key: 'depsdev', group: 'sca', name: 'deps.dev (Open Source Insights)', url: 'GET https://api.deps.dev/v3/systems/{sistem}/packages/{nama}/versions/{versi}', use: 'Lisensi (SPDX) tiap dependency untuk matriks risiko lisensi & SBOM, bila lockfile tidak memuat lisensinya.', sends: 'nama package, versi, ekosistem', when: 'Opsi "Cek lisensi dependency"' },
       { key: 'eol', group: 'docker', name: 'endoflife.date', url: 'GET https://endoflife.date/api/{produk}.json', use: 'Status EOL base image Docker dan runtime/framework (Node, Go, .NET, PHP, Angular, Vue, Laravel, …).', sends: 'nama produk, mis. nodejs', when: 'Scan Dockerfile & tab EOL' },
       { key: 'gh-api', group: 'scrape', name: 'GitHub REST API', url: 'GET https://api.github.com/repos/{owner}/{repo}[/git/trees/{ref}]', use: 'Mencari file yang bisa dipindai di repo GitHub.', sends: 'owner/repo, branch; token bila diisi', when: 'Ambil dari link GitHub' },
       { key: 'gh-raw', group: 'scrape', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
@@ -725,7 +791,7 @@
       const out = [];
       ids.slice().sort().forEach(id => {
         const raw = vulnCache[id];
-        if (!raw) { out.push({ id, aliases: [], cves: [], severity: 'UNKNOWN', cwes: [], summary: '(detail tidak berhasil diambil)', fixed: null, epss: null, kev: false }); return; }
+        if (!raw) { out.push({ id, aliases: [], cves: [], severity: 'UNKNOWN', cwes: [], summary: L('(detail tidak berhasil diambil)'), fixed: null, epss: null, kev: false }); return; }
         const als = [raw.id].concat(raw.aliases || []);
         if (als.some(a => covered.has(a))) return;
         als.forEach(a => covered.add(a));
@@ -811,7 +877,7 @@
       const idLists = await osvBatch(entries.map(e => ({ name: e.name, version: e.version, eco: e.eco })));
       const ids = new Set();
       idLists.forEach(l => l.forEach(i => ids.add(i)));
-      log(ids.size + ' advisory unik, mengambil detail...');
+      log(Lf('{n} advisory unik, mengambil detail...', { n: ids.size }));
       await pool(Array.from(ids), 15, id => getVuln(id).catch(() => null));
       entries.forEach((e, i) => { e.vulns = buildVulns(idLists[i], e.name, e.version, e.eco); });
     //  if (opts.sonatype) await sonatypeEnrich(entries, opts.sonatype, log);
@@ -900,7 +966,7 @@
           if (!path || !p || !p.version || p.link || !startsWithDigit(p.version)) return;
           const idx = path.lastIndexOf('node_modules/');
           const name = p.name || path.slice(idx + 13);
-          out.push({ name, version: p.version, eco: 'npm', dev: !!p.dev, direct: path === 'node_modules/' + name && direct.has(name) });
+          out.push({ name, version: p.version, eco: 'npm', dev: !!p.dev, direct: path === 'node_modules/' + name && direct.has(name), license: typeof p.license === 'string' ? p.license : '' });
         });
       } else if (j.dependencies) {
         const walk = (deps, top) => Object.keys(deps).forEach(name => {
@@ -929,7 +995,7 @@
         let v = String(p.version || '');
         if (v[0] === 'v') v = v.slice(1);
         if (!startsWithDigit(v)) return;
-        out.push({ name: p.name, version: v, eco: 'Packagist', dev: pair[1], direct: null });
+        out.push({ name: p.name, version: v, eco: 'Packagist', dev: pair[1], direct: null, license: (p.license || []).join(' OR ') });
       }));
       return out;
     }
@@ -1227,6 +1293,7 @@
       'cargo-toml': 'Cargo.toml memuat rentang versi; yang dipindai adalah versi dasarnya. Gunakan Cargo.lock untuk versi yang terpasang.',
       'py-req': 'Hanya baris yang dipin dengan == yang bisa dipindai.'
     };
+    Object.keys(TYPE_NOTES).forEach(k => { TYPE_NOTES[k] = L(TYPE_NOTES[k]); });
 
     // ============================================================
     //  Dockerfile
@@ -1380,6 +1447,17 @@
       });
       return out;
     }
+    // Jenis file yang runtime-nya hanya terbaca saat impor (hilang bila sudah dipadatkan).
+    const RUNTIME_TYPES = ['npm-pkg', 'go-mod', 'composer', 'nuget-proj'];
+    // Runtime + framework satu file; di-cache per isi agar render tabel tidak mem-parse ulang lockfile.
+    const DETECT_CACHE = new WeakMap();
+    function detectedComponents(it) {
+      const hit = DETECT_CACHE.get(it);
+      if (hit && hit.text === it.text && hit.runtimes === it.runtimes) return hit.list;
+      const list = [...(it.runtimes || []), ...frameworksOf(it)].filter(c => c.ver);
+      DETECT_CACHE.set(it, { text: it.text, runtimes: it.runtimes, list });
+      return list;
+    }
     // Versi struktur-data dari checkEol untuk tab EOL (status + data mentah, agar bisa dilokalkan).
     async function eolCheck(slug, ver) {
       if (!eolCache[slug]) eolCache[slug] = apiFetch('eol', 'https://endoflife.date/api/' + slug + '.json').then(r => r.ok ? r.json() : []).catch(() => []);
@@ -1436,7 +1514,7 @@
     async function analyzeDocker(text, log, opts) {
       const ins = parseDockerfile(text);
       const args = {}, stages = [], findings = [];
-      const add = (line, rule, severity, detail, fix) => findings.push({ line, rule, severity, detail, fix: fix || '' });
+      const add = (line, rule, severity, detail, fix) => findings.push({ line, rule: L(rule), severity, detail: L(detail), fix: L(fix || '') });
       const sub = s => s.replace(/\$\{(\w+)(?::-([^}]*))?\}|\$(\w+)/g, (all, a, def, b) => {
         const k = a || b; return args[k] !== undefined ? args[k] : (def || '');
       });
@@ -1456,8 +1534,8 @@
           cur = { line: i.line, name: asIdx > 0 ? tk[asIdx + 1] : '', ref, img, internal: stages.some(s => s.name && s.name === ref) || ref === 'scratch', user: '', runs: [] };
           stages.push(cur);
           if (!cur.internal) {
-            if (!img.tag && !img.digest) add(i.line, 'Base image tanpa tag (latest)', 'MEDIUM', ref + ' memakai tag latest.', 'Pin tag versi tertentu, mis. ' + ref + ':<versi>.');
-            else if (img.tag === 'latest') add(i.line, 'Base image memakai :latest', 'MEDIUM', ref + ' tidak bisa direproduksi.', 'Pin tag versi tertentu.');
+            if (!img.tag && !img.digest) add(i.line, 'Base image tanpa tag (latest)', 'MEDIUM', Lf('{x} memakai tag latest.', { x: ref }), Lf('Pin tag versi tertentu, mis. {x}:<versi>.', { x: ref }));
+            else if (img.tag === 'latest') add(i.line, 'Base image memakai :latest', 'MEDIUM', Lf('{x} tidak bisa direproduksi.', { x: ref }), 'Pin tag versi tertentu.');
           }
           return;
         }
@@ -1473,7 +1551,7 @@
           if (i.args.split(/\s+/).some(p => p.split('/')[0] === '22')) add(i.line, 'Port SSH (22) di-EXPOSE', 'MEDIUM', i.args, 'Hapus EXPOSE 22; akses kontainer lewat docker exec.');
         } else if (i.cmd === 'ENV' || i.cmd === 'ARG') {
           const m = rx1(/^([A-Za-z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|ACCESS_?KEY)[A-Za-z0-9_]*)\s*[= ]\s*(\S+)/gi, i.args);
-          if (m && m[2].indexOf('$') < 0 && m[2] !== '""' && m[2] !== "''") add(i.line, 'Secret di ' + i.cmd, 'HIGH', m[1] + ' berisi nilai langsung di Dockerfile.', 'Gunakan runtime secret / env saat run, bukan di image.');
+          if (m && m[2].indexOf('$') < 0 && m[2] !== '""' && m[2] !== "''") add(i.line, Lf('Secret di {x}', { x: i.cmd }), 'HIGH', Lf('{x} berisi nilai langsung di Dockerfile.', { x: m[1] }), 'Gunakan runtime secret / env saat run, bukan di image.');
         } else if (i.cmd === 'RUN') {
           cur.runs.push({ line: i.line, text: i.args });
           const a = i.args;
@@ -1504,8 +1582,8 @@
           log(tr('log_eol_check').replace('{x}', t.label + ' ' + t.ver));
           const r = await checkEol(t);
           row.checks.push(Object.assign({ label: t.label, ver: t.ver }, r));
-          if (r.status === 'eol') add(st.line, 'Base image sudah EOL: ' + t.label + ' ' + t.ver, 'HIGH', r.note, 'Naikkan ke versi yang masih didukung.');
-          else if (r.status === 'soon') add(st.line, 'Base image segera EOL: ' + t.label + ' ' + t.ver, 'MEDIUM', r.note, 'Rencanakan upgrade.');
+          if (r.status === 'eol') add(st.line, Lf('Base image sudah EOL: {x}', { x: t.label + ' ' + t.ver }), 'HIGH', r.note, 'Naikkan ke versi yang masih didukung.');
+          else if (r.status === 'soon') add(st.line, Lf('Base image segera EOL: {x}', { x: t.label + ' ' + t.ver }), 'MEDIUM', r.note, 'Rencanakan upgrade.');
         }
         bases.push(row);
         const osEco = osEcosystem(st.img);
@@ -1516,7 +1594,7 @@
           else if (p.kind === 'pip') eco = 'PyPI';
           if (!p.version || !startsWithDigit(p.version)) { unpinned.push({ line: run.line, name: p.name, kind: p.kind }); return; }
           if (!eco) return;
-          pkgs.push({ name: p.name, version: p.version, eco, dev: false, direct: true, origin: 'baris ' + run.line });
+          pkgs.push({ name: p.name, version: p.version, eco, dev: false, direct: true, origin: Lf('baris {x}', { x: run.line }) });
         }));
       }
       if (unpinned.length) {
@@ -1541,7 +1619,7 @@
       'cargo-lock': 'Rust — Cargo.lock', 'cargo-toml': 'Rust — Cargo.toml', 'go-mod': 'Go — go.mod',
       'py-req': 'Python — requirements.txt', 'py-toml-lock': 'Python — poetry.lock / uv.lock', 'pipfile-lock': 'Python — Pipfile.lock',
       'ruby': 'Ruby — Gemfile.lock', 'pubspec': 'Dart — pubspec.lock', 'mix': 'Elixir — mix.lock',
-      'docker': 'Dockerfile', 'unknown': '(tidak dikenali)'
+      'docker': 'Dockerfile', 'unknown': L('(tidak dikenali)')
     };
     function detectType(name, text) {
       const n = String(name).toLowerCase();
@@ -1734,6 +1812,8 @@
       .b{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;color:#fff}
       .CRITICAL{background:#7f1d1d}.HIGH{background:#dc2626}.MEDIUM{background:#d97706}.LOW{background:#2563eb}.UNKNOWN{background:#64748b}
       .okb{background:#16a34a}.eolb{background:#dc2626}.soonb{background:#d97706}
+      .b.lic-strong{background:#dc2626}.b.lic-weak{background:#d97706}.b.lic-unknown{background:#64748b}.b.lic-permissive{background:#16a34a}
+      .card.lic-strong{border-color:#dc2626;background:#fef2f2}.card.lic-weak{border-color:#d97706;background:#fffbeb}.card.lic-permissive{border-color:#16a34a;background:#f0fdf4}
       .mono{font-family:Consolas,monospace;font-size:12px}
       .nums{white-space:nowrap}
       details summary{cursor:pointer;color:#1e40af}
@@ -1848,9 +1928,9 @@
       results.forEach(r => (r.entries || []).concat(r.docker ? r.docker.entries : []).forEach(e => {
         if (!e.vulns.length) return;
         const ep = e.vulns.reduce((m, v) => (v.epss !== null && v.epss > m ? v.epss : m), 0);
-        rows.push([r.name, e.name, e.eco, e.version, e.updateTo || 'BELUM ADA', e.kind, maxSev(e.vulns.map(v => v.severity)),
+        rows.push([r.name, e.name, e.eco, e.version, e.updateTo || L('BELUM ADA'), e.kind, maxSev(e.vulns.map(v => v.severity)),
           e.vulns.map(v => v.id).join(' '), e.vulns.map(v => v.cves.join(' ')).join(' ').trim(), ep ? (ep * 100).toFixed(2) + '%' : '',
-          e.vulns.some(v => v.kev) ? 'ya' : '', e.dev ? 'dev' : 'prod', e.direct === true ? 'langsung' : e.direct === false ? 'transitif' : '']);
+          e.vulns.some(v => v.kev) ? L('ya') : '', e.dev ? 'dev' : 'prod', e.direct === true ? L('langsung') : e.direct === false ? L('transitif') : '']);
       }));
       return '\ufeff' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
     }
@@ -1878,9 +1958,106 @@
       html += '<div class="note">' + tr('rep_docker_limit') + '</div>';
       return html;
     }
+    // ============================================================
+    //  Lisensi dependency + SBOM (CycloneDX 1.5 / SPDX 2.3)
+    //  Lisensi: dari lockfile (npm, Composer) bila ada, selain itu deps.dev (CORS terbuka).
+    // ============================================================
+    const DEPSDEV_SYSTEM = { npm: 'npm', PyPI: 'pypi', Maven: 'maven', 'crates.io': 'cargo', Go: 'go', NuGet: 'nuget', RubyGems: 'rubygems' };
+    const licenseCache = {};
+    function fetchLicense(p) {
+      const sys = DEPSDEV_SYSTEM[p.eco];
+      if (!sys) return Promise.resolve('');
+      const ver = sys === 'go' && p.version[0] !== 'v' ? 'v' + p.version : p.version;
+      const k = sys + '|' + p.name + '|' + ver;
+      if (!(k in licenseCache)) {
+        licenseCache[k] = apiFetch('depsdev', 'https://api.deps.dev/v3/systems/' + sys + '/packages/' + encodeURIComponent(p.name) + '/versions/' + encodeURIComponent(ver))
+          .then(r => (r.ok ? r.json() : {})).then(j => (j.licenses || []).join(' AND ')).catch(() => '');
+      }
+      return licenseCache[k];
+    }
+    async function enrichLicenses(pkgs, log) {
+      const todo = pkgs.filter(p => !p.license && DEPSDEV_SYSTEM[p.eco]);
+      if (todo.length) log(tr('log_lic_fetch').replace('{n}', todo.length));
+      await pool(todo, 8, async p => { p.license = await fetchLicense(p); });
+    }
+    // Risiko lisensi (License Risk Matrix): strong copyleft > weak copyleft > tidak diketahui > permissive.
+    // Ekspresi SPDX: "A OR B" = boleh pilih (ambil yang teringan), "A AND B" = keduanya berlaku (ambil yang terberat).
+    const LIC_LEVELS = ['strong', 'weak', 'unknown', 'permissive'];
+    const LIC_TERM_RISK = [
+      ['weak', /\b(LGPL|MPL|EPL|CDDL|CPL|MS-RL|CECILL-C)/i],
+      ['strong', /\b(AGPL|GPL|SSPL|EUPL|OSL|RPL|CPAL|CC-BY-SA|CECILL)/i],
+      ['permissive', /^(MIT|MIT-0|ISC|0BSD|BSD-\d-Clause[\w-]*|Apache-[12]\.\d|Unlicense|CC0-1\.0|Zlib|BlueOak-1\.0\.0|Python-2\.0|PSF-2\.0|WTFPL|BSL-1\.0|X11|PostgreSQL|Artistic-2\.0|Ruby|PHP-3\.0?1?|CC-BY-[34]\.0)$/i]
+    ];
+    function termRisk(term) {
+      const t = term.replace(/[()]/g, '').trim().split(/\s+WITH\s+/i)[0];
+      const hit = LIC_TERM_RISK.find(([, re]) => re.test(t));
+      return hit ? hit[0] : 'unknown';
+    }
+    function licenseRisk(expr) {
+      if (!expr || /^(NOASSERTION|non-standard|UNKNOWN)$/i.test(expr.trim())) return 'unknown';
+      const rank = l => LIC_LEVELS.indexOf(l);
+      return expr.split(/\s+OR\s+/i)
+        .map(alt => alt.split(/\s+AND\s+/i).map(termRisk).reduce((a, b) => (rank(a) < rank(b) ? a : b)))
+        .reduce((a, b) => (rank(a) > rank(b) ? a : b));
+    }
+    function renderLicenseMatrix(results) {
+      const rows = [];
+      results.forEach(r => (r.entries || []).forEach(e => rows.push({ file: r.name, e, lvl: licenseRisk(e.license) })));
+      if (!rows.length) return '';
+      const n = l => rows.filter(x => x.lvl === l).length;
+      let h = '<h2>' + tr('licm_title') + '</h2><div class="cards">' +
+        LIC_LEVELS.map(l => '<div class="card lic-' + l + '"><b>' + n(l) + '</b><span>' + tr('licm_' + l) + '</span></div>').join('') + '</div>' +
+        '<div class="note">' + tr('licm_note') + '</div>';
+      const risky = rows.filter(x => x.lvl !== 'permissive').sort((a, b) => LIC_LEVELS.indexOf(a.lvl) - LIC_LEVELS.indexOf(b.lvl));
+      if (!risky.length) return h;
+      h += '<table><thead><tr>' + ['rep_th_package', 'licm_th_license', 'licm_th_level', 'licm_th_action', 'th_file'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>' +
+        risky.map(x => '<tr><td>' + esc(x.e.name) + ' <span class="mono">' + esc(x.e.version) + ' · ' + esc(x.e.eco) + (x.e.dev ? ' · dev' : '') + '</span></td><td class="mono">' + esc(x.e.license || '—') +
+          '</td><td><span class="b lic-' + x.lvl + '">' + tr('licm_' + x.lvl) + '</span></td><td>' + tr('licm_act_' + x.lvl) + '</td><td>' + esc(x.file) + '</td></tr>').join('') + '</tbody></table>';
+      return h;
+    }
+    // Package URL (purl-spec) untuk SBOM.
+    const PURL_TYPE = { npm: 'npm', PyPI: 'pypi', Maven: 'maven', 'crates.io': 'cargo', Go: 'golang', NuGet: 'nuget', RubyGems: 'gem', Packagist: 'composer', Pub: 'pub', Hex: 'hex' };
+    function purlOf(p) {
+      const type = PURL_TYPE[p.eco];
+      if (!type) return '';
+      let ns = '', name = type === 'pypi' ? p.name.toLowerCase() : p.name;
+      if (type === 'maven') [ns, name] = name.split(':');
+      else if (name.lastIndexOf('/') > 0) { const i = name.lastIndexOf('/'); ns = name.slice(0, i); name = name.slice(i + 1); }
+      const seg = s => s.split('/').map(encodeURIComponent).join('/');
+      return 'pkg:' + type + '/' + (ns ? seg(ns) + '/' : '') + encodeURIComponent(name) + '@' + encodeURIComponent(type === 'golang' ? 'v' + p.version : p.version);
+    }
+    const isSpdxExpr = lic => !!lic && licenseRisk(lic) !== 'unknown';
+    function buildCycloneDx(pkgs, project) {
+      return {
+        bomFormat: 'CycloneDX', specVersion: '1.5', serialNumber: 'urn:uuid:' + crypto.randomUUID(), version: 1,
+        metadata: { timestamp: new Date().toISOString(), tools: { components: [{ type: 'application', name: 'Scanner Security', version: APP_VERSION }] }, component: { type: 'application', name: project } },
+        components: pkgs.map(p => {
+          const purl = purlOf(p), c = { type: 'library', 'bom-ref': purl || p.eco + ':' + p.name + '@' + p.version, name: p.name, version: p.version, scope: p.dev ? 'optional' : 'required' };
+          if (purl) c.purl = purl;
+          if (p.license) c.licenses = /\s(AND|OR|WITH)\s/i.test(p.license) ? [{ expression: p.license }] : [{ license: isSpdxExpr(p.license) ? { id: p.license } : { name: p.license } }];
+          return c;
+        })
+      };
+    }
+    function buildSpdx(pkgs, project) {
+      const id = i => 'SPDXRef-Package-' + i;
+      return {
+        spdxVersion: 'SPDX-2.3', dataLicense: 'CC0-1.0', SPDXID: 'SPDXRef-DOCUMENT', name: project,
+        documentNamespace: 'https://spdx.org/spdxdocs/' + encodeURIComponent(project) + '-' + crypto.randomUUID(),
+        creationInfo: { created: new Date().toISOString().replace(/\.\d+Z$/, 'Z'), creators: ['Tool: Scanner Security-' + APP_VERSION] },
+        packages: pkgs.map((p, i) => {
+          const purl = purlOf(p);
+          return { name: p.name, SPDXID: id(i), versionInfo: p.version, downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'NOASSERTION',
+            licenseDeclared: isSpdxExpr(p.license) ? p.license : 'NOASSERTION',
+            externalRefs: purl ? [{ referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: purl }] : [] };
+        }),
+        relationships: pkgs.map((p, i) => ({ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: id(i) }))
+      };
+    }
+
     function buildReport(results, opts) {
       const now = new Date().toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID');
-      let body = '<h1>' + tr('rep_h1') + '</h1><div class="sub">' + tr('rep_created') + ' ' + esc(now) + ' · ' + results.length + ' ' + tr('rep_files') + ' · ' + tr('rep_source') + ': OSV.dev' + (opts.enrich ? ', FIRST EPSS, CISA KEV' : '') + ', endoflife.date' + (opts.sonatype ? ' · ' + tr('rep_sona_active') : '') + (opts.omitDev ? ' · ' + tr('rep_omitdev') : '') + '</div>';
+      let body = '<h1>' + tr('rep_h1') + '</h1><div class="sub">' + tr('rep_created') + ' ' + esc(now) + ' · ' + results.length + ' ' + tr('rep_files') + ' · ' + tr('rep_source') + ': OSV.dev' + (opts.enrich ? ', FIRST EPSS, CISA KEV' : '') + ', endoflife.date' + (opts.license ? ', deps.dev' : '') + (opts.sonatype ? ' · ' + tr('rep_sona_active') : '') + (opts.omitDev ? ' · ' + tr('rep_omitdev') : '') + '</div>';
       const all = results.reduce((a, r) => a.concat(r.entries || [], r.docker ? r.docker.entries : []), []);
       body += cards(all);
       results.forEach(r => {
@@ -1889,6 +2066,7 @@
         if (r.docker) { body += renderDocker(r, results.length > 1); return; }
         body += '<div class="cap">' + r.entries.length + ' ' + tr('rep_unique_pkg') + (r.skipped ? ' · ' + r.skipped + ' ' + tr('rep_skipped_dev') : '') + '</div>' + (r.note ? '<div class="note">' + esc(r.note) + '</div>' : '') + (results.length > 1 ? cards(r.entries) : '') + renderVulnTable(r.entries, r.name);
       });
+      if (opts.license) body += renderLicenseMatrix(results);
       const csv = buildCsv(results);
       const gname = Object.fromEntries(API_GROUPS.map(g => [g.key, trData('grp_' + g.key + '_title', g.title)]));
       const used = API_LIST.filter(a => apiStats[a.key].calls && a.group !== 'app');
@@ -1967,9 +2145,10 @@
     }
 
     async function httpErr(res, what, hasToken) {
-      if (res.status === 404) return new Error(what + ' tidak ditemukan' + (hasToken ? ' (cek token/izin)' : ' atau private (isi token read-only)'));
-      if (res.status === 401) return new Error(what + ': token ditolak (401)');
-      if (res.status === 403 || res.status === 429) return new Error(what + ': kena batas request/izin (HTTP ' + res.status + '). Tanpa token GitHub dibatasi 60 request per jam; isi token untuk menaikkan.');
+      const v = { x: what, s: res.status };
+      if (res.status === 404) return new Error(Lf('{x} tidak ditemukan', v) + L(hasToken ? ' (cek token/izin)' : ' atau private (isi token read-only)'));
+      if (res.status === 401) return new Error(Lf('{x}: token ditolak (401)', v));
+      if (res.status === 403 || res.status === 429) return new Error(Lf('{x}: kena batas request/izin (HTTP {s}). Tanpa token GitHub dibatasi 60 request per jam; isi token untuk menaikkan.', v));
       return new Error(what + ': HTTP ' + res.status);
     }
 
@@ -2151,7 +2330,7 @@
     }
     function analyzeHeaders(u, p) {
       const f = [], H = p.hdr, https = u.protocol === 'https:';
-      const add = (sev, header, rule, detail, fix) => f.push({ sev, header, rule, detail: detail || '', fix: fix || '' });
+      const add = (sev, header, rule, detail, fix) => f.push({ sev, header, rule: L(rule), detail: detail || '', fix: L(fix || '') });
       if (!https) add('HIGH', '-', 'Situs diakses lewat HTTP (tanpa TLS)', u.href, 'Sajikan seluruh situs lewat HTTPS dan alihkan HTTP ke HTTPS.');
       const hsts = H['strict-transport-security'];
       if (https) {
@@ -2183,9 +2362,9 @@
       if (H['access-control-allow-origin'] === '*') add('LOW', 'Access-Control-Allow-Origin', 'CORS terbuka untuk semua origin (*)', '', 'Batasi ke origin yang dibutuhkan bila respons berisi data sensitif.');
       p.cookies.forEach(c => {
         const name = c.split('=')[0].trim(), lc = c.toLowerCase();
-        if (https && lc.indexOf('; secure') < 0) add('MEDIUM', 'Set-Cookie', 'Cookie tanpa flag Secure: ' + name, '', 'Tambahkan atribut Secure.');
-        if (lc.indexOf('httponly') < 0) add('MEDIUM', 'Set-Cookie', 'Cookie tanpa flag HttpOnly: ' + name, '', 'Tambahkan atribut HttpOnly.');
-        if (lc.indexOf('samesite') < 0) add('LOW', 'Set-Cookie', 'Cookie tanpa SameSite: ' + name, '', 'Tambahkan SameSite=Lax atau Strict.');
+        if (https && lc.indexOf('; secure') < 0) add('MEDIUM', 'Set-Cookie', Lf('Cookie tanpa flag Secure: {x}', { x: name }), '', 'Tambahkan atribut Secure.');
+        if (lc.indexOf('httponly') < 0) add('MEDIUM', 'Set-Cookie', Lf('Cookie tanpa flag HttpOnly: {x}', { x: name }), '', 'Tambahkan atribut HttpOnly.');
+        if (lc.indexOf('samesite') < 0) add('LOW', 'Set-Cookie', Lf('Cookie tanpa SameSite: {x}', { x: name }), '', 'Tambahkan SameSite=Lax atau Strict.');
       });
       f.sort((a, b) => SEV_ORDER[b.sev] - SEV_ORDER[a.sev]);
       return f;
@@ -2336,33 +2515,34 @@
     }
     function relTime(sec) {
       const a = Math.abs(sec), u = a >= 86400 ? [Math.floor(a / 86400), 'hari'] : a >= 3600 ? [Math.floor(a / 3600), 'jam'] : a >= 60 ? [Math.floor(a / 60), 'menit'] : [a, 'detik'];
-      return u[0] + ' ' + u[1];
+      return u[0] + ' ' + L(u[1]);
     }
     function jwtClaims(payload, now) {
       return JWT_TIME_CLAIMS.filter(([k]) => typeof payload[k] === 'number').map(([k, label]) => {
         const diff = payload[k] - now;
         const past = diff <= 0;
-        const status = k === 'exp' ? (past ? 'Kedaluwarsa ' + relTime(diff) + ' lalu' : 'Berlaku, sisa ' + relTime(diff))
-          : k === 'nbf' ? (past ? 'Sudah berlaku' : 'Belum berlaku, ' + relTime(diff) + ' lagi')
-          : (past ? relTime(diff) + ' lalu' : 'Di masa depan (' + relTime(diff) + ')');
-        return { key: k, label, value: payload[k], date: new Date(payload[k] * 1000).toLocaleString('id-ID'), status, ok: k === 'exp' ? !past : k === 'nbf' ? past : past };
+        const x = { x: relTime(diff) };
+        const status = k === 'exp' ? Lf(past ? 'Kedaluwarsa {x} lalu' : 'Berlaku, sisa {x}', x)
+          : k === 'nbf' ? (past ? L('Sudah berlaku') : Lf('Belum berlaku, {x} lagi', x))
+          : Lf(past ? '{x} lalu' : 'Di masa depan ({x})', x);
+        return { key: k, label: L(label), value: payload[k], date: new Date(payload[k] * 1000).toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID'), status, ok: k === 'exp' ? !past : k === 'nbf' ? past : past };
       });
     }
     function decodeJwt(raw) {
       const token = raw.trim().replace(/^bearer\s+/i, '').replace(/\s+/g, '');
       if (!token) return null;
       const parts = token.split('.');
-      if (parts.length < 2 || parts.length > 3) return { error: 'Format JWT tidak valid: harus berupa header.payload[.signature].' };
+      if (parts.length < 2 || parts.length > 3) return { error: L('Format JWT tidak valid: harus berupa header.payload[.signature].') };
       try {
         const header = b64urlJson(parts[0]), payload = b64urlJson(parts[1]);
         const alg = String(header.alg || '');
         const warnings = [];
-        if (!alg || alg.toLowerCase() === 'none') warnings.push('Algoritma "none": token tidak ditandatangani.');
-        else if (!parts[2]) warnings.push('Signature kosong padahal algoritma ' + alg + '.');
-        if (/^HS/i.test(alg)) warnings.push('Algoritma ' + alg + ' memakai secret bersama; pastikan secret kuat dan tidak bocor.');
-        if (typeof payload.exp !== 'number') warnings.push('Tidak ada klaim exp: token tidak pernah kedaluwarsa.');
+        if (!alg || alg.toLowerCase() === 'none') warnings.push(L('Algoritma "none": token tidak ditandatangani.'));
+        else if (!parts[2]) warnings.push(Lf('Signature kosong padahal algoritma {x}.', { x: alg }));
+        if (/^HS/i.test(alg)) warnings.push(Lf('Algoritma {x} memakai secret bersama; pastikan secret kuat dan tidak bocor.', { x: alg }));
+        if (typeof payload.exp !== 'number') warnings.push(L('Tidak ada klaim exp: token tidak pernah kedaluwarsa.'));
         return { header, payload, headerText: JSON.stringify(header, null, 2), payloadText: JSON.stringify(payload, null, 2), signature: parts[2] || '', claims: jwtClaims(payload, Date.now() / 1000), warnings };
-      } catch (e) { return { error: 'Gagal mendekode token (bukan base64url/JSON yang valid).' }; }
+      } catch (e) { return { error: L('Gagal mendekode token (bukan base64url/JSON yang valid).') }; }
     }
 
     // ============================================================
@@ -2379,7 +2559,7 @@
       '    b.onclick = fn; return b;',
       '  }'
     ];
-    const HOOK_SCRIPT = [
+    const HOOK_SCRIPT = localizeScript([
       '(function () {',
       '  if (window.__apiHook) window.__apiHook.close();',
       '  function pretty(t) { try { return JSON.stringify(JSON.parse(t), null, 2); } catch (e) { return t; } }',
@@ -2611,7 +2791,7 @@
       '  function restore() { window.fetch = origFetch; XMLHttpRequest.prototype.open = OrigOpen; XMLHttpRequest.prototype.send = OrigSend; XMLHttpRequest.prototype.setRequestHeader = OrigSetHdr; protoSubtle.decrypt = origDecrypt; protoSubtle.encrypt = origEncrypt; window.removeEventListener("mousemove", onDragMove); window.removeEventListener("mouseup", onDragEnd); }',
       '  window.__apiHook = { close: function () { restore(); panel.remove(); } };',
       '})();'
-    ].join('\n');
+    ].join('\n'));
 
     // ============================================================
     //  Parser curl ringan: dipakai di halaman ini sendiri untuk mengisi
@@ -2683,7 +2863,7 @@
       const headers = {};
       cfg.headers.forEach(([k, v]) => { headers[k] = v; });
       const payload = JSON.stringify({ method: cfg.method, url: cfg.url, headers, body: cfg.body, count: cfg.count, delay: cfg.delay });
-      return [
+      return localizeScript([
         '(function () {',
         '  if (window.__rateHook) window.__rateHook.close();',
         '  var cfg = ' + payload + ';',
@@ -2737,7 +2917,7 @@
         '  })();',
         '  window.__rateHook = { close: function () { stopped = true; panel.remove(); } };',
         '})();'
-      ].join('\n');
+      ].join('\n'));
     }
 
     // ============================================================
@@ -2787,7 +2967,7 @@
       const headers = {};
       cfg.headers.forEach(([k, v]) => { headers[k] = v; });
       const payload = JSON.stringify({ method: rtoMethod(cfg.method), url: cfg.url, headers, body: cfg.body, kbps: clampNum(cfg.kbps, 2, 100000), sizeKb: clampNum(cfg.sizeKb, 1, 10240), count: clampNum(cfg.count, 1, 5), delay: clampNum(cfg.delay, 0, 10000) });
-      return [
+      return localizeScript([
         '(function () {',
         '  if (window.__rtoHook) window.__rtoHook.close();',
         '  var cfg = ' + payload + ', TICK = 100;',
@@ -2844,7 +3024,7 @@
         '  })();',
         '  window.__rtoHook = { close: function () { stopped = true; if (ctl) ctl.abort(); panel.remove(); } };',
         '})();'
-      ].join('\n');
+      ].join('\n'));
     }
 
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
@@ -2879,7 +3059,7 @@
     // Batas aman ~5 juta karakter localStorage (disisakan untuk kunci lain).
     const STORAGE_BUDGET = 4500000;
 
-    // Lockfile besar dipadatkan menjadi daftar package saja: [nama, versi, ekosistem, dev, direct].
+    // Lockfile besar dipadatkan menjadi daftar package saja: [nama, versi, ekosistem, dev, direct, lisensi].
     // File non-package (mis. Dockerfile) atau yang gagal diparse disimpan apa adanya.
     function toStoredForm(type, text) {
       const parse = PARSERS[type];
@@ -2887,13 +3067,23 @@
       try {
         const pkgs = parse(text);
         if (!pkgs.length) return { text, compact: false };
-        const rows = pkgs.map(p => [p.name, p.version, p.eco, p.dev ? 1 : 0, p.direct == null ? null : +!!p.direct]);
+        const rows = pkgs.map(p => [p.name, p.version, p.eco, p.dev ? 1 : 0, p.direct == null ? null : +!!p.direct, p.license || null]);
         return { text: JSON.stringify({ unpinned: pkgs.unpinned || 0, pkgs: rows }), compact: true };
       } catch (e) { return { text, compact: false }; }
     }
+    const MAX_FILE_BYTES = 20 * 1024 * 1024;
+    // Isi item dari file: jenis, bentuk simpan, dan runtime (ditangkap sebelum dipadatkan, untuk cek EOL).
+    function itemContent(name, text) {
+      const type = detectType(name, text);
+      return { name, type, ...toStoredForm(type, text), runtimes: extractRuntimes(type, name, text) };
+    }
+    // Kunci unik item = project + nama file, tanpa beda huruf besar/kecil.
+    function sameItemKey(a, b) {
+      return a.project.toLowerCase() === b.project.toLowerCase() && a.name.toLowerCase() === b.name.toLowerCase();
+    }
     function expandCompact(text) {
       const d = JSON.parse(text);
-      const out = d.pkgs.map(r => ({ name: r[0], version: r[1], eco: r[2], dev: !!r[3], direct: r[4] == null ? null : !!r[4] }));
+      const out = d.pkgs.map(r => ({ name: r[0], version: r[1], eco: r[2], dev: !!r[3], direct: r[4] == null ? null : !!r[4], license: r[5] || '' }));
       out.unpinned = d.unpinned;
       return out;
     }
@@ -2904,34 +3094,6 @@
         return path.split('/').filter(Boolean).pop().replace(/\.git$/, '') || DEFAULT_PROJECT;
       } catch (e) { return DEFAULT_PROJECT; }
     }
-
-    // ============================================================
-    //  i18n: Bahasa Indonesia (default) + English (dipakai di path /en/).
-    //  t(key) mengembalikan teks bahasa aktif; jika belum diterjemahkan,
-    //  jatuh ke Indonesia (aplikasi tetap jalan saat terjemahan belum lengkap).
-    // ============================================================
-    const THEME_KEY = 'scaTheme', LANG_KEY = 'scaLang';
-    // Bahasa dari: query ?lang= > path /en/ > localStorage > default 'id'.
-    function detectLang() {
-      try {
-        const q = new URLSearchParams(location.search).get('lang');
-        if (q === 'en' || q === 'id') return q;
-      } catch (e) { /* abaikan */ }
-      if (/(^|\/)en(\/|$)/.test(location.pathname)) return 'en';
-      try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'id') return s; } catch (e) { /* abaikan */ }
-      return 'id';
-    }
-    function detectTheme() {
-      try { const s = localStorage.getItem(THEME_KEY); if (s === 'light' || s === 'dark') return s; } catch (e) { /* abaikan */ }
-      return 'dark';
-    }
-    const I18N = window.APP_I18N || { id: {}, en: {} };
-    const LANG = detectLang();
-    // tr(): versi non-Vue dari t(), bisa dipakai di builder laporan, pesan error, dll.
-    function tr(key) { return (I18N[LANG] && I18N[LANG][key]) || (I18N.id && I18N.id[key]) || key; }
-    // Teks data (grup/API) yang punya default Indonesia di array: pakai terjemahan
-    // bila ada untuk bahasa aktif, selain itu jatuh ke nilai Indonesia di data.
-    function trData(key, fallback) { const d = I18N[LANG]; return (d && d[key]) || fallback; }
 
     createApp({
       data() {
@@ -2948,7 +3110,9 @@
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false,
-          eolResults: [], eolBusy: false, eolDone: false
+          eolResults: [], eolBusy: false, eolDone: false,
+          license: true, sbomBusy: false, appVersion: APP_VERSION,
+          editFields: ['project', 'name'], edit: { id: null, field: '', value: '' }, reupId: null
         };
       },
       computed: {
@@ -2978,7 +3142,7 @@
         rtoEta() {
           const secs = (clampNum(this.rto.sizeKb, 1, 10240) * 1024 * 8) / (clampNum(this.rto.kbps, 2, 100000) * 1000);
           if (!isFinite(secs) || secs <= 0) return '—';
-          return secs < 90 ? secs.toFixed(1) + ' dtk' : (secs / 60).toFixed(1) + ' mnt';
+          return secs < 90 ? secs.toFixed(1) + L(' dtk') : (secs / 60).toFixed(1) + L(' mnt');
         },
         rtoErrorHint() {
           const r = this.rto.results, errs = r.filter(x => x.outcome === 'error');
@@ -3007,7 +3171,8 @@
           const saved = JSON.parse(localStorage.getItem(ITEMS_KEY) || '[]');
           if (Array.isArray(saved)) {
             this.items = saved.filter(it => it && it.name && typeof it.text === 'string')
-              .map(it => ({ ...it, project: it.project || DEFAULT_PROJECT, enabled: it.enabled !== false, ...(it.compact ? {} : toStoredForm(it.type, it.text)) }));
+              .map(it => ({ ...it, project: it.project || DEFAULT_PROJECT, enabled: it.enabled !== false,
+                ...(it.compact ? {} : { runtimes: it.runtimes || extractRuntimes(it.type, it.name, it.text), ...toStoredForm(it.type, it.text) }) }));
             this.persistedIds = this.items.map(it => it.id);
             this.nextId = this.items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
           }
@@ -3106,11 +3271,11 @@
             const body = slowBodyStream(bytes, rto.kbps, n => { sent = n; }, () => rto.stop);
             try {
               const res = await fetch(rto.url, { method, headers, body, duplex: 'half', credentials: 'omit', signal: ctl.signal });
-              rto.results.push({ i, outcome: 'done', label: 'selesai (server tidak timeout)', status: res.status, ms: Math.round(performance.now() - t0), sent, total: bytes.length });
+              rto.results.push({ i, outcome: 'done', label: L('selesai (server tidak timeout)'), status: res.status, ms: Math.round(performance.now() - t0), sent, total: bytes.length });
             } catch (e) {
               const reset = !rto.stop && sent > 0 && sent < bytes.length;
               rto.results.push({ i, outcome: rto.stop ? 'stop' : reset ? 'reset' : 'error', status: '', ms: Math.round(performance.now() - t0), sent, total: bytes.length,
-                label: rto.stop ? 'dihentikan' : reset ? 'koneksi diputus server (kemungkinan read timeout)' : friendlyFetchError(e) });
+                label: rto.stop ? L('dihentikan') : reset ? L('koneksi diputus server (kemungkinan read timeout)') : friendlyFetchError(e) });
             }
             rto.ctl = null;
             if (i < rto.count && rto.delay && !rto.stop) await new Promise(r => setTimeout(r, rto.delay));
@@ -3181,7 +3346,7 @@
           this.eolBusy = true; this.eolDone = false; this.eolResults = [];
           const seen = new Set(), rows = [];
           for (const it of this.activeItems) {
-            [...(it.runtimes || []), ...frameworksOf(it)].forEach(c => {
+            detectedComponents(it).forEach(c => {
               if (!c.ver) return;
               const key = it.project + '|' + c.slug + '|' + c.ver;
               if (seen.has(key)) return;
@@ -3223,7 +3388,7 @@
             log(tr('log_done'));
             if (w) w.location.href = this.dastUrl; else log(tr('log_popup_blocked'));
           } catch (e) {
-            this.dastError = 'Pemeriksaan gagal: ' + e.message;
+            this.dastError = Lf('Pemeriksaan gagal: {x}', { x: e.message });
             if (w) w.close();
           } finally { this.dastBusy = false; }
         },
@@ -3245,20 +3410,49 @@
               files.forEach(f => { this.addItem(f.name, f.text, this.project.trim() || projectFromLink(link)); added++; });
             } catch (e) { log(tr('failed') + ': ' + e.message); }
           }
-          log(added ? added + ' file ditambahkan ke daftar. Klik "Scan & buka laporan".' : 'Tidak ada file yang ditambahkan.');
+          log(added ? Lf('{n} file ditambahkan ke daftar. Klik "Scan & buka laporan".', { n: added }) : L('Tidak ada file yang ditambahkan.'));
           if (added) this.urlText = '';
           this.urlBusy = false;
         },
         // Kunci unik = project + nama file (tanpa beda huruf besar/kecil); duplikat menggantikan yang lama.
         addItem(name, text, project) {
-          const type = detectType(name, text);
-          const proj = (project || this.project).trim() || projectFromContent(type, text) || DEFAULT_PROJECT;
-          const same = x => x.project.toLowerCase() === proj.toLowerCase() && x.name.toLowerCase() === name.toLowerCase();
-          const old = this.items.find(same);
-          const runtimes = extractRuntimes(type, name, text); // ditangkap sebelum dipadatkan (cek EOL)
-          const fresh = { id: old ? old.id : this.nextId++, project: proj, name, type, ...toStoredForm(type, text), runtimes, enabled: old ? old.enabled : true };
+          const c = itemContent(name, text);
+          const proj = (project || this.project).trim() || projectFromContent(c.type, text) || DEFAULT_PROJECT;
+          const old = this.items.find(x => sameItemKey(x, { project: proj, name }));
+          const fresh = { id: old ? old.id : this.nextId++, project: proj, ...c, enabled: old ? old.enabled : true };
           if (old) Object.assign(old, fresh); else this.items.push(fresh);
         },
+        // Unggah ulang satu baris: isi diganti, project & status centang tetap; baris lain
+        // dengan project + nama sama (bila nama file berubah) dibuang agar tidak duplikat.
+        askReupload(it) { this.reupId = it.id; this.$refs.reup.click(); },
+        async onReupload(e) {
+          const f = e.target.files[0], it = this.items.find(x => x.id === this.reupId);
+          e.target.value = ''; this.reupId = null; this.error = ''; this.dropMsg = '';
+          if (!f || !it) return;
+          if (f.size > MAX_FILE_BYTES) { this.error = tr('msg_files_big').replace('{n}', 1); return; }
+          Object.assign(it, itemContent(f.name, await f.text()));
+          this.items = this.items.filter(x => x === it || !sameItemKey(x, it));
+          this.dropMsg = tr('it_reup_done').replace('{x}', f.name);
+        },
+        // Edit sel Project/File: klik dua kali, Enter simpan, Esc batal (blur ikut menyimpan).
+        startEdit(it, field) { this.edit = { id: it.id, field, value: it[field] }; },
+        isEditing(it, field) { return this.edit.id === it.id && this.edit.field === field; },
+        cancelEdit() { this.edit = { id: null, field: '', value: '' }; },
+        commitEdit() {
+          const { id, field } = this.edit, v = String(this.edit.value).trim();
+          if (id == null) return;
+          this.cancelEdit();
+          const it = this.items.find(x => x.id === id);
+          if (!it || !v || v === it[field]) return;
+          if (this.items.some(x => x.id !== id && sameItemKey(x, { ...it, [field]: v }))) { this.error = tr('it_edit_dup'); return; }
+          it[field] = v; this.error = '';
+        },
+        detectedText(it) {
+          const list = detectedComponents(it).map(c => c.label + ' ' + c.ver);
+          if (!it.runtimes && RUNTIME_TYPES.includes(it.type)) list.push(tr('it_reup_hint'));
+          return list.join(', ') || '—';
+        },
+        L(s) { return L(s); },
         // Yang sudah tersimpan diprioritaskan; file baru yang tidak muat tetap dipakai di sesi ini tetapi hilang saat halaman dimuat ulang.
         saveItems() {
           const kept = new Set(this.persistedIds);
@@ -3282,7 +3476,7 @@
           let skipped = 0, big = 0;
           for (const f of Array.from(list)) {
             if (filterImportant && !isImportantByName(f.name)) { skipped++; continue; }
-            if (f.size > 20 * 1024 * 1024) { big++; continue; }
+            if (f.size > MAX_FILE_BYTES) { big++; continue; }
             toAdd.push(f);
           }
           for (const f of toAdd) this.addItem(f.name, await f.text());
@@ -3323,10 +3517,11 @@
             if (!parse) throw new Error(tr('err_unknown_type'));
             let pkgs = it.compact ? expandCompact(it.text) : parse(it.text);
             res.note = TYPE_NOTES[it.type] || '';
-            if (pkgs.unpinned) res.note += ' ' + pkgs.unpinned + ' baris tidak dipin dan dilewati.';
+            if (pkgs.unpinned) res.note += ' ' + Lf('{n} baris tidak dipin dan dilewati.', { n: pkgs.unpinned });
             if (opts.omitDev) { const n = pkgs.length; pkgs = pkgs.filter(p => !p.dev); res.skipped = n - pkgs.length; }
-            log(it.name + ': ' + pkgs.length + ' package terbaca');
+            log(Lf('{x}: {n} package terbaca', { x: it.name, n: pkgs.length }));
             if (!pkgs.length) throw new Error(tr('err_no_packages') + (TYPE_NOTES[it.type] ? ' ' + TYPE_NOTES[it.type] : ''));
+            if (opts.license) await enrichLicenses(pkgs, log);
             res.entries = await scanPackages(pkgs, log, opts);
           } catch (e) { res.error = e.message; }
           return res;
@@ -3335,7 +3530,7 @@
           // buka tab dulu (sinkron saat klik) supaya tidak diblokir popup blocker
           const w = window.open('', '_blank');
           this.scanning = true; this.error = ''; this.logs = [];
-          const opts = { omitDev: this.omitDev, enrich: this.enrich, sonatype: null };
+          const opts = { omitDev: this.omitDev, enrich: this.enrich, license: this.license, sonatype: null };
           try {
             const results = [];
             for (const it of this.activeItems) { this.log('== ' + it.project + ' / ' + it.name); results.push(await this.scanItem(it, opts)); }
@@ -3348,22 +3543,45 @@
             if (w) w.location.href = this.reportUrl;
             else this.log(tr('log_popup_blocked'));
           } catch (e) {
-            this.error = 'Scan gagal: ' + e.message;
+            this.error = Lf('Scan gagal: {x}', { x: e.message });
             if (w) w.close();
           } finally { this.scanning = false; }
+        },
+        // SBOM dari file aktif (tanpa Dockerfile): package unik per ekosistem+nama+versi, lisensi dilengkapi bila opsi aktif.
+        async downloadSbom(fmt) {
+          this.sbomBusy = true; this.error = ''; this.logs = [];
+          try {
+            const uniq = new Map();
+            this.activeItems.forEach(it => itemPackages(it).forEach(p => {
+              if (this.omitDev && p.dev) return;
+              const k = p.eco + '|' + p.name + '|' + p.version, old = uniq.get(k);
+              if (old) { old.dev = old.dev && p.dev; old.license = old.license || p.license; } else uniq.set(k, { ...p });
+            }));
+            const pkgs = [...uniq.values()];
+            if (!pkgs.length) throw new Error(tr('err_no_packages'));
+            if (this.license) await enrichLicenses(pkgs, m => this.log(m));
+            const project = [...new Set(this.activeItems.map(it => it.project))].join(', ');
+            const doc = fmt === 'spdx' ? buildSpdx(pkgs, project) : buildCycloneDx(pkgs, project);
+            const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
+            const a = document.createElement('a');
+            a.href = url; a.download = project.replace(/[^\w.-]+/g, '_').slice(0, 60) + (fmt === 'spdx' ? '.spdx.json' : '.cdx.json');
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            this.log(tr('sbom_done').replace('{n}', pkgs.length));
+          } catch (e) { this.error = e.message; } finally { this.sbomBusy = false; }
         },
         scanSast() {
           const findings = [];
           this.codeText.split('\n').forEach((line, idx) => {
             SAST_RULES.forEach(r => {
-              if (line.includes(r.token)) findings.push({ line: idx + 1, rule: r.rule, severity: r.severity, snippet: line.trim(), fix: r.fix });
+              if (line.includes(r.token)) findings.push({ line: idx + 1, rule: L(r.rule), severity: r.severity, snippet: line.trim(), fix: L(r.fix) });
             });
           });
           this.sastResults = findings;
           this.sastDone = true;
         }
       }
-    }).mount('#app');
+    }).directive('focus', { mounted(el) { el.focus(); el.select(); } }).mount('#app');
   </script>
 </body>
 </html>
