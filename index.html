@@ -98,6 +98,16 @@
     .opts label { cursor: pointer; }
     a { color: var(--link); }
     code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+    .pill.medp { background: #78350f; color: #fde68a; }
+    .dec-step { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-top: 10px; background: var(--panel-bg); }
+    .dec-h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .dec-h [title] { cursor: help; }
+    .dec-step pre.json { max-height: 320px; overflow: auto; margin-top: 8px; }
+    .dec-step table { margin-top: 8px; font-size: 13px; }
+    .dec-step td:first-child { white-space: nowrap; width: 1%; }
+    .dec-step td { word-break: break-all; }
+    .dec-form { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+    .dec-form .row label { min-width: 110px; }
   </style>
 </head>
 <body>
@@ -483,6 +493,89 @@
           <div class="muted" v-if="rto.msg" style="color:#f59e0b">{{ rto.msg }}</div>
         </template>
       </section>
+
+      <!-- Smart Decode: buka lapisan encoding/token/ciphertext bertingkat -->
+      <section v-else-if="tab === 'decode'">
+        <h2 style="margin-top:0">{{ t('dec_title') }}</h2>
+        <p class="muted">{{ t('dec_intro') }}</p>
+        <textarea v-model="dec.input" :placeholder="t('dec_ph')" spellcheck="false"></textarea>
+        <div class="actions">
+          <button class="btn gray" :disabled="!dec.input" @click="clearDecode">{{ t('dec_clear') }}</button>
+          <span class="muted">{{ t('dec_samples') }}</span>
+          <button class="btn gray" v-for="s in decSamples" :key="s.key" @click="loadDecSample(s.key)">{{ s.label }}</button>
+          <span class="muted" v-if="dec.busy">{{ t('running') }}</span>
+        </div>
+        <div class="muted" v-if="dec.note" style="color:var(--warn)">{{ dec.note }}</div>
+        <div class="bad" v-if="dec.error">{{ dec.error }}</div>
+        <template v-for="(ch, ci) in dec.chains" :key="ci">
+          <h3 v-if="ch.title" style="margin:18px 0 0">{{ ch.title }}</h3>
+          <div class="dec-step" v-for="(s, si) in ch.steps" :key="si" :style="{ marginLeft: Math.min(si, 5) * 14 + 'px' }">
+            <div class="dec-h">
+              <span class="pill">#{{ si }}</span>
+              <b>{{ s.format }}</b>
+              <span class="pill" :class="decConfClass(s.conf)" :title="tipOf('dec_lbl_conf')">{{ t('dec_conf_' + s.conf) }}</span>
+              <span class="muted" :title="tipOf('dec_lbl_len')">{{ t('dec_lbl_len') }}: {{ s.byteLen }} byte</span>
+              <span class="muted" :title="tipOf('dec_lbl_ent')">{{ t('dec_lbl_ent') }}: {{ s.entropy }} bit/byte</span>
+              <button class="lnk" @click="copyDec(s, ci + '-' + si)">{{ dec.copied === ci + '-' + si ? t('copied') : t('dec_copy') }}</button>
+              <a v-if="s.fileUrl" class="lnk" :href="s.fileUrl" :download="s.fileName">⬇ {{ t('dec_download') }} {{ s.fileName }}</a>
+            </div>
+            <div v-if="s.found" style="margin-top:6px">{{ t('dec_found') }}: <b>{{ s.found }}</b>
+              <span class="pill" :class="decConfClass(s.foundConf)" :title="tipOf('dec_lbl_conf')">{{ t('dec_conf_' + s.foundConf) }}</span></div>
+            <div v-for="w in s.warnings" :key="w" class="sev-MEDIUM" style="margin-top:4px">⚠ {{ w }}</div>
+            <div v-for="n in s.notes" :key="n" class="muted" style="margin-top:4px">• {{ n }}</div>
+            <table v-if="s.details.length">
+              <tbody><tr v-for="(d, di) in s.details" :key="di"><td>{{ d[0] }}</td><td>{{ d[1] }}</td></tr></tbody>
+            </table>
+            <pre class="json" v-if="!s.file">{{ s.view }}</pre>
+          </div>
+        </template>
+
+        <div class="dec-form" v-if="decTarget">
+          <h3 style="margin:0 0 4px">{{ t('dec_form_title') }}: {{ t('dec_type_' + decTarget.type) }}</h3>
+          <p class="muted" style="margin:0">{{ t('dec_mem_note') }}</p>
+          <div class="row" v-if="decHas('passphrase')">
+            <label>{{ t('dec_f_pass') }}</label>
+            <input type="password" v-model="dec.form.passphrase" autocomplete="off" />
+          </div>
+          <div class="row" v-if="decHas('key')">
+            <label>{{ decTarget.type === 'laravel' ? 'APP_KEY' : t('dec_f_key') }}</label>
+            <input type="text" v-model="dec.form.key" autocomplete="off" spellcheck="false" placeholder="hex / base64 / base64:... / utf8" />
+            <select v-model="dec.form.keyEnc"><option v-for="e in decEncs" :key="e" :value="e">{{ e === 'auto' ? t('dec_f_auto') : e }}</option></select>
+          </div>
+          <div class="row" v-if="decHas('mode')">
+            <label>{{ t('dec_f_mode') }}</label>
+            <select v-model="dec.form.mode"><option v-for="m in decModes" :key="m" :value="m">{{ m }}</option></select>
+            <label v-if="dec.form.mode !== 'ECB'" style="min-width:0"><input type="checkbox" v-model="dec.form.ivPrefix" /> {{ t('dec_f_ivprefix') }}</label>
+          </div>
+          <div class="row" v-if="decHas('iv')">
+            <label>{{ t('dec_f_iv') }}</label>
+            <input type="text" v-model="dec.form.iv" autocomplete="off" spellcheck="false" :placeholder="dec.form.mode === 'GCM' ? '12 byte' : '16 byte'" />
+            <select v-model="dec.form.ivEnc"><option v-for="e in decEncs" :key="e" :value="e">{{ e === 'auto' ? t('dec_f_auto') : e }}</option></select>
+          </div>
+          <div class="row" v-if="decHas('tag')">
+            <label>{{ t('dec_f_tag') }}</label>
+            <input type="text" v-model="dec.form.tag" autocomplete="off" spellcheck="false" placeholder="16 byte" />
+            <select v-model="dec.form.tagEnc"><option v-for="e in decEncs" :key="e" :value="e">{{ e === 'auto' ? t('dec_f_auto') : e }}</option></select>
+          </div>
+          <div class="row" v-if="decHas('aad')">
+            <label>{{ t('dec_f_aad') }}</label>
+            <input type="text" v-model="dec.form.aad" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="actions">
+            <button class="btn" :disabled="dec.tryBusy || !decReady" @click="decRun(false)">{{ dec.tryBusy ? t('running') : t('dec_btn_dec') }}</button>
+            <button class="btn blue" :disabled="dec.tryBusy || !decReady" @click="decRun(true)">{{ t('dec_btn_all') }}</button>
+          </div>
+          <table v-if="dec.tries.length">
+            <thead><tr><th>{{ t('dec_th_variant') }}</th><th>{{ t('dec_th_result') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="(r, ri) in dec.tries" :key="ri">
+                <td>{{ r.label }}</td>
+                <td :class="r.ok ? 'ok' : 'sev-HIGH'">{{ r.ok ? '✔' : '✘' }} {{ r.msg }}<div v-if="r.note" class="sev-MEDIUM">⚠ {{ r.note }}</div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
     </div>
   </div>
@@ -530,7 +623,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.4';
+    const APP_VERSION = '1.5';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -1740,7 +1833,10 @@
       'di CISA KEV': 'Jumlah advisory yang CVE-nya masuk daftar CISA KEV (sudah dieksploitasi di dunia nyata).',
       'tanpa versi aman': 'Package yang belum punya versi perbaikan. Pantau rilis upstream, ganti package, atau catat sebagai accepted risk.',
       'nilai Observatory': 'Nilai A+ sampai F dari MDN HTTP Observatory berdasarkan kelengkapan header keamanan situs.',
-      'tes Observatory lulus': 'Jumlah tes header keamanan Observatory yang lulus dari total tes.'
+      'tes Observatory lulus': 'Jumlah tes header keamanan Observatory yang lulus dari total tes.',
+      'Keyakinan': 'Seberapa yakin deteksi ini: yakin = struktur/penanda cocok persis, sedang = cocok sebagian, tebakan = hanya dari panjang/entropi.',
+      'Entropi': 'Entropi Shannon (0-8 bit per byte). Teks biasa ~4-5; data terkompresi/terenkripsi/acak mendekati 8 (untuk data pendek maksimum log2(panjang)).',
+      'Panjang': 'Jumlah byte hasil langkah ini. Kelipatan 16 sering menandakan blok AES (CBC/ECB).'
       },
       en: {
       'No': 'Row number. In the SCA table, one row = one package that needs updating.',
@@ -1780,7 +1876,10 @@
       'in CISA KEV': 'Number of advisories whose CVE is on the CISA KEV list (already exploited in the wild).',
       'no safe version': 'Packages with no fixed version yet. Watch upstream releases, replace the package, or record as accepted risk.',
       'Observatory grade': 'A+ to F grade from MDN HTTP Observatory based on how complete the site security headers are.',
-      'Observatory tests passed': 'Number of Observatory security-header tests passed out of the total.'
+      'Observatory tests passed': 'Number of Observatory security-header tests passed out of the total.',
+      'Confidence': 'How sure this detection is: confident = structure/marker matches exactly, medium = partial match, guess = from length/entropy only.',
+      'Entropy': 'Shannon entropy (0-8 bits per byte). Plain text ~4-5; compressed/encrypted/random data approaches 8 (short data maxes at log2(length)).',
+      'Length': 'Number of bytes produced by this step. Multiples of 16 often indicate AES blocks (CBC/ECB).'
       }
     };
     function tipify(html) {
@@ -2547,6 +2646,834 @@
     }
 
     // ============================================================
+    //  Smart Decode: deteksi otomatis lapisan encoding, token/container, dan tebakan
+    //  ciphertext, lalu dekripsi opsional via WebCrypto. Semua di browser; key/IV hanya
+    //  di memori (tidak pernah ke localStorage) - OWASP ASVS V6.4 / V8.3.
+    //  Isi yang didekode tidak tepercaya: hanya ditampilkan sebagai teks (interpolasi Vue).
+    // ============================================================
+    // @@DECODE-START (penanda ekstraksi untuk uji node)
+    const DECODE_I18N = {
+      id: {
+        tab_decode: 'Smart Decode', dec_title: 'Smart Decode',
+        dec_intro: 'Tempel string apa pun (token, cookie, parameter, payload). Lapisan encoding dibuka otomatis bertingkat (maks 5), format token/container dikenali dari strukturnya, dan ciphertext mentah ditebak dari panjang + entropi. Semua diproses di browser; key/IV hanya disimpan di memori.',
+        dec_ph: 'Tempel string di sini, mis. %48%34%73... / eyJhbGciOi... / U2FsdGVkX1... / gAAAAA...',
+        dec_samples: 'Contoh:', dec_clear: 'Bersihkan', dec_input: 'Input', dec_found: 'Terdeteksi',
+        dec_conf_high: 'yakin', dec_conf_med: 'sedang', dec_conf_low: 'tebakan',
+        dec_lbl_conf: 'Keyakinan', dec_lbl_ent: 'Entropi', dec_lbl_len: 'Panjang',
+        dec_copy: 'salin', dec_download: 'unduh', dec_more_bytes: '... (+{n} byte lagi)', dec_more_text: '... (dipotong, salin untuk teks lengkap)',
+        dec_no_more: 'Tidak ada lapisan encoding lain yang dikenali.', dec_max_depth: 'Batas 5 tingkat tercapai; dekode dihentikan.',
+        dec_fmt_url: 'URL-encoding (%xx)', dec_fmt_html: 'HTML entity', dec_fmt_esc: 'Escape \\uXXXX / \\xXX', dec_fmt_qp: 'Quoted-printable',
+        dec_err_generic: 'Gagal memproses: {e}', dec_err_inflate: 'Data terkompresi rusak / tidak bisa dibuka: {e}',
+        dec_err_toobig: 'Hasil dekompresi melebihi 20 MB; dihentikan (cegah decompression bomb).',
+        dec_err_nodecomp: 'Browser tidak mendukung DecompressionStream.', dec_err_nosubtle: 'WebCrypto (crypto.subtle) tidak tersedia; buka lewat https:// atau file lokal.',
+        dec_err_op: 'Gagal: key/IV salah, padding tidak valid, atau tag autentikasi tidak cocok.',
+        dec_err_keylen: 'Panjang key {n} byte tidak valid (AES butuh 16/24/32 byte).', dec_err_enc: 'Nilai bukan {enc} yang valid.',
+        dec_err_iv: 'IV dibutuhkan: isi IV atau centang "IV di depan ciphertext".', dec_err_block: 'Panjang ciphertext bukan kelipatan 16 byte.',
+        dec_err_mac: 'MAC tidak cocok: APP_KEY salah atau payload diubah.', dec_err_fernet_mac: 'HMAC Fernet tidak cocok: key salah atau token diubah.',
+        dec_err_pem: 'Isi PEM bukan base64 yang valid.', dec_mac_bad_but_ok: 'Peringatan: MAC tidak cocok walau dekripsi berhasil (payload mungkin diubah).',
+        dec_bad_plain: 'Terdekripsi tetapi hasilnya bukan teks/JSON/format dikenal (kemungkinan key/IV/mode salah).',
+        dec_ok_json: 'Berhasil: JSON valid', dec_ok_text: 'Berhasil: teks UTF-8 valid', dec_ok_file: 'Berhasil: data biner berformat dikenal',
+        dec_file_note: 'File biner dikenali dari magic bytes; isi tidak ditampilkan, gunakan tombol unduh (buka dengan hati-hati).',
+        dec_bin_unknown: 'Biner tidak dikenali', dec_guess_title: 'Kemungkinan ciphertext mentah (TEBAKAN)',
+        dec_guess_warn: 'Ini TEBAKAN dari panjang + entropi, bukan kepastian. Tanpa key yang benar data tidak bisa dibuka.',
+        dec_guess_digest: 'Panjang ini juga cocok untuk digest hash (MD5 16, SHA-1 20, SHA-256 32, SHA-512 64 byte) atau key mentah.',
+        dec_guess_cbc: 'Kelipatan 16 byte: kemungkinan AES-CBC/ECB (key 16/24/32 byte; CBC butuh IV 16 byte, sering ditaruh di 16 byte pertama).',
+        dec_guess_ecb: 'Ada blok 16 byte yang berulang: kemungkinan mode ECB (lemah, pola plaintext bocor) - OWASP ASVS V6.2.',
+        dec_guess_gcm: 'Bukan kelipatan 16 dan >= 28 byte: kemungkinan AES-GCM dengan IV 12 byte di depan dan tag 16 byte di belakang.',
+        dec_guess_ctr: 'Bukan kelipatan 16: bisa juga cipher stream (AES-CTR / ChaCha20).',
+        dec_guess_lowent: 'Entropi rendah: kemungkinan bukan ciphertext (data biner terstruktur / encoding lain).',
+        dec_salted_note: 'Format OpenSSL enc / CryptoJS.AES.encrypt(teks, passphrase): cukup passphrase (key & IV diturunkan via EVP_BytesToKey).',
+        dec_java_warn: 'Objek Java serialized: jangan pernah deserialisasi data tak tepercaya (risiko RCE gadget chain) - OWASP A08:2021, ASVS V5.5.',
+        dec_d_classes: 'Kelas', dec_fernet_note: 'Token Fernet (Python cryptography): butuh key Fernet 32 byte base64url (16 byte HMAC + 16 byte AES-128).',
+        dec_d_time: 'Waktu dibuat', dec_ec_unc: 'Kemungkinan public key EC tidak terkompresi (0x04 || X || Y) untuk ECDH/ECDSA.',
+        dec_ec_comp: 'Kemungkinan public key EC P-256 terkompresi (0x02/0x03 || X).',
+        dec_jwt_note: 'Didekode tanpa verifikasi signature. Jangan percaya isi klaim sebelum signature diverifikasi di server (RFC 7519, RFC 8725).',
+        dec_jwe_note: 'JWE terenkripsi (RFC 7516): butuh key sesuai alg={alg} / enc={enc} (dir = key simetris langsung; RSA-OAEP = private key RSA; ECDH-ES = private key EC; A*KW = key AES pembungkus).',
+        dec_aspnet_note: 'ASP.NET Core Data Protection: dienkripsi dengan key ring di server (purpose + key id). Tidak bisa didekripsi di browser tanpa salinan key ring + algoritma server.',
+        dec_php_warn: 'PHP serialize(): jangan unserialize() data tak tepercaya (object injection / POP chain) - OWASP A08:2021, ASVS V5.5.',
+        dec_pwhash_note: 'Hash satu arah: tidak bisa didekripsi, hanya bisa diuji dengan tebakan (cracking). Pastikan password di-hash dengan algoritma lambat (ASVS V2.4).',
+        dec_hexhash_note: 'Identifikasi dari panjang saja; bisa juga key/IV/ciphertext mentah dalam hex. Hash tidak bisa didekripsi.',
+        dec_pem_enc: 'Kunci privat terenkripsi (butuh passphrase).', dec_pem_priv: 'Berisi KUNCI PRIVAT: jangan dibagikan / di-commit (ASVS V6.4).',
+        dec_asn_cert: 'Sertifikat X.509', dec_asn_csr: 'Certificate Signing Request (CSR)', dec_asn_spki: 'Public key (SubjectPublicKeyInfo)',
+        dec_asn_pkcs8: 'Private key (PKCS#8)', dec_asn_epkcs8: 'Private key terenkripsi (PKCS#8)', dec_asn_rsapriv: 'Private key RSA (PKCS#1)',
+        dec_asn_rsapub: 'Public key RSA (PKCS#1)', dec_asn_ecpriv: 'Private key EC (SEC1)', dec_asn_generic: 'struktur SEQUENCE (jenis tidak dikenali)',
+        dec_d_subject: 'Subject', dec_d_issuer: 'Issuer', dec_d_from: 'Berlaku mulai', dec_d_to: 'Berlaku sampai', dec_d_expired: 'KEDALUWARSA',
+        dec_d_serial: 'Serial', dec_d_key: 'Kunci', dec_d_sigalg: 'Algoritma tanda tangan', dec_d_alg: 'Algoritma', dec_d_der: 'Panjang DER',
+        dec_d_salt: 'Salt', dec_d_ct: 'Ciphertext', dec_d_cipher: 'Cipher', dec_d_iv: 'IV', dec_d_cost: 'Cost',
+        dec_laravel_note: 'Payload Laravel encrypt()/Crypt: butuh APP_KEY (base64:...). CBC diverifikasi dengan MAC HMAC-SHA256(iv+value); GCM bila ada tag.',
+        dec_smp_pass: 'Contoh CryptoJS - passphrase demo: {p}', dec_smp_key: 'Contoh AES-256-GCM (IV 12 byte di depan) - key demo (hex): {k}',
+        dec_smp_appkey: 'Contoh Laravel - APP_KEY demo: {k}', dec_smp_fernet: 'Contoh Fernet - key demo: {k}',
+        dec_smp_bcrypt: 'Contoh hash bcrypt publik (hanya identifikasi, tidak bisa didekripsi).', dec_smp_chain: 'Contoh rantai urlencode(base64(gzip(JSON))).',
+        dec_smp_jwt: 'Contoh JWT dummy (signature palsu).', dec_smp_hash: 'Contoh SHA-256 (hex) dari teks "contoh".',
+        dec_chain_title: 'Hasil dekripsi ({v}) - didekode ulang', dec_form_title: 'Dekripsi',
+        dec_type_cryptojs: 'CryptoJS / OpenSSL passphrase', dec_type_laravel: 'Laravel encrypt()', dec_type_fernet: 'Fernet', dec_type_aes: 'AES (tebakan)',
+        dec_f_key: 'Key', dec_f_iv: 'IV', dec_f_mode: 'Mode', dec_f_pass: 'Passphrase', dec_f_tag: 'Tag (GCM)', dec_f_aad: 'AAD (teks)',
+        dec_f_ivprefix: 'IV di depan ciphertext', dec_f_auto: 'auto',
+        dec_btn_dec: 'Dekripsi', dec_btn_all: 'Coba semua variasi', dec_th_variant: 'Variasi', dec_th_result: 'Hasil',
+        dec_mem_note: 'Key/IV/passphrase hanya di memori tab ini dan tidak disimpan.'
+      },
+      en: {
+        tab_decode: 'Smart Decode', dec_title: 'Smart Decode',
+        dec_intro: 'Paste any string (token, cookie, parameter, payload). Encoding layers are unwrapped automatically (up to 5 levels), token/container formats are recognized by structure, and raw ciphertext is guessed from length + entropy. Everything runs in the browser; keys/IVs stay in memory only.',
+        dec_ph: 'Paste a string here, e.g. %48%34%73... / eyJhbGciOi... / U2FsdGVkX1... / gAAAAA...',
+        dec_samples: 'Samples:', dec_clear: 'Clear', dec_input: 'Input', dec_found: 'Detected',
+        dec_conf_high: 'confident', dec_conf_med: 'medium', dec_conf_low: 'guess',
+        dec_lbl_conf: 'Confidence', dec_lbl_ent: 'Entropy', dec_lbl_len: 'Length',
+        dec_copy: 'copy', dec_download: 'download', dec_more_bytes: '... (+{n} more bytes)', dec_more_text: '... (truncated, copy for the full text)',
+        dec_no_more: 'No further encoding layer recognized.', dec_max_depth: '5-level limit reached; decoding stopped.',
+        dec_fmt_url: 'URL encoding (%xx)', dec_fmt_html: 'HTML entity', dec_fmt_esc: 'Escape \\uXXXX / \\xXX', dec_fmt_qp: 'Quoted-printable',
+        dec_err_generic: 'Processing failed: {e}', dec_err_inflate: 'Compressed data is corrupt / cannot be opened: {e}',
+        dec_err_toobig: 'Decompressed output exceeds 20 MB; stopped (decompression bomb guard).',
+        dec_err_nodecomp: 'This browser does not support DecompressionStream.', dec_err_nosubtle: 'WebCrypto (crypto.subtle) is unavailable; open via https:// or a local file.',
+        dec_err_op: 'Failed: wrong key/IV, invalid padding, or authentication tag mismatch.',
+        dec_err_keylen: 'Key length {n} bytes is invalid (AES needs 16/24/32 bytes).', dec_err_enc: 'Value is not valid {enc}.',
+        dec_err_iv: 'IV required: fill in the IV or tick "IV prepended to ciphertext".', dec_err_block: 'Ciphertext length is not a multiple of 16 bytes.',
+        dec_err_mac: 'MAC mismatch: wrong APP_KEY or tampered payload.', dec_err_fernet_mac: 'Fernet HMAC mismatch: wrong key or tampered token.',
+        dec_err_pem: 'PEM body is not valid base64.', dec_mac_bad_but_ok: 'Warning: MAC mismatch although decryption succeeded (payload may be tampered).',
+        dec_bad_plain: 'Decrypted but the output is not text/JSON/a known format (likely wrong key/IV/mode).',
+        dec_ok_json: 'Success: valid JSON', dec_ok_text: 'Success: valid UTF-8 text', dec_ok_file: 'Success: binary data in a known format',
+        dec_file_note: 'Binary file recognized by magic bytes; content not shown, use the download button (open with care).',
+        dec_bin_unknown: 'Unrecognized binary', dec_guess_title: 'Possibly raw ciphertext (GUESS)',
+        dec_guess_warn: 'This is a GUESS from length + entropy, not a certainty. Without the right key the data cannot be opened.',
+        dec_guess_digest: 'This length also fits a hash digest (MD5 16, SHA-1 20, SHA-256 32, SHA-512 64 bytes) or a raw key.',
+        dec_guess_cbc: 'Multiple of 16 bytes: possibly AES-CBC/ECB (16/24/32-byte key; CBC needs a 16-byte IV, often in the first 16 bytes).',
+        dec_guess_ecb: 'A repeated 16-byte block exists: possibly ECB mode (weak, leaks plaintext patterns) - OWASP ASVS V6.2.',
+        dec_guess_gcm: 'Not a multiple of 16 and >= 28 bytes: possibly AES-GCM with a 12-byte IV in front and a 16-byte tag at the end.',
+        dec_guess_ctr: 'Not a multiple of 16: could also be a stream cipher (AES-CTR / ChaCha20).',
+        dec_guess_lowent: 'Low entropy: probably not ciphertext (structured binary / other encoding).',
+        dec_salted_note: 'OpenSSL enc / CryptoJS.AES.encrypt(text, passphrase) format: only the passphrase is needed (key & IV derived via EVP_BytesToKey).',
+        dec_java_warn: 'Java serialized object: never deserialize untrusted data (RCE gadget chain risk) - OWASP A08:2021, ASVS V5.5.',
+        dec_d_classes: 'Classes', dec_fernet_note: 'Fernet token (Python cryptography): needs a 32-byte base64url Fernet key (16-byte HMAC + 16-byte AES-128).',
+        dec_d_time: 'Created at', dec_ec_unc: 'Possibly an uncompressed EC public key (0x04 || X || Y) for ECDH/ECDSA.',
+        dec_ec_comp: 'Possibly a compressed EC P-256 public key (0x02/0x03 || X).',
+        dec_jwt_note: 'Decoded without signature verification. Do not trust the claims until the signature is verified server-side (RFC 7519, RFC 8725).',
+        dec_jwe_note: 'Encrypted JWE (RFC 7516): needs the key matching alg={alg} / enc={enc} (dir = direct symmetric key; RSA-OAEP = RSA private key; ECDH-ES = EC private key; A*KW = AES wrapping key).',
+        dec_aspnet_note: 'ASP.NET Core Data Protection: encrypted with the server key ring (purpose + key id). Cannot be decrypted in the browser without a copy of the key ring + server algorithms.',
+        dec_php_warn: 'PHP serialize(): never unserialize() untrusted data (object injection / POP chain) - OWASP A08:2021, ASVS V5.5.',
+        dec_pwhash_note: 'One-way hash: cannot be decrypted, only tested by guessing (cracking). Make sure passwords use a slow hash (ASVS V2.4).',
+        dec_hexhash_note: 'Identified by length only; may also be a raw key/IV/ciphertext in hex. Hashes cannot be decrypted.',
+        dec_pem_enc: 'Encrypted private key (passphrase required).', dec_pem_priv: 'Contains a PRIVATE KEY: do not share / commit it (ASVS V6.4).',
+        dec_asn_cert: 'X.509 certificate', dec_asn_csr: 'Certificate Signing Request (CSR)', dec_asn_spki: 'Public key (SubjectPublicKeyInfo)',
+        dec_asn_pkcs8: 'Private key (PKCS#8)', dec_asn_epkcs8: 'Encrypted private key (PKCS#8)', dec_asn_rsapriv: 'RSA private key (PKCS#1)',
+        dec_asn_rsapub: 'RSA public key (PKCS#1)', dec_asn_ecpriv: 'EC private key (SEC1)', dec_asn_generic: 'SEQUENCE structure (unknown type)',
+        dec_d_subject: 'Subject', dec_d_issuer: 'Issuer', dec_d_from: 'Valid from', dec_d_to: 'Valid until', dec_d_expired: 'EXPIRED',
+        dec_d_serial: 'Serial', dec_d_key: 'Key', dec_d_sigalg: 'Signature algorithm', dec_d_alg: 'Algorithm', dec_d_der: 'DER length',
+        dec_d_salt: 'Salt', dec_d_ct: 'Ciphertext', dec_d_cipher: 'Cipher', dec_d_iv: 'IV', dec_d_cost: 'Cost',
+        dec_laravel_note: 'Laravel encrypt()/Crypt payload: needs APP_KEY (base64:...). CBC is verified with MAC HMAC-SHA256(iv+value); GCM when a tag is present.',
+        dec_smp_pass: 'CryptoJS sample - demo passphrase: {p}', dec_smp_key: 'AES-256-GCM sample (12-byte IV prepended) - demo key (hex): {k}',
+        dec_smp_appkey: 'Laravel sample - demo APP_KEY: {k}', dec_smp_fernet: 'Fernet sample - demo key: {k}',
+        dec_smp_bcrypt: 'Public bcrypt hash sample (identification only, cannot be decrypted).', dec_smp_chain: 'Chain sample urlencode(base64(gzip(JSON))).',
+        dec_smp_jwt: 'Dummy JWT sample (fake signature).', dec_smp_hash: 'SHA-256 (hex) sample of the text "contoh".',
+        dec_chain_title: 'Decryption result ({v}) - decoded again', dec_form_title: 'Decrypt',
+        dec_type_cryptojs: 'CryptoJS / OpenSSL passphrase', dec_type_laravel: 'Laravel encrypt()', dec_type_fernet: 'Fernet', dec_type_aes: 'AES (guess)',
+        dec_f_key: 'Key', dec_f_iv: 'IV', dec_f_mode: 'Mode', dec_f_pass: 'Passphrase', dec_f_tag: 'Tag (GCM)', dec_f_aad: 'AAD (text)',
+        dec_f_ivprefix: 'IV prepended to ciphertext', dec_f_auto: 'auto',
+        dec_btn_dec: 'Decrypt', dec_btn_all: 'Try all variants', dec_th_variant: 'Variant', dec_th_result: 'Result',
+        dec_mem_note: 'Keys/IVs/passphrases live only in this tab\'s memory and are never stored.'
+      }
+    };
+    // Kamus i18n.js tetap menang bila kelak kunci yang sama ditambahkan di sana.
+    Object.keys(DECODE_I18N).forEach(l => { I18N[l] = Object.assign({}, DECODE_I18N[l], I18N[l] || {}); });
+    function dtr(key, vars) { return tr(key).replace(/\{(\w+)\}/g, (m, k) => (vars && k in vars ? String(vars[k]) : m)); }
+
+    const DEC_TE = new TextEncoder();
+    const DEC_MAX_DEPTH = 5, DEC_MAX_OUT = 20 * 1024 * 1024, DEC_VIEW_MAX = 50000;
+    // ---- Util byte
+    function utf8Strict(b) { try { return new TextDecoder('utf-8', { fatal: true }).decode(b); } catch (e) { return null; } }
+    // Teks "terbaca": hampir tanpa karakter kontrol (selain tab/CR/LF) dan tanpa U+FFFD.
+    function isReadable(s) {
+      if (!s) return false;
+      let bad = 0;
+      for (const ch of s) {
+        const c = ch.codePointAt(0);
+        if ((c < 32 && c !== 9 && c !== 10 && c !== 13) || (c >= 0x7f && c < 0xa0) || c === 0xfffd) bad++;
+      }
+      return bad / s.length <= 0.02;
+    }
+    function bytesToText(b) { const s = utf8Strict(b); return s !== null && isReadable(s) ? s : null; }
+    function decVal(bytes) { return { bytes, text: bytesToText(bytes) }; }
+    function shannon(b) {
+      if (!b.length) return 0;
+      const f = new Array(256).fill(0);
+      for (const x of b) f[x]++;
+      return f.reduce((h, n) => (n ? h - (n / b.length) * Math.log2(n / b.length) : h), 0);
+    }
+    const hx2 = x => (x < 16 ? '0' : '') + x.toString(16);
+    function toHex(b) { return Array.from(b, hx2).join(''); }
+    function fromHex(s) { const out = new Uint8Array(s.length >> 1); for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(i * 2, i * 2 + 2), 16); return out; }
+    function b64ToBytes(s) {
+      let c = String(s).replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+      c += '='.repeat((4 - c.length % 4) % 4);
+      return Uint8Array.from(atob(c), ch => ch.charCodeAt(0));
+    }
+    function bytesToB64(b) { let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+    function bytesToB64u(b, keepPad) { const s = bytesToB64(b).replace(/\+/g, '-').replace(/\//g, '_'); return keepPad ? s : s.replace(/=+$/, ''); }
+    function concatBytes(list) {
+      const out = new Uint8Array(list.reduce((n, a) => n + a.length, 0));
+      let o = 0;
+      list.forEach(a => { out.set(a, o); o += a.length; });
+      return out;
+    }
+    function startsWithBytes(b, sig) { return b.length >= sig.length && sig.every((x, i) => b[i] === x); }
+    function sameBytes(a, b) { return a.length === b.length && a.every((x, i) => x === b[i]); }
+    function pushAll(out, arr) { for (const x of arr) out.push(x); }
+    function hexdump(b, max) {
+      const n = Math.min(b.length, max || 256), lines = [];
+      for (let i = 0; i < n; i += 16) {
+        const row = b.subarray(i, Math.min(i + 16, n));
+        const asc = Array.from(row, x => (x >= 32 && x < 127 ? String.fromCharCode(x) : '.')).join('');
+        lines.push(i.toString(16).padStart(6, '0') + '  ' + Array.from(row, hx2).join(' ').padEnd(47) + '  ' + asc);
+      }
+      if (b.length > n) lines.push(dtr('dec_more_bytes', { n: b.length - n }));
+      return lines.join('\n');
+    }
+    function clipText(s) { return s.length > DEC_VIEW_MAX ? s.slice(0, DEC_VIEW_MAX) + '\n' + tr('dec_more_text') : s; }
+    // Jalankan TransformStream (de/kompresi) dengan batas ukuran hasil (cegah decompression bomb).
+    async function streamBytes(b, ts) {
+      const reader = new Blob([b]).stream().pipeThrough(ts).getReader(), parts = [];
+      let total = 0;
+      for (;;) {
+        const r = await reader.read();
+        if (r.done) break;
+        total += r.value.length;
+        if (total > DEC_MAX_OUT) { reader.cancel().catch(() => { /* abaikan */ }); throw new Error(tr('dec_err_toobig')); }
+        parts.push(r.value);
+      }
+      return concatBytes(parts);
+    }
+    function inflateBytes(b, fmt) {
+      if (typeof DecompressionStream === 'undefined') return Promise.reject(new Error(tr('dec_err_nodecomp')));
+      return streamBytes(b, new DecompressionStream(fmt));
+    }
+
+    // ---- Magic bytes
+    const DEC_MAGIC = [
+      { sig: [0x25, 0x50, 0x44, 0x46], name: 'PDF', mime: 'application/pdf', ext: 'pdf' },
+      { sig: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], name: 'PNG', mime: 'image/png', ext: 'png' },
+      { sig: [0xff, 0xd8, 0xff], name: 'JPEG', mime: 'image/jpeg', ext: 'jpg' },
+      { sig: [0x47, 0x49, 0x46, 0x38], name: 'GIF', mime: 'image/gif', ext: 'gif' },
+      { sig: [0x50, 0x4b, 0x03, 0x04], name: 'ZIP (PK) / docx / jar / apk', mime: 'application/zip', ext: 'zip' },
+      { sig: [0x50, 0x4b, 0x05, 0x06], name: 'ZIP (PK, kosong)', mime: 'application/zip', ext: 'zip' }
+    ];
+    const SIG_SALTED = Array.from('Salted__', c => c.charCodeAt(0)), SIG_JAVA = [0xac, 0xed, 0x00, 0x05];
+    function fileMagic(b) { return DEC_MAGIC.find(m => startsWithBytes(b, m.sig)) || null; }
+    function compressFmt(b) {
+      if (b.length > 10 && b[0] === 0x1f && b[1] === 0x8b) return 'gzip';
+      if (b.length > 2 && b[0] === 0x78 && ((b[0] << 8) | b[1]) % 31 === 0) return 'deflate';
+      return '';
+    }
+
+    // ---- ASN.1 DER minimal (TLV, panjang definit)
+    function asn1(b, off, end, depth) {
+      const out = [];
+      if (depth > 24) throw new Error('asn1 depth');
+      while (off < end) {
+        const tag = b[off++];
+        if ((tag & 0x1f) === 0x1f || off >= end) throw new Error('asn1 tag');
+        let len = b[off++];
+        if (len & 0x80) {
+          const n = len & 0x7f;
+          if (!n || n > 4) throw new Error('asn1 len');
+          len = 0;
+          for (let i = 0; i < n; i++) len = len * 256 + b[off++];
+        }
+        const node = { tag, vs: off, ve: off + len, kids: null };
+        if (node.ve > end) throw new Error('asn1 overflow');
+        if (tag & 0x20) node.kids = asn1(b, node.vs, node.ve, depth + 1);
+        out.push(node);
+        off = node.ve;
+      }
+      return out;
+    }
+    function derTop(b) {
+      if (b[0] !== 0x30 || b.length < 8) return null;
+      try { const t = asn1(b, 0, b.length, 0); return t.length === 1 ? t[0] : null; } catch (e) { return null; }
+    }
+    const OID_NAMES = {
+      '2.5.4.3': 'CN', '2.5.4.6': 'C', '2.5.4.7': 'L', '2.5.4.8': 'ST', '2.5.4.10': 'O', '2.5.4.11': 'OU', '1.2.840.113549.1.9.1': 'E',
+      '1.2.840.113549.1.1.1': 'RSA', '1.2.840.10045.2.1': 'EC', '1.3.101.112': 'Ed25519', '1.3.101.110': 'X25519',
+      '1.2.840.10045.3.1.7': 'P-256', '1.3.132.0.34': 'P-384', '1.3.132.0.35': 'P-521',
+      '1.2.840.113549.1.1.5': 'sha1WithRSA', '1.2.840.113549.1.1.11': 'sha256WithRSA', '1.2.840.113549.1.1.12': 'sha384WithRSA',
+      '1.2.840.113549.1.1.13': 'sha512WithRSA', '1.2.840.10045.4.3.2': 'ecdsa-with-SHA256', '1.2.840.10045.4.3.3': 'ecdsa-with-SHA384',
+      '1.2.840.113549.1.5.13': 'PBES2'
+    };
+    function oidStr(b, n) {
+      const v = b.subarray(n.vs, n.ve), parts = [Math.floor(v[0] / 40), v[0] % 40];
+      let x = 0;
+      for (let i = 1; i < v.length; i++) { x = x * 128 + (v[i] & 0x7f); if (!(v[i] & 0x80)) { parts.push(x); x = 0; } }
+      return parts.join('.');
+    }
+    function oidName(b, n) { if (!n || n.tag !== 6) return '-'; const o = oidStr(b, n); return OID_NAMES[o] || o; }
+    function asnStr(b, n) { const v = b.subarray(n.vs, n.ve); return utf8Strict(v) || String.fromCharCode.apply(null, v); }
+    function asnName(b, n) {
+      const parts = [];
+      ((n && n.kids) || []).forEach(set => (set.kids || []).forEach(atv => {
+        const [o, v] = atv.kids || [];
+        if (o && v) parts.push(oidName(b, o) + '=' + asnStr(b, v));
+      }));
+      return parts.join(', ') || '-';
+    }
+    function asnTime(b, n) {
+      const s = asnStr(b, n), full = n.tag === 0x17 ? (Number(s.slice(0, 2)) < 50 ? '20' : '19') + s : s;
+      const m = rx1(/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?/g, full);
+      if (!m) return { text: s, ms: NaN };
+      const iso = m[1] + '-' + m[2] + '-' + m[3] + 'T' + m[4] + ':' + m[5] + ':' + (m[6] || '00') + 'Z';
+      return { text: iso.replace('T', ' '), ms: Date.parse(iso) };
+    }
+    function intBits(b, n) { let i = n.vs; while (i < n.ve - 1 && b[i] === 0) i++; return (n.ve - i) * 8; }
+    // Jenis kunci dari AlgorithmIdentifier (+ panjang modulus RSA bila BIT STRING tersedia).
+    function keyInfo(b, spki) {
+      const [alg, bits] = (spki && spki.kids) || [];
+      if (!alg || !alg.kids) return '-';
+      const algName = oidName(b, alg.kids[0]), p = alg.kids[1];
+      let s = algName + (p && p.tag === 6 ? ' ' + oidName(b, p) : '');
+      if (algName === 'RSA' && bits && bits.tag === 3) {
+        try { s += ' ' + intBits(b, asn1(b, bits.vs + 1, bits.ve, 0)[0].kids[0]) + ' bit'; } catch (e) { /* abaikan */ }
+      }
+      return s;
+    }
+    function describeSigned(b, k, add) {
+      const tbs = k[0].kids || [], o = tbs[0] && tbs[0].tag === 0xa0 ? 1 : 0, val = tbs[o + 3];
+      add('dec_d_sigalg', oidName(b, k[1].kids && k[1].kids[0]));
+      if (tbs[o] && tbs[o].tag === 2 && val && val.kids && val.kids.length === 2) {
+        const to = asnTime(b, val.kids[1]);
+        add('dec_d_subject', asnName(b, tbs[o + 4]));
+        add('dec_d_issuer', asnName(b, tbs[o + 2]));
+        add('dec_d_from', asnTime(b, val.kids[0]).text);
+        add('dec_d_to', to.text + (to.ms < Date.now() ? ' (' + tr('dec_d_expired') + ')' : ''));
+        add('dec_d_serial', toHex(b.subarray(tbs[o].vs, tbs[o].ve)));
+        add('dec_d_key', keyInfo(b, tbs[o + 5]));
+        return 'dec_asn_cert';
+      }
+      add('dec_d_subject', asnName(b, tbs[1]));
+      add('dec_d_key', keyInfo(b, tbs[2]));
+      return 'dec_asn_csr';
+    }
+    // Kenali jenis struktur DER (sertifikat / public key / private key); kembalikan kunci i18n jenisnya.
+    function describeDer(step, b, top) {
+      const k = top.kids || [], tg = i => (k[i] ? k[i].tag : -1), add = (l, v) => step.details.push([tr(l), v]);
+      add('dec_d_der', b.length + ' byte');
+      try {
+        if (k.length === 3 && tg(0) === 0x30 && tg(1) === 0x30 && tg(2) === 3) return describeSigned(b, k, add);
+        if (k.length === 2 && tg(0) === 0x30 && tg(1) === 3) { add('dec_d_key', keyInfo(b, top)); return 'dec_asn_spki'; }
+        if (k.length >= 3 && tg(0) === 2 && tg(1) === 0x30 && tg(2) === 4) { add('dec_d_key', keyInfo(b, { kids: [k[1]] })); return 'dec_asn_pkcs8'; }
+        if (k.length === 2 && tg(0) === 0x30 && tg(1) === 4) { add('dec_d_alg', oidName(b, k[0].kids && k[0].kids[0])); return 'dec_asn_epkcs8'; }
+        if (k.length === 9 && k.every(n => n.tag === 2)) { add('dec_d_key', 'RSA ' + intBits(b, k[1]) + ' bit'); return 'dec_asn_rsapriv'; }
+        if (k.length === 2 && k.every(n => n.tag === 2)) { add('dec_d_key', 'RSA ' + intBits(b, k[0]) + ' bit'); return 'dec_asn_rsapub'; }
+        if (k.length >= 2 && tg(0) === 2 && tg(1) === 4 && b[k[0].vs] === 1) return 'dec_asn_ecpriv';
+      } catch (e) { /* struktur tak lazim: jatuh ke generik */ }
+      return 'dec_asn_generic';
+    }
+    function applyDer(step, b, top, prefix) {
+      const kind = describeDer(step, b, top);
+      setFound(step, (prefix || 'ASN.1 DER') + ': ' + tr(kind), kind === 'dec_asn_generic' ? 'low' : 'high');
+      if (/priv/.test(kind)) step.warnings.push(tr('dec_pem_priv'));
+    }
+
+    // ---- Langkah (satu node pohon hasil)
+    function decStep(format, conf, v) {
+      const isText = v.text !== null;
+      return { format, conf, byteLen: v.bytes.length, entropy: shannon(v.bytes).toFixed(2), isText,
+        view: isText ? clipText(v.text) : hexdump(v.bytes), copyText: isText ? v.text : toHex(v.bytes),
+        found: '', foundConf: '', notes: [], warnings: [], details: [], crypto: null, file: null, bytes: v.bytes };
+    }
+    function setFound(step, name, conf) { step.found = name; step.foundConf = conf; }
+
+    // ---- Pengenalan token/container dari teks (true = berhenti di sini)
+    function recPem(step, s) {
+      const m = rx1(/-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/g, s);
+      if (!m) return false;
+      const label = m[1], body = m[2].split(/\r?\n/).filter(l => l && !l.includes(':')).join('');
+      let der = null;
+      try { der = b64ToBytes(body); } catch (e) { step.warnings.push(tr('dec_err_pem')); }
+      const top = der && derTop(der);
+      if (top) applyDer(step, der, top, 'PEM ' + label);
+      else setFound(step, 'PEM ' + label, 'med');
+      if (/Proc-Type:\s*4,ENCRYPTED/.test(m[2]) || /ENCRYPTED/.test(label)) step.warnings.push(tr('dec_pem_enc'));
+      if (/PRIVATE KEY/.test(label) && !step.warnings.includes(tr('dec_pem_priv'))) step.warnings.push(tr('dec_pem_priv'));
+      return true;
+    }
+    function recJwt(step, s) {
+      if (!/^eyJ[\w-]*\.[\w-]+\.[\w-]*$/.test(s)) return false;
+      const j = decodeJwt(s);
+      if (!j || j.error) return false;
+      setFound(step, 'JWT (JWS)', 'high');
+      step.details.push(['alg', String(j.header.alg || '-')]);
+      j.claims.forEach(c => step.details.push([c.key + ' (' + c.label + ')', c.value + ' → ' + c.date + ' · ' + c.status]));
+      j.warnings.forEach(w => step.warnings.push(w));
+      step.notes.push(tr('dec_jwt_note'));
+      step.view = clipText('Header:\n' + j.headerText + '\n\nPayload:\n' + j.payloadText);
+      return true;
+    }
+    function recJwe(step, s) {
+      if (!/^eyJ[\w-]*(?:\.[\w-]*){4}$/.test(s)) return false;
+      let h;
+      try { h = JSON.parse(utf8Strict(b64ToBytes(s.split('.')[0]))); } catch (e) { return false; }
+      setFound(step, 'JWE compact', 'high');
+      ['alg', 'enc', 'kid', 'zip'].forEach(k => { if (h[k] !== undefined) step.details.push([k, String(h[k])]); });
+      step.notes.push(dtr('dec_jwe_note', { alg: h.alg || '?', enc: h.enc || '?' }));
+      step.view = clipText(JSON.stringify(h, null, 2));
+      return true;
+    }
+    function recAspNet(step, s) {
+      if (!/^CfDJ8[\w-]{20,}$/.test(s)) return false;
+      setFound(step, 'ASP.NET Core Data Protection', 'high');
+      step.notes.push(tr('dec_aspnet_note'));
+      return true;
+    }
+    function recPhpSer(step, s) {
+      if (!/^(?:a:\d+:\{|[OC]:\d+:"|s:\d+:"|i:-?\d+;|b:[01];|d:-?[\d.E+-]+;|N;)/.test(s)) return false;
+      setFound(step, 'PHP serialize()', 'high');
+      step.warnings.push(tr('dec_php_warn'));
+      const cls = [...new Set(Array.from(s.matchAll(/[OC]:\d+:"([^"]{1,200})"/g), m => m[1]))];
+      if (cls.length) step.details.push([tr('dec_d_classes'), cls.slice(0, 10).join(', ')]);
+      return true;
+    }
+    const PW_HASHES = [
+      [/^\$2[abxy]?\$\d{2}\$[./A-Za-z0-9]{53}$/, 'bcrypt'], [/^\$argon2(?:id|i|d)\$/, 'Argon2'],
+      [/^\$6\$/, 'sha512crypt'], [/^\$5\$/, 'sha256crypt'], [/^\$1\$/, 'md5crypt'], [/^\$y\$/, 'yescrypt'],
+      [/^pbkdf2_sha(?:1|256)\$\d+\$/, 'PBKDF2 (Django)'], [/^\$pbkdf2(?:-sha\d+)?\$/, 'PBKDF2 (passlib)']
+    ];
+    const HEX_HASHES = { 32: 'MD5 / NTLM', 40: 'SHA-1', 64: 'SHA-256 / SHA3-256', 128: 'SHA-512 / SHA3-512' };
+    function recPwHash(step, s) {
+      const hit = PW_HASHES.find(([re]) => re.test(s));
+      if (!hit) return false;
+      setFound(step, 'Hash password ' + hit[1], 'high');
+      if (hit[1] === 'bcrypt') step.details.push([tr('dec_d_cost'), s.split('$')[2]]);
+      step.notes.push(tr('dec_pwhash_note'));
+      return true;
+    }
+    function recHexHash(step, s) {
+      if (!HEX_HASHES[s.length] || !/^[0-9a-fA-F]+$/.test(s) || bytesToText(fromHex(s))) return false;
+      setFound(step, 'Hash ' + HEX_HASHES[s.length] + ' (hex)', 'med');
+      step.notes.push(tr('dec_hexhash_note'));
+      return true;
+    }
+    const DEC_TEXT_RULES = [recPem, recJwt, recJwe, recAspNet, recPhpSer, recPwHash, recHexHash];
+    // JSON -> tampil rapi; objek {iv, value, mac[, tag]} = payload Laravel encrypt().
+    function applyJson(step, s) {
+      if (!/^[[{]/.test(s)) return false;
+      let o;
+      try { o = JSON.parse(s); } catch (e) { return false; }
+      setFound(step, 'JSON', 'high');
+      step.view = clipText(JSON.stringify(o, null, 2));
+      if (o && typeof o === 'object' && ['iv', 'value', 'mac'].every(k => typeof o[k] === 'string')) {
+        const gcm = typeof o.tag === 'string' && o.tag !== '';
+        let ivLen = '?';
+        try { ivLen = b64ToBytes(o.iv).length; } catch (e) { /* abaikan */ }
+        setFound(step, 'Laravel encrypt() payload', 'high');
+        step.details.push([tr('dec_d_iv'), ivLen + ' byte'], [tr('dec_d_cipher'), gcm ? 'AES-256-GCM' : 'AES-256-CBC / AES-128-CBC'], ['mac', o.mac ? 'HMAC-SHA256' : '-']);
+        step.notes.push(tr('dec_laravel_note'));
+        step.crypto = { type: 'laravel', payload: o };
+      }
+      return true;
+    }
+
+    // ---- Lapisan encoding teks -> { format, conf, val } atau null
+    // Token %xx / =XX (bagian ganjil hasil split) jadi byte; sisanya di-encode UTF-8.
+    function splitToBytes(s, re) {
+      const out = [];
+      s.split(re).forEach((p, i) => { if (i % 2) out.push(parseInt(p.slice(1), 16)); else pushAll(out, DEC_TE.encode(p)); });
+      return Uint8Array.from(out);
+    }
+    function layerUrl(s) {
+      const hits = s.match(/%[0-9a-fA-F]{2}/g);
+      if (!hits) return null;
+      return { format: tr('dec_fmt_url'), conf: hits.length >= 2 ? 'high' : 'med', val: decVal(splitToBytes(s, /(%[0-9a-fA-F]{2})/)) };
+    }
+    const HTML_ENT = new Map([['amp', '&'], ['lt', '<'], ['gt', '>'], ['quot', '"'], ['apos', "'"], ['nbsp', '\u00a0']]);
+    function layerHtml(s) {
+      let n = 0;
+      const out = s.replace(/&(#[xX][0-9a-fA-F]{1,6}|#\d{1,7}|[a-zA-Z]+);/g, (m, e) => {
+        let ch = HTML_ENT.get(e.toLowerCase());
+        if (e[0] === '#') {
+          const cp = /^#x/i.test(e) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+          ch = cp <= 0x10ffff ? String.fromCodePoint(cp) : undefined;
+        }
+        if (ch === undefined) return m;
+        n++;
+        return ch;
+      });
+      return n ? { format: tr('dec_fmt_html'), conf: n >= 2 ? 'high' : 'med', val: decVal(DEC_TE.encode(out)) } : null;
+    }
+    function layerEscape(s) {
+      if (!/\\(?:u[0-9a-fA-F]{4}|u\{[0-9a-fA-F]{1,6}\}|x[0-9a-fA-F]{2})/.test(s)) return null;
+      const out = [], simple = { n: '\n', r: '\r', t: '\t', 0: '\0' };
+      let pend = '';
+      const flush = () => { pushAll(out, DEC_TE.encode(pend)); pend = ''; };
+      s.split(/(\\u\{[0-9a-fA-F]{1,6}\}|\\u[0-9a-fA-F]{4}|\\x[0-9a-fA-F]{2}|\\[nrt0"'\\/])/).forEach((p, i) => {
+        if (i % 2 === 0) { pend += p; return; }
+        const c = p[1];
+        if (c === 'x') { flush(); out.push(parseInt(p.slice(2), 16)); return; }
+        if (c === 'u') { const cp = parseInt(p[2] === '{' ? p.slice(3, -1) : p.slice(2), 16); pend += cp <= 0x10ffff ? String.fromCodePoint(cp) : p; return; }
+        pend += simple[c] || c;
+      });
+      flush();
+      return { format: tr('dec_fmt_esc'), conf: 'high', val: decVal(Uint8Array.from(out)) };
+    }
+    function layerQp(s) {
+      const hits = s.match(/=[0-9A-F]{2}/g);
+      if (!hits || (hits.length < 2 && !/=\r?\n/.test(s)) || /[^\t\r\n\x20-\x7e]/.test(s)) return null;
+      return { format: tr('dec_fmt_qp'), conf: /=\r?\n/.test(s) ? 'high' : 'med', val: decVal(splitToBytes(s.replace(/=\r?\n/g, ''), /(=[0-9A-F]{2})/)) };
+    }
+    function layerHex(s) {
+      const h = s.replace(/^0x/i, '').replace(/[\s:]/g, '');
+      if (h.length < 4 || h.length % 2 || !/^[0-9a-fA-F]+$/.test(h)) return null;
+      const b = fromHex(h), txt = bytesToText(b), letters = /[a-fA-F]/.test(h);
+      if (!txt && !(letters && h.length >= 16) && !(letters && /\d/.test(h) && h.length >= 8)) return null;
+      return { format: 'Hex', conf: txt || h.length >= 32 ? 'high' : 'med', val: decVal(b) };
+    }
+    function b32ToBytes(s) {
+      const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567', out = [];
+      let bits = 0, val = 0;
+      for (const ch of s.replace(/=+$/, '')) {
+        val = ((val << 5) | A.indexOf(ch)) & 0x1fff;
+        bits += 5;
+        if (bits >= 8) { bits -= 8; out.push((val >>> bits) & 255); }
+      }
+      return Uint8Array.from(out);
+    }
+    function isKnownBinary(b) { return !!(fileMagic(b) || compressFmt(b) || DEC_BIN_RULES.some(r => r.test(b))); }
+    function layerB32(s) {
+      const c = s.replace(/\s+/g, '');
+      if (c.length < 8 || !/^[A-Z2-7]+=*$/.test(c) || (c.includes('=') && c.length % 8)) return null;
+      const b = b32ToBytes(c);
+      if (!bytesToText(b) && !isKnownBinary(b)) return null;
+      return { format: 'Base32', conf: c.length % 8 === 0 ? 'high' : 'med', val: decVal(b) };
+    }
+    function layerB64(s) {
+      const c = s.replace(/[\r\n]+/g, ''), body = c.replace(/=+$/, '');
+      const std = /^[A-Za-z0-9+/]+={0,2}$/.test(c), url = /^[A-Za-z0-9_-]+={0,2}$/.test(c);
+      if (!(std || url) || c.length < 4 || body.length % 4 === 1 || (c !== body && c.length % 4) || /^\d+$/.test(body)) return null;
+      let b;
+      try { b = b64ToBytes(c); } catch (e) { return null; }
+      const txt = bytesToText(b), known = isKnownBinary(b);
+      if (!txt && !known && c.length < 16) return null;
+      const padOk = c.length % 4 === 0;
+      let conf = 'low';
+      if ((txt || known) && padOk) conf = 'high';
+      else if (txt || known || (padOk && shannon(b) > 3)) conf = 'med';
+      return { format: url && !std ? 'Base64 URL-safe' : 'Base64', conf, val: decVal(b) };
+    }
+    const DEC_TEXT_LAYERS = [layerUrl, layerHtml, layerEscape, layerQp, layerHex, layerB32, layerB64];
+
+    // ---- Pengenalan biner (struktur/magic) -> isi step; test() juga dipakai layerB64
+    const DEC_BIN_RULES = [
+      { test: b => b.length >= 32 && startsWithBytes(b, SIG_SALTED) && b.length % 16 === 0,
+        apply(step, b) {
+          setFound(step, 'OpenSSL/CryptoJS "Salted__" (AES passphrase)', 'high');
+          step.details.push([tr('dec_d_salt'), toHex(b.subarray(8, 16))], [tr('dec_d_ct'), (b.length - 16) + ' byte']);
+          step.notes.push(tr('dec_salted_note'));
+          step.crypto = { type: 'cryptojs', salt: b.slice(8, 16), ct: b.slice(16) };
+        } },
+      { test: b => startsWithBytes(b, SIG_JAVA),
+        apply(step, b) {
+          setFound(step, 'Java serialized object', 'high');
+          step.warnings.push(tr('dec_java_warn'));
+          const names = [];
+          // TC_CLASSDESC (0x72) + panjang u16 + nama kelas
+          for (let i = 4; i < b.length - 3 && names.length < 8; i++) {
+            if (b[i] !== 0x72) continue;
+            const n = (b[i + 1] << 8) | b[i + 2], txt = n > 0 && n < 256 && i + 3 + n <= b.length ? bytesToText(b.subarray(i + 3, i + 3 + n)) : null;
+            if (txt && /^[\w.$[;]+$/.test(txt)) { names.push(txt); i += 2 + n; }
+          }
+          if (names.length) step.details.push([tr('dec_d_classes'), names.join(', ')]);
+        } },
+      // Fernet: 0x80 | ts(8) | iv(16) | ct(16n) | hmac(32)
+      { test: b => b[0] === 0x80 && b.length >= 73 && (b.length - 57) % 16 === 0,
+        apply(step, b) {
+          const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), ts = dv.getUint32(1) * 4294967296 + dv.getUint32(5);
+          setFound(step, 'Fernet token', 'high');
+          step.details.push([tr('dec_d_time'), ts + ' → ' + new Date(ts * 1000).toISOString()], [tr('dec_d_ct'), (b.length - 57) + ' byte']);
+          step.notes.push(tr('dec_fernet_note'));
+          step.crypto = { type: 'fernet', token: b.slice() };
+        } },
+      { test: b => !!derTop(b), apply(step, b) { applyDer(step, b, derTop(b)); } },
+      { test: b => (b.length === 65 || b.length === 97) && b[0] === 4,
+        apply(step, b) {
+          setFound(step, 'EC public key ' + (b.length === 65 ? 'P-256' : 'P-384') + ' (uncompressed)', 'med');
+          step.notes.push(tr('dec_ec_unc'));
+          const n = (b.length - 1) / 2;
+          step.details.push(['X', toHex(b.subarray(1, 1 + n))], ['Y', toHex(b.subarray(1 + n))]);
+        } },
+      { test: b => b.length === 33 && (b[0] === 2 || b[0] === 3),
+        apply(step, b) { setFound(step, 'EC public key P-256 (compressed)', 'med'); step.notes.push(tr('dec_ec_comp')); step.details.push(['X', toHex(b.subarray(1))]); } }
+    ];
+    function hasRepeatBlock(b) {
+      const seen = new Set();
+      for (let i = 0; i + 16 <= b.length; i += 16) { const k = toHex(b.subarray(i, i + 16)); if (seen.has(k)) return true; seen.add(k); }
+      return false;
+    }
+    // Tebakan ciphertext mentah dari panjang + entropi (dinormalisasi terhadap panjang data).
+    function guessCipher(step, b) {
+      const n = b.length, norm = n > 1 ? shannon(b) / Math.min(8, Math.log2(n)) : 0, ecb = n % 16 === 0 && hasRepeatBlock(b);
+      if (n < 16 || (norm < 0.85 && !ecb)) {
+        setFound(step, tr('dec_bin_unknown'), 'low');
+        if (n >= 16) step.notes.push(tr('dec_guess_lowent'));
+        return;
+      }
+      setFound(step, tr('dec_guess_title'), 'low');
+      step.warnings.push(tr('dec_guess_warn'));
+      if ([16, 20, 32, 48, 64].includes(n)) step.notes.push(tr('dec_guess_digest'));
+      if (n % 16 === 0) {
+        step.notes.push(tr('dec_guess_cbc'));
+        if (ecb) step.warnings.push(tr('dec_guess_ecb'));
+        step.crypto = { type: 'aes', ct: b, mode: ecb ? 'ECB' : 'CBC' };
+        return;
+      }
+      step.notes.push(tr('dec_guess_ctr'));
+      if (n >= 28) step.notes.push(tr('dec_guess_gcm'));
+      step.crypto = { type: 'aes', ct: b, mode: n >= 28 ? 'GCM' : 'CTR' };
+    }
+    async function analyzeBinary(step, b) {
+      const fmt = compressFmt(b);
+      if (fmt) {
+        try { return { format: fmt === 'gzip' ? 'gzip' : 'zlib/deflate', conf: 'high', val: decVal(await inflateBytes(b, fmt)) }; }
+        catch (e) { setFound(step, fmt, 'med'); step.warnings.push(dtr('dec_err_inflate', { e: e.message || e })); return null; }
+      }
+      const rule = DEC_BIN_RULES.find(r => r.test(b));
+      if (rule) rule.apply(step, b);
+      else guessCipher(step, b);
+      return null;
+    }
+    async function analyzeStep(step, v) {
+      // Magic bytes dicek dulu: PDF bisa saja seluruhnya ASCII sehingga lolos sebagai teks.
+      const fm = fileMagic(v.bytes);
+      if (fm) { setFound(step, fm.name, 'high'); step.file = fm; step.notes.push(tr('dec_file_note')); return null; }
+      if (v.text === null) return analyzeBinary(step, v.bytes);
+      const s = v.text.trim();
+      if (DEC_TEXT_RULES.some(r => r(step, s)) || applyJson(step, s)) return null;
+      for (const layer of DEC_TEXT_LAYERS) { const r = layer(s); if (r) return r; }
+      step.notes.push(tr('dec_no_more'));
+      return null;
+    }
+    // Buka lapisan bertingkat; input = string (dari textarea) atau Uint8Array (hasil dekripsi).
+    async function smartDecode(input) {
+      let v = typeof input === 'string' ? { bytes: DEC_TE.encode(input), text: input } : decVal(input);
+      let step = decStep(tr('dec_input'), 'high', v);
+      const steps = [step];
+      for (let depth = 0; ; depth++) {
+        let next = null;
+        try { next = await analyzeStep(step, v); } catch (e) { step.warnings.push(dtr('dec_err_generic', { e: (e && e.message) || e })); }
+        if (!next || sameBytes(next.val.bytes, v.bytes)) break;
+        if (depth >= DEC_MAX_DEPTH) { step.notes.push(tr('dec_max_depth')); break; }
+        v = next.val;
+        step = decStep(next.format, next.conf, v);
+        steps.push(step);
+      }
+      return steps;
+    }
+
+    // ---- Kripto (WebCrypto). MD5 hanya untuk EVP_BytesToKey kompatibel CryptoJS/OpenSSL lama (RFC 1321).
+    function md5(bytes) {
+      const K = Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) | 0);
+      const S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+      const n = bytes.length, total = Math.ceil((n + 9) / 64) * 64, buf = new Uint8Array(total), dv = new DataView(buf.buffer);
+      buf.set(bytes);
+      buf[n] = 0x80;
+      dv.setUint32(total - 8, (n * 8) >>> 0, true);
+      dv.setUint32(total - 4, Math.floor(n / 0x20000000), true);
+      const h = [0x67452301, 0xefcdab89 | 0, 0x98badcfe | 0, 0x10325476];
+      for (let off = 0; off < total; off += 64) {
+        let [a, b, c, d] = h;
+        for (let i = 0; i < 64; i++) {
+          const r = i >> 4;
+          let f, g;
+          if (r === 0) { f = (b & c) | (~b & d); g = i; }
+          else if (r === 1) { f = (d & b) | (~d & c); g = (5 * i + 1) & 15; }
+          else if (r === 2) { f = b ^ c ^ d; g = (3 * i + 5) & 15; }
+          else { f = c ^ (b | ~d); g = (7 * i) & 15; }
+          f = (f + a + K[i] + dv.getInt32(off + g * 4, true)) | 0;
+          const s = S[r * 4 + (i & 3)];
+          a = d; d = c; c = b;
+          b = (b + ((f << s) | (f >>> (32 - s)))) | 0;
+        }
+        h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0; h[3] = (h[3] + d) | 0;
+      }
+      const out = new Uint8Array(16), ov = new DataView(out.buffer);
+      h.forEach((x, i) => ov.setInt32(i * 4, x, true));
+      return out;
+    }
+    function subtleApi() {
+      const s = globalThis.crypto && globalThis.crypto.subtle;
+      if (!s) throw new Error(tr('dec_err_nosubtle'));
+      return s;
+    }
+    async function sha256(b) { return new Uint8Array(await subtleApi().digest('SHA-256', b)); }
+    async function hmacSha256(key, data) {
+      const S = subtleApi(), k = await S.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      return new Uint8Array(await S.sign('HMAC', k, data));
+    }
+    // AES CBC/GCM/CTR via WebCrypto (op = 'encrypt' | 'decrypt'). GCM: tag 16 byte di akhir data.
+    async function aesCrypt(op, mode, key, iv, data, aad) {
+      const S = subtleApi(), name = 'AES-' + mode;
+      const algo = mode === 'CTR' ? { name, counter: iv, length: 64 } : { name, iv };
+      if (mode === 'GCM' && aad && aad.length) algo.additionalData = aad;
+      const k = await S.importKey('raw', key, { name }, false, [op]);
+      return new Uint8Array(await S[op](algo, k, data));
+    }
+    // ECB tidak ada di WebCrypto: D(C) = blok pertama CBC-decrypt(IV=0, C || E(C xor 0x10..)),
+    // blok tambahan itu membuat padding PKCS#7 penuh sehingga WebCrypto tidak menolak. Hanya untuk analisis (ECB lemah).
+    async function aesEcbDecrypt(key, data) {
+      if (!data.length || data.length % 16) throw new Error(tr('dec_err_block'));
+      const S = subtleApi(), zero = new Uint8Array(16), out = new Uint8Array(data.length);
+      const k = await S.importKey('raw', key, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+      for (let i = 0; i < data.length; i += 16) {
+        const c = data.subarray(i, i + 16);
+        const x = new Uint8Array(await S.encrypt({ name: 'AES-CBC', iv: zero }, k, c.map(v => v ^ 16))).subarray(0, 16);
+        out.set(new Uint8Array(await S.decrypt({ name: 'AES-CBC', iv: zero }, k, concatBytes([c, x]))), i);
+      }
+      const p = out[out.length - 1];
+      return p >= 1 && p <= 16 && out.subarray(out.length - p).every(v => v === p) ? out.slice(0, out.length - p) : out;
+    }
+    function aesDecrypt(mode, key, iv, data, aad) { return mode === 'ECB' ? aesEcbDecrypt(key, data) : aesCrypt('decrypt', mode, key, iv, data, aad); }
+    // EVP_BytesToKey 1 iterasi (OpenSSL enc / CryptoJS) -> key 32 + IV 16.
+    async function evpKdf(pass, salt, hash) {
+      let d = new Uint8Array(0), out = new Uint8Array(0);
+      while (out.length < 48) {
+        const blk = concatBytes([d, pass, salt]);
+        d = hash === 'md5' ? md5(blk) : await sha256(blk);
+        out = concatBytes([out, d]);
+      }
+      return { key: out.slice(0, 32), iv: out.slice(32, 48) };
+    }
+    async function pbkdf2Kdf(pass, salt) {
+      const S = subtleApi(), k = await S.importKey('raw', pass, 'PBKDF2', false, ['deriveBits']);
+      const bits = new Uint8Array(await S.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 10000 }, k, 384));
+      return { key: bits.slice(0, 32), iv: bits.slice(32) };
+    }
+    // Nilai key/IV/tag: hex / base64 / utf8 (auto = pilih tafsiran yang panjangnya sesuai 'want').
+    function parseBin(s, enc, want) {
+      let v = String(s || '').trim(), e = enc || 'auto';
+      if (v.startsWith('base64:')) { v = v.slice(7); if (e === 'auto') e = 'base64'; }
+      const dec = {
+        hex: x => { const h = x.replace(/^0x/i, ''); return /^(?:[0-9a-fA-F]{2})+$/.test(h) ? fromHex(h) : null; },
+        base64: x => { if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(x)) return null; try { return b64ToBytes(x); } catch (err) { return null; } },
+        utf8: x => DEC_TE.encode(x)
+      };
+      if (e !== 'auto') { const b = dec[e] && dec[e](v); if (!b) throw new Error(dtr('dec_err_enc', { enc: e })); return { bytes: b, enc: e }; }
+      const cands = ['hex', 'base64', 'utf8'].map(k => ({ enc: k, bytes: dec[k](v) })).filter(c => c.bytes);
+      return cands.find(c => want.includes(c.bytes.length)) || cands[0];
+    }
+    function plainKind(b) {
+      const s = bytesToText(b);
+      if (s !== null) { try { JSON.parse(s); return 'json'; } catch (e) { return 'text'; } }
+      return fileMagic(b) || compressFmt(b) ? 'file' : '';
+    }
+    function cryptoErr(e) { return e && e.name === 'OperationError' ? tr('dec_err_op') : (e && e.message) || String(e); }
+    async function tryVariant(v) {
+      try {
+        const r = await v.fn(), bytes = r instanceof Uint8Array ? r : r.bytes, kind = plainKind(bytes);
+        return { label: v.label, ok: !!kind, bytes, msg: kind ? tr('dec_ok_' + kind) : tr('dec_bad_plain'), note: r.note || '' };
+      } catch (e) { return { label: v.label, ok: false, bytes: null, msg: cryptoErr(e), note: '' }; }
+    }
+    const AES_KEY_LENS = [16, 24, 32];
+    function cryptojsVariants(t, f, all) {
+      const pass = DEC_TE.encode(f.passphrase || '');
+      const kdfs = [['EVP_BytesToKey MD5 (CryptoJS)', () => evpKdf(pass, t.salt, 'md5')]];
+      if (all) kdfs.push(['EVP_BytesToKey SHA-256 (openssl >= 1.1)', () => evpKdf(pass, t.salt, 'sha256')], ['PBKDF2-SHA256 10000 (openssl -pbkdf2)', () => pbkdf2Kdf(pass, t.salt)]);
+      return kdfs.map(([label, kdf]) => ({ label: 'AES-256-CBC, ' + label, fn: async () => { const k = await kdf(); return aesDecrypt('CBC', k.key, k.iv, t.ct); } }));
+    }
+    function laravelVariants(t, f) {
+      return [{ label: 'Laravel ' + (t.payload.tag ? 'AES-GCM' : 'AES-CBC + HMAC-SHA256'), fn: async () => {
+        const key = parseBin(f.key, f.keyEnc, [32, 16]).bytes, p = t.payload;
+        if (key.length !== 32 && key.length !== 16) throw new Error(dtr('dec_err_keylen', { n: key.length }));
+        const iv = b64ToBytes(p.iv), ct = b64ToBytes(p.value);
+        if (p.tag) return aesDecrypt('GCM', key, iv, concatBytes([ct, b64ToBytes(p.tag)]));
+        const macOk = !p.mac || toHex(await hmacSha256(key, DEC_TE.encode(p.iv + p.value))) === p.mac.toLowerCase();
+        let bytes;
+        try { bytes = await aesDecrypt('CBC', key, iv, ct); } catch (e) { throw macOk ? e : new Error(tr('dec_err_mac')); }
+        return { bytes, note: macOk ? '' : tr('dec_mac_bad_but_ok') };
+      } }];
+    }
+    function fernetVariants(t, f) {
+      return [{ label: 'Fernet (HMAC-SHA256 + AES-128-CBC)', fn: async () => {
+        const key = parseBin(f.key, f.keyEnc === 'auto' ? 'base64' : f.keyEnc, [32]).bytes, tok = t.token, end = tok.length - 32;
+        if (key.length !== 32) throw new Error(dtr('dec_err_keylen', { n: key.length }));
+        if (!sameBytes(await hmacSha256(key.slice(0, 16), tok.slice(0, end)), tok.slice(end))) throw new Error(tr('dec_err_fernet_mac'));
+        return aesDecrypt('CBC', key.slice(16), tok.slice(9, 25), tok.slice(25, end));
+      } }];
+    }
+    // Ciphertext mentah: kombinasi key (apa adanya / SHA-256 teks), mode, dan letak IV/tag.
+    function aesVariants(t, f, all) {
+      const ct = t.ct, keys = [], out = [];
+      const k = f.key ? parseBin(f.key, f.keyEnc, AES_KEY_LENS) : null;
+      if (k && AES_KEY_LENS.includes(k.bytes.length)) keys.push({ label: 'key ' + k.enc, get: () => Promise.resolve(k.bytes) });
+      if (all && f.key) keys.push({ label: 'SHA-256(key)', get: () => sha256(DEC_TE.encode(f.key.trim())) });
+      if (!keys.length) throw new Error(dtr('dec_err_keylen', { n: k ? k.bytes.length : 0 }));
+      const ivSep = f.iv ? parseBin(f.iv, f.ivEnc, [16, 12]).bytes : null;
+      const tag = f.tag ? parseBin(f.tag, f.tagEnc, [16]).bytes : null;
+      const aad = f.aad ? DEC_TE.encode(f.aad) : null;
+      const modes = all ? ['CBC', 'GCM', 'CTR', 'ECB'] : [f.mode];
+      keys.forEach(key => modes.forEach(mode => {
+        const add = (where, iv, data) => out.push({ label: 'AES-' + mode + ', ' + key.label + where,
+          fn: async () => aesDecrypt(mode, await key.get(), iv, mode === 'GCM' && tag ? concatBytes([data, tag]) : data, aad) });
+        if (mode === 'ECB') { add('', null, ct); return; }
+        const ivLen = mode === 'GCM' ? 12 : 16;
+        if ((all || f.ivPrefix) && ct.length > ivLen) add(', IV prefix ' + ivLen + 'B', ct.slice(0, ivLen), ct.slice(ivLen));
+        if (ivSep && (all || !f.ivPrefix)) add(', IV terpisah', ivSep, ct);
+      }));
+      if (!out.length) throw new Error(tr('dec_err_iv'));
+      return out;
+    }
+    const DEC_VARIANTS = { cryptojs: cryptojsVariants, laravel: laravelVariants, fernet: fernetVariants, aes: aesVariants };
+    // Jalankan satu (all=false) atau semua variasi dekripsi; hasil: [{ label, ok, bytes, msg, note }].
+    async function decryptTarget(t, f, all) {
+      let list;
+      try { list = DEC_VARIANTS[t.type](t, f, all); } catch (e) { return [{ label: '-', ok: false, bytes: null, msg: cryptoErr(e), note: '' }]; }
+      const res = [];
+      for (const v of list) res.push(await tryVariant(v));
+      return res;
+    }
+
+    // ---- Sampel demo deterministik (semua key/passphrase di sini dummy, bukan rahasia)
+    const DEC_SAMPLES = [
+      { key: 'chain', label: 'URL+Base64+gzip' }, { key: 'jwt', label: 'JWT' }, { key: 'cryptojs', label: 'CryptoJS AES' },
+      { key: 'gcm', label: 'AES-GCM' }, { key: 'laravel', label: 'Laravel' }, { key: 'fernet', label: 'Fernet' },
+      { key: 'bcrypt', label: 'bcrypt' }, { key: 'sha256', label: 'SHA-256' }
+    ];
+    function decFormDefault() {
+      return { key: '', keyEnc: 'auto', iv: '', ivEnc: 'auto', mode: 'CBC', ivPrefix: true, tag: '', tagEnc: 'auto', aad: '', passphrase: '' };
+    }
+    async function buildDecodeSample(key) {
+      const enc = s => DEC_TE.encode(s), seq = (n, start) => Uint8Array.from({ length: n }, (_, i) => (start + i) & 255);
+      if (key === 'chain') {
+        const json = JSON.stringify({ user: 'demo', role: 'auditor', note: 'contoh data dummy', items: [1, 2, 3] });
+        return { text: encodeURIComponent(bytesToB64(await streamBytes(enc(json), new CompressionStream('gzip')))), note: tr('dec_smp_chain') };
+      }
+      if (key === 'jwt') {
+        const parts = [{ alg: 'HS256', typ: 'JWT' }, { sub: 'demo-user', name: 'Contoh Dummy', iat: 1700000000, exp: 1900000000 }].map(o => bytesToB64u(enc(JSON.stringify(o))));
+        return { text: parts.join('.') + '.' + bytesToB64u(enc('bukan-signature-asli')), note: tr('dec_smp_jwt') };
+      }
+      if (key === 'cryptojs') {
+        const pass = 'contoh-passphrase', salt = seq(8, 1), k = await evpKdf(enc(pass), salt, 'md5');
+        const ct = await aesCrypt('encrypt', 'CBC', k.key, k.iv, enc('{"pesan":"halo dari CryptoJS (contoh)"}'));
+        return { text: bytesToB64(concatBytes([SIG_SALTED, salt, ct].map(a => Uint8Array.from(a)))), note: dtr('dec_smp_pass', { p: pass }), form: { passphrase: pass } };
+      }
+      if (key === 'gcm') {
+        const k = seq(32, 0), iv = seq(12, 0xa0), ct = await aesCrypt('encrypt', 'GCM', k, iv, enc('{"demo":"AES-GCM","ok":true}'));
+        return { text: bytesToB64(concatBytes([iv, ct])), note: dtr('dec_smp_key', { k: toHex(k) }), form: { key: toHex(k), mode: 'GCM' } };
+      }
+      if (key === 'laravel') {
+        const k = enc('contoh-app-key-32-byte-demo-only'), iv = seq(16, 0x30), appKey = 'base64:' + bytesToB64(k);
+        const ivS = bytesToB64(iv), valS = bytesToB64(await aesCrypt('encrypt', 'CBC', k, iv, enc('s:13:"halo, Laravel";')));
+        const mac = toHex(await hmacSha256(k, enc(ivS + valS)));
+        return { text: bytesToB64(enc(JSON.stringify({ iv: ivS, value: valS, mac, tag: '' }))), note: dtr('dec_smp_appkey', { k: appKey }), form: { key: appKey } };
+      }
+      if (key === 'fernet') {
+        const k = enc('contoh-fernet-key-32-byte-demo!!'), head = new Uint8Array(9);
+        head[0] = 0x80;
+        new DataView(head.buffer).setUint32(5, 1700000000);
+        const body = concatBytes([head, seq(16, 0x50), await aesCrypt('encrypt', 'CBC', k.slice(16), seq(16, 0x50), enc('halo dari Fernet (contoh)'))]);
+        const fkey = bytesToB64u(k, true);
+        return { text: bytesToB64u(concatBytes([body, await hmacSha256(k.slice(0, 16), body)]), true), note: dtr('dec_smp_fernet', { k: fkey }), form: { key: fkey } };
+      }
+      if (key === 'bcrypt') return { text: '$2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW', note: tr('dec_smp_bcrypt') };
+      return { text: toHex(await sha256(enc('contoh'))), note: tr('dec_smp_hash') };
+    }
+    // @@DECODE-END
+
+    // ============================================================
     //  Skrip "Hook tab lain": dipasang lewat console/bookmarklet DI TAB TARGET (bukan di sini).
     //  Menyadap fetch/XHR + SubtleCrypto.decrypt supaya request & hasil dekripsi asli terbaca
     //  apa adanya, sesaat setelah aplikasi target memanggilnya sendiri dengan key ephemeral-nya.
@@ -3038,6 +3965,7 @@
       { key: 'dast', label: 'DAST pasif (URL)' },
       { key: 'sast', label: 'SAST (Kode)' },
       { key: 'jwt', label: 'JWT Decode' },
+      { key: 'decode', label: 'Smart Decode' },
       { key: 'dbg', label: 'Hook Debug' },
       { key: 'rate', label: 'Rate Limiter (dari curl)' },
       { key: 'rto', label: 'RTO (kirim lambat)' }
@@ -3113,7 +4041,10 @@
           sastResults: [], sastDone: false,
           eolResults: [], eolBusy: false, eolDone: false,
           license: true, sbomBusy: false, appVersion: APP_VERSION,
-          editFields: ['project', 'name'], edit: { id: null, field: '', value: '' }, reupId: null
+          editFields: ['project', 'name'], edit: { id: null, field: '', value: '' }, reupId: null,
+          // Smart Decode: key/IV di form hanya di memori (tidak pernah ke localStorage)
+          dec: { input: '', busy: false, chains: [], error: '', copied: '', note: '', form: decFormDefault(), tries: [], tryBusy: false },
+          decSamples: DEC_SAMPLES, decEncs: ['auto', 'hex', 'base64', 'utf8'], decModes: ['CBC', 'GCM', 'CTR', 'ECB']
         };
       },
       computed: {
@@ -3154,6 +4085,19 @@
         activeItems() { return this.items.filter(it => it.enabled); },
         allEnabled() { return this.items.length > 0 && this.activeItems.length === this.items.length; },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
+        // Target dekripsi = temuan kripto pertama pada rantai input (bukan rantai hasil dekripsi).
+        decTarget() {
+          const c = this.dec.chains[0], s = c && c.steps.find(x => x.crypto);
+          return s ? s.crypto : null;
+        },
+        decFields() {
+          const t = this.decTarget, m = this.dec.form.mode;
+          if (!t) return [];
+          if (t.type === 'cryptojs') return ['passphrase'];
+          if (t.type !== 'aes') return ['key'];
+          return ['key', 'mode', ...(m === 'ECB' ? [] : ['iv']), ...(m === 'GCM' ? ['tag', 'aad'] : [])];
+        },
+        decReady() { return !!(this.decTarget && (this.decTarget.type === 'cryptojs' ? this.dec.form.passphrase : this.dec.form.key.trim())); },
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
       },
       created() {
@@ -3181,10 +4125,82 @@
         } catch (e) { /* data rusak / localStorage tidak tersedia: mulai kosong */ }
       },
       watch: {
-        items: { deep: true, handler() { this.saveItems(); } }
+        items: { deep: true, handler() { this.saveItems(); } },
+        // Deteksi otomatis saat ketik/tempel (debounce 300 ms).
+        'dec.input'() {
+          clearTimeout(this.decTimer);
+          this.decTimer = setTimeout(() => { this.runDecode(); }, 300);
+        }
       },
       methods: {
         log(m) { this.logs.push(m); },
+        // ---- Smart Decode
+        tipOf(key) { return tips()[this.t(key)] || ''; },
+        decConfClass(c) { return c === 'high' ? 'okp' : c === 'med' ? 'medp' : 'errp'; },
+        decHas(f) { return this.decFields.includes(f); },
+        // Blob URL untuk langkah berjenis file (unduh); dicabut saat rantai diganti.
+        decChain(title, steps) {
+          const urls = [];
+          steps.forEach(s => {
+            if (!s.file) return;
+            s.fileUrl = URL.createObjectURL(new Blob([s.bytes], { type: s.file.mime }));
+            s.fileName = 'decoded.' + s.file.ext;
+            urls.push(s.fileUrl);
+          });
+          return { title, steps, urls };
+        },
+        setDecChains(chains) {
+          this.dec.chains.forEach(ch => { if (!chains.includes(ch)) ch.urls.forEach(u => URL.revokeObjectURL(u)); });
+          this.dec.chains = Vue.markRaw(chains);
+        },
+        async runDecode() {
+          const id = (this.decRunId = (this.decRunId || 0) + 1), d = this.dec, input = d.input;
+          d.error = ''; d.tries = [];
+          if (!input.trim()) { this.setDecChains([]); d.busy = false; return; }
+          d.busy = true;
+          try {
+            const steps = await smartDecode(input);
+            if (id !== this.decRunId) return;
+            this.setDecChains([this.decChain('', steps)]);
+            const t = this.decTarget;
+            if (t && t.type === 'aes') d.form.mode = t.mode;
+          } catch (e) {
+            if (id === this.decRunId) d.error = dtr('dec_err_generic', { e: (e && e.message) || e });
+          } finally {
+            if (id === this.decRunId) d.busy = false;
+          }
+        },
+        clearDecode() { this.dec.input = ''; this.dec.note = ''; this.dec.form = decFormDefault(); },
+        async loadDecSample(key) {
+          try {
+            const s = await buildDecodeSample(key);
+            this.dec.form = Object.assign(decFormDefault(), s.form || {});
+            this.dec.note = s.note || '';
+            this.dec.input = s.text;
+          } catch (e) { this.dec.error = dtr('dec_err_generic', { e: (e && e.message) || e }); }
+        },
+        copyDec(s, id) {
+          const done = () => { this.dec.copied = id; setTimeout(() => { if (this.dec.copied === id) this.dec.copied = ''; }, 2000); };
+          const p = navigator.clipboard ? navigator.clipboard.writeText(s.copyText) : Promise.reject(new Error('clipboard'));
+          p.then(done).catch(() => { this.dec.error = tr('clip_fail'); });
+        },
+        // Dekripsi (satu variasi / semua); hasil pertama yang valid diumpankan lagi ke detektor.
+        async decRun(all) {
+          const t = this.decTarget, d = this.dec, runId = this.decRunId;
+          if (!t) return;
+          d.tryBusy = true; d.tries = []; d.error = '';
+          try {
+            const res = await decryptTarget(t, { ...d.form }, all);
+            if (runId !== this.decRunId) return;
+            d.tries = res.map(r => ({ label: r.label, ok: r.ok, msg: r.msg, note: r.note }));
+            const win = res.find(r => r.ok), head = d.chains.slice(0, 1);
+            this.setDecChains(win ? [...head, this.decChain(dtr('dec_chain_title', { v: win.label }), await smartDecode(win.bytes))] : head);
+          } catch (e) {
+            d.error = dtr('dec_err_generic', { e: (e && e.message) || e });
+          } finally {
+            d.tryBusy = false;
+          }
+        },
         // Terjemahan teks UI; fallback ke Indonesia bila key belum ada di bahasa aktif.
         t(key) { return (I18N[this.lang] && I18N[this.lang][key]) || I18N.id[key] || key; },
         applyTheme() {
