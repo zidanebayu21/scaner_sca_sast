@@ -668,7 +668,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.6';
+    const APP_VERSION = '1.7';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -4239,7 +4239,9 @@
       if (okExt) return;
       ctx.find(det.exec || det.script ? 'HIGH' : 'MEDIUM', det.exec || det.script ? 'fi_s_disguised' : 'fi_s_mismatch', { x: ext || tr('fi_none'), y: show });
     }
-    const POLYGLOT_RE = /<\?php|<script[\s>]|<%@?\s|eval\s*\(\s*(base64_decode|gzinflate|atob)\s*\(/i;
+    // Pola sengaja panjang/berkonteks: data terkompresi/terenkripsi (FLAC, MP4, PDF terenkripsi) berisi byte acak,
+    // sehingga token pendek seperti "<%" atau "<script>" bisa muncul kebetulan (false positive).
+    const POLYGLOT_RE = /<\?php[\s/]|<script[\s>][^\0]{0,2000}?<\/script>|<%@\s*(page|language|import)\b|<%=?\s*(eval|execute|response\.write|request[.([])|\b(eval|assert)\s*\(\s*(base64_decode|gzinflate|str_rot13|atob)\s*\(|\b(system|shell_exec|passthru)\s*\(\s*\$_(GET|POST|REQUEST)/i;
     function fiPolyglot(ctx) {
       if (ctx.r.det.text || ['zip', 'gz', 'bz2', 'xz', '7z', 'rar', 'pe', 'elf', 'macho', 'wasm', 'class', 'sqlite', 'ole', 'unknown'].includes(ctx.r.det.id)) return;
       const m = POLYGLOT_RE.exec(ctx.text);
