@@ -267,10 +267,13 @@
 
       <!-- DAST pasif -->
       <section v-else-if="tab === 'dast'">
-        <p class="muted">Masukkan URL situs publik (boleh beberapa, pisah spasi, maks 10). Hasil dibuka sebagai laporan HTML di tab baru: nilai MDN Observatory + analisis header respons (HSTS, CSP, cookie, dll.).</p>
+        <p class="muted">Masukkan URL situs publik (boleh beberapa, pisah spasi, maks 10). Hasil dibuka sebagai laporan HTML di tab baru: nilai MDN Observatory + analisis header respons (HSTS, CSP, cookie, dll.), plus info domain &amp; port pasif (DNS + Shodan InternetDB).</p>
         <div class="row">
           <input type="text" v-model="dastText" placeholder="https://unpkg.com  https://situs-anda.go.id" @keyup.enter="runDast" />
           <button class="btn" :disabled="dastBusy || !dastText.trim()" @click="runDast">{{ dastBusy ? 'Memeriksa...' : 'Cek & buka laporan' }}</button>
+        </div>
+        <div class="opts">
+          <label><input type="checkbox" v-model="dastNet" /> Tambahkan info domain &amp; port (DNS + Shodan InternetDB — port terbuka &amp; CVE diketahui, pasif tanpa nmap langsung)</label>
         </div>
         <div class="actions">
           <a v-if="dastUrl" class="btn blue" :href="dastUrl" target="_blank">Buka laporan lagi</a>
@@ -278,7 +281,7 @@
           <span class="bad" v-if="dastError">{{ dastError }}</span>
         </div>
         <div class="log" v-if="dastLogs.length"><div v-for="(l, i) in dastLogs" :key="i">{{ l }}</div></div>
-        <p class="muted">Pemeriksaan ini pasif (hanya membaca respons publik), bukan DAST aktif. Host lokal/internal/VPN tidak bisa dijangkau karena yang mengambil adalah layanan publik, bukan browser Anda. HackerTarget gratis dibatasi ±50 request per hari. Periksa hanya situs yang Anda miliki atau berwenang untuk diuji.</p>
+        <p class="muted">Pemeriksaan ini pasif (hanya membaca respons publik + basis data yang sudah ada), bukan DAST/nmap aktif — tidak ada paket yang dikirim ke target. Port &amp; CVE berasal dari Shodan InternetDB (hasil pindai Shodan sebelumnya) untuk IP hasil resolusi DNS; bisa tidak mutakhir. Host lokal/internal/VPN tidak terjangkau. HackerTarget gratis dibatasi ±50 request/hari. Periksa hanya situs yang Anda miliki atau berwenang untuk diuji.</p>
       </section>
 
       <!-- SAST -->
@@ -569,6 +572,8 @@
       { key: 'url', group: 'scrape', name: 'Link langsung', url: 'GET {link yang Anda masukkan}', use: 'Mengunduh file mentah dari URL lain (butuh CORS dari server tujuan).', sends: 'tidak ada', when: 'Link selain GitHub/GitLab' },
       { key: 'obs', group: 'dast', name: 'MDN HTTP Observatory', url: 'POST https://observatory-api.mdn.mozilla.net/api/v2/scan?host={host}', use: 'Nilai (A–F), skor, dan jumlah tes keamanan header yang lulus/gagal (CSP, HSTS, cookie, redirect, dll.).', sends: 'nama host situs (tanpa path)', when: 'Tab DAST pasif' },
       { key: 'ht', group: 'dast', name: 'HackerTarget — httpheaders', url: 'GET https://api.hackertarget.com/httpheaders/?q={url}', use: 'Mengambil header respons situs, lalu dianalisis di browser (HSTS, CSP, cookie, dll.). Batas gratis ±50 request/hari.', sends: 'URL yang dicek', when: 'Tab DAST pasif' },
+      { key: 'dns', group: 'dast', name: 'Google DNS-over-HTTPS', url: 'GET https://dns.google/resolve?name={host}&type={A,AAAA,MX,NS,TXT}', use: 'Resolusi DNS pasif: IP (A/AAAA), name server, MX, dan TXT domain.', sends: 'nama host/domain', when: 'Tab DAST pasif — opsi domain & port' },
+      { key: 'idb', group: 'dast', name: 'Shodan InternetDB', url: 'GET https://internetdb.shodan.io/{ip}', use: 'Data pasif per-IP: port terbuka, CVE diketahui, teknologi (CPE), dan tag — hasil pindai Shodan sebelumnya, bukan scan nmap langsung.', sends: 'alamat IP hasil resolusi DNS', when: 'Tab DAST pasif — opsi domain & port' },
       { key: 'cdn', group: 'app', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
       // T0D0: Sonatype dinonaktifkan (butuh proxy node, sedangkan aturan kontes hanya index.html). Buka komentar untuk mengaktifkan lagi.
     //  { key: 'sonatype', name: 'Sonatype Guide (via proxy lokal)', url: 'POST {proxy lokal}/component-report → https://api.guide.sonatype.com/api/v3/component-report', use: 'Data tambahan CVE, CWE, dan skor CVSS dari Sonatype. Butuh token pribadi dan proxy lokal karena server Sonatype memblokir akses langsung dari browser (CORS).', sends: 'PURL package (pkg:npm/nama@versi) + email/token di header Authorization (lewat proxy lokal, tidak disimpan proxy)', when: 'Opsi "Sonatype Guide" aktif (panel Sonatype)' }
@@ -2027,8 +2032,40 @@
       f.sort((a, b) => SEV_ORDER[b.sev] - SEV_ORDER[a.sev]);
       return f;
     }
-    async function dastCheck(raw, log) {
-      const res = { input: raw, error: '', findings: [], obs: null, obsErr: '', headers: null, hdrErr: '' };
+    // ---- Info domain & port (pasif, tanpa API key) ----
+    // DNS over HTTPS (Google) -> daftar nilai record untuk host+type.
+    const DNS_TYPE = { A: 1, AAAA: 28, MX: 15, NS: 2, TXT: 16 };
+    async function dohResolve(host, type) {
+      const res = await apiFetch('dns', 'https://dns.google/resolve?name=' + encodeURIComponent(host) + '&type=' + type);
+      if (!res.ok) throw new Error('DNS HTTP ' + res.status);
+      const j = await res.json();
+      return (j.Answer || []).filter(a => a.type === DNS_TYPE[type]).map(a => String(a.data).replace(/^"|"$/g, ''));
+    }
+    // Shodan InternetDB: data "mirip nmap" pasif untuk satu IP (port/CVE/CPE/tag)
+    // dari hasil pindai Shodan sebelumnya — bukan scan langsung. 404 = IP tak ada
+    // di basis data (dianggap bersih). Tanpa API key.
+    async function internetDb(ip) {
+      const res = await apiFetch('idb', 'https://internetdb.shodan.io/' + encodeURIComponent(ip));
+      if (res.status === 404) return { ports: [], vulns: [], cpes: [], tags: [], hostnames: [], empty: true };
+      if (!res.ok) throw new Error('InternetDB HTTP ' + res.status);
+      const j = await res.json();
+      return { ports: j.ports || [], vulns: j.vulns || [], cpes: j.cpes || [], tags: j.tags || [], hostnames: j.hostnames || [] };
+    }
+    async function netScan(host) {
+      const net = { ips: [], aaaa: [], mx: [], ns: [], txt: [], idb: null, idbErr: '', dnsErr: '' };
+      const [a, aaaa, mx, ns, txt] = await Promise.allSettled([
+        dohResolve(host, 'A'), dohResolve(host, 'AAAA'), dohResolve(host, 'MX'), dohResolve(host, 'NS'), dohResolve(host, 'TXT')
+      ]);
+      if (a.status === 'fulfilled') net.ips = a.value; else net.dnsErr = a.reason.message;
+      if (aaaa.status === 'fulfilled') net.aaaa = aaaa.value;
+      if (mx.status === 'fulfilled') net.mx = mx.value;
+      if (ns.status === 'fulfilled') net.ns = ns.value;
+      if (txt.status === 'fulfilled') net.txt = txt.value;
+      if (net.ips.length) { try { net.idb = await internetDb(net.ips[0]); } catch (e) { net.idbErr = friendlyFetchError(e); } }
+      return net;
+    }
+    async function dastCheck(raw, log, opts) {
+      const res = { input: raw, error: '', findings: [], obs: null, obsErr: '', headers: null, hdrErr: '', net: null };
       let u;
       try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { res.error = 'URL tidak valid'; return res; }
       if (u.protocol !== 'http:' && u.protocol !== 'https:') { res.error = 'Hanya http/https yang didukung'; return res; }
@@ -2039,12 +2076,45 @@
       if (o.status === 'fulfilled') res.obs = o.value; else res.obsErr = o.reason.message;
       if (h.status === 'fulfilled') { res.headers = h.value; res.findings = analyzeHeaders(u, h.value); } else res.hdrErr = h.reason.message;
       log('  Observatory: ' + (res.obs ? 'nilai ' + res.obs.grade + ' (' + res.obs.score + ')' : 'gagal — ' + res.obsErr) + ' · header: ' + (res.headers ? res.findings.length + ' temuan' : 'gagal — ' + res.hdrErr));
+      if (opts && opts.net) {
+        res.net = await netScan(res.host);
+        const idb = res.net.idb;
+        log('  DNS: ' + (res.net.ips.length ? res.net.ips.join(', ') : '-') + ' · port: ' + (idb ? (idb.empty ? 'tidak ada di InternetDB' : idb.ports.join(', ')) : 'gagal — ' + res.net.idbErr));
+      }
       return res;
     }
     const GRADE_COLOR = { A: '#16a34a', B: '#65a30d', C: '#d97706', D: '#ea580c', E: '#dc2626', F: '#7f1d1d' };
+    // Bagian "Domain & port (pasif)" per URL: hasil DNS + Shodan InternetDB.
+    function dastNetHtml(r) {
+      const n = r.net;
+      if (!n) return '';
+      let h = '<h3>Domain &amp; port (pasif)</h3>';
+      const rows = [];
+      if (n.ips.length) rows.push(['A (IPv4)', esc(n.ips.join(', '))]);
+      if (n.aaaa.length) rows.push(['AAAA (IPv6)', esc(n.aaaa.join(', '))]);
+      if (n.ns.length) rows.push(['NS', esc(n.ns.join(', '))]);
+      if (n.mx.length) rows.push(['MX', esc(n.mx.join(', '))]);
+      if (n.txt.length) rows.push(['TXT', n.txt.map(esc).join('<br>')]);
+      if (rows.length) h += '<table><tbody>' + rows.map(d => '<tr><td class="mono" style="width:110px">' + d[0] + '</td><td class="mono">' + d[1] + '</td></tr>').join('') + '</tbody></table>';
+      if (n.dnsErr) h += '<div class="note">Resolusi DNS gagal: ' + esc(n.dnsErr) + '</div>';
+      const idb = n.idb;
+      if (n.idbErr) h += '<div class="note">Shodan InternetDB gagal: ' + esc(n.idbErr) + '</div>';
+      else if (idb && idb.empty) h += '<p class="cap">IP <span class="mono">' + esc(n.ips[0]) + '</span> tidak ada di Shodan InternetDB — tidak ada port/CVE yang diketahui publik (indikasi baik).</p>';
+      else if (idb) {
+        h += '<p class="cap">Dari Shodan InternetDB untuk <span class="mono">' + esc(n.ips[0]) + '</span> — data <b>pasif</b> (sudah pernah dipindai Shodan, bukan nmap langsung):</p>';
+        h += '<div class="cards"><div class="card"><b>' + idb.ports.length + '</b><span>port terbuka</span></div>' +
+          '<div class="card ' + (idb.vulns.length ? 'h' : '') + '"><b>' + idb.vulns.length + '</b><span>CVE diketahui</span></div></div>';
+        if (idb.ports.length) h += '<p><b>Port:</b> <span class="mono">' + idb.ports.slice().sort((a, b) => a - b).join(', ') + '</span></p>';
+        if (idb.cpes.length) h += '<p><b>Teknologi (CPE):</b> <span class="mono">' + idb.cpes.map(esc).join(', ') + '</span></p>';
+        if (idb.tags.length) h += '<p><b>Tag:</b> <span class="mono">' + idb.tags.map(esc).join(', ') + '</span></p>';
+        if (idb.vulns.length) h += '<p><b>CVE:</b> ' + idb.vulns.map(v => '<a href="https://nvd.nist.gov/vuln/detail/' + esc(v) + '" target="_blank" rel="noopener noreferrer" class="mono">' + esc(v) + '</a>').join(', ') + '</p>';
+      }
+      return h;
+    }
     function buildDastReport(results) {
       const now = new Date().toLocaleString('id-ID');
-      let body = '<h1>Laporan DAST Pasif (cek header situs)</h1><div class="sub">Dibuat ' + esc(now) + ' · ' + results.length + ' URL · sumber: MDN HTTP Observatory, HackerTarget httpheaders</div>';
+      const srcNet = results.some(r => r.net) ? ', Google DoH, Shodan InternetDB' : '';
+      let body = '<h1>Laporan DAST Pasif (cek header situs)</h1><div class="sub">Dibuat ' + esc(now) + ' · ' + results.length + ' URL · sumber: MDN HTTP Observatory, HackerTarget httpheaders' + srcNet + '</div>';
       body += '<div class="note">Ini pemeriksaan <b>pasif</b>: hanya membaca header respons publik dan nilai dari Observatory. Bukan DAST aktif (tanpa spider, ajax, atau payload serangan). Untuk itu gunakan <span class="mono">scan_dast.ps1</span>.</div>';
       results.forEach(r => {
         body += '<h2>' + esc(r.url || r.input) + '</h2>';
@@ -2073,6 +2143,7 @@
           }
           body += '<details style="margin-top:10px"><summary>Header respons mentah (' + r.headers.raw.length + ' baris)</summary><pre>' + esc(r.headers.raw.join('\n')) + '</pre></details>';
         } else body += '<div class="note">Pengambilan header gagal: ' + esc(r.hdrErr) + '</div>';
+        body += dastNetHtml(r);
       });
       const used = API_LIST.filter(a => a.group === 'dast' && apiStats[a.key].calls);
       body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
@@ -2724,7 +2795,7 @@
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
           lang: detectLang(), theme: detectTheme(),
           tabList: TAB_LIST, visibleTabs: {},
-          apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
+          apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
           hookCopied: false, hookMsg: '',
           rl: { curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
@@ -2967,7 +3038,7 @@
           const log = m => this.dastLogs.push(m);
           try {
             const results = [];
-            for (const l of links) results.push(await dastCheck(l, log));
+            for (const l of links) results.push(await dastCheck(l, log, { net: this.dastNet }));
             const html = buildDastReport(results);
             if (this.dastUrl) URL.revokeObjectURL(this.dastUrl);
             this.dastUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
