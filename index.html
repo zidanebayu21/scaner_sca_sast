@@ -82,7 +82,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.41</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.42</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -307,7 +307,7 @@
       <!-- Hook Debug -->
       <section v-else-if="tab === 'dbg'">
         <h2 style="margin-top:0">Hook tab lain (live, mudah dibaca)</h2>
-        <p class="muted">Seperti Postman, mencatat tiap request fetch/XHR saat Anda memakai aplikasi target seperti biasa — <b>bekerja untuk endpoint biasa maupun yang terenkripsi</b>. Tiap entri menampilkan <b>method, URL, header request, body, status, dan header response</b>; untuk endpoint ber-enkripsi sekali pakai per-request (ECDH ephemeral) juga ditampilkan <b>payload sebelum dienkripsi</b> (sadapan <code>crypto.subtle.encrypt</code>) dan hasil dekripsi response (sadapan <code>crypto.subtle.decrypt</code>) — berguna karena curl lama tak bisa dipakai ulang (kunci hanya hidup sesaat di memori tab). Karena merekam semua panggilan, panel ini sekaligus seperti <b>crawler</b>: tombol <b>export json</b> mengunduh seluruh daftar (link, method, header, body, status) sebagai satu file JSON.</p>
+        <p class="muted">Seperti Postman, mencatat tiap request fetch/XHR saat Anda memakai aplikasi target seperti biasa — <b>bekerja untuk endpoint biasa maupun yang terenkripsi</b>. Tiap entri menampilkan <b>method, URL, header request, body, status, dan header response</b>; untuk endpoint ber-enkripsi sekali pakai per-request (ECDH ephemeral) juga ditampilkan <b>payload sebelum dienkripsi</b> (sadapan <code>crypto.subtle.encrypt</code>) dan hasil dekripsi response (sadapan <code>crypto.subtle.decrypt</code>) — berguna karena curl lama tak bisa dipakai ulang (kunci hanya hidup sesaat di memori tab). Karena merekam semua panggilan, panel ini sekaligus seperti <b>crawler</b>: request berulang ke <b>method + URL yang sama digabung</b> jadi satu entri dengan penghitung <code>×N</code> (tidak dobel), dan tombol <b>export json</b> mengunduh seluruh daftar unik (link, method, header, body, status, jumlah hit) sebagai satu file JSON.</p>
         <ol class="muted" style="margin:0 0 10px 18px;padding:0">
           <li>Buka tab aplikasi target, tekan F12 → tab <b>Console</b>, tempel skrip di bawah lalu Enter.</li>
           <li>Atau seret tombol <b>🪝 Hoox</b> ke bilah bookmark sekali saja; setelah itu tinggal klik dari bilah bookmark saat berada di tab target, bisa dipakai berkali-kali tanpa buka Console.</li>
@@ -2147,9 +2147,9 @@
       '  var title = document.createElement("b"); title.textContent = "API Hook"; title.style.flex = "1";',
       '  var body = document.createElement("div");',
       '  Object.assign(body.style, { overflow: "auto", padding: "8px 10px", flex: "1" });',
-      '  var entries = [], records = [];',
+      '  var entries = [], uniq = [], byKey = {};',
       '  var exportBtn = mkBtn("export json", function () {',
-      '    var data = records.map(function (r) { return { method: r.method, url: r.url, reqHeaders: r.reqHeaders || {}, reqBody: bodyToText(r.reqBody), reqPlain: r.reqPlain || null, status: r.status != null ? r.status : null, resHeaders: r.resHeaders || {}, plain: r.plain || null, resBody: r.resBody != null ? r.resBody : null, resend: !!r.resend }; });',
+      '    var data = uniq.map(function (w) { var r = w.rec; return { method: r.method, url: r.url, hits: w.count, reqHeaders: r.reqHeaders || {}, reqBody: bodyToText(r.reqBody), reqPlain: r.reqPlain || null, status: r.status != null ? r.status : null, resHeaders: r.resHeaders || {}, plain: r.plain || null, resBody: r.resBody != null ? r.resBody : null, resend: !!r.resend }; });',
       '    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });',
       '    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "api-hook-" + location.hostname + "-" + Date.now() + ".json";',
       '    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);',
@@ -2160,7 +2160,7 @@
       '    entries.forEach(function (en) { en.pre.style.display = open ? "block" : "none"; en.arrow.textContent = open ? String.fromCharCode(9662) : String.fromCharCode(9656); });',
       '    expandBtn.textContent = open ? "tutup semua" : "buka semua";',
       '  });',
-      '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); entries.length = 0; records.length = 0; count = 0; expandBtn.textContent = "buka semua"; });',
+      '  var clearBtn = mkBtn("bersihkan", function () { while (body.firstChild) body.removeChild(body.firstChild); entries.length = 0; uniq.length = 0; byKey = {}; count = 0; expandBtn.textContent = "buka semua"; });',
       '  var minimized = false, prevHeight = "";',
       '  var minBtn = mkBtn(String.fromCharCode(8211), function () {',
       '    minimized = !minimized;',
@@ -2240,6 +2240,14 @@
       '    return ov;',
       '  }',
       '  function addEntry(rec) {',
+      '    var key = rec.method + " " + rec.url;',
+      '    var ex = byKey[key];',
+      '    if (ex) {',
+      '      ex.count++; ex.rec = rec; rec.slot = ex.pre;',
+      '      ex.titleEl.textContent = ex.label + " \\u00d7" + ex.count;',
+      '      body.insertBefore(ex.box, body.firstChild);',
+      '      return ex.pre;',
+      '    }',
       '    count++;',
       '    var box = document.createElement("div");',
       '    Object.assign(box.style, { marginBottom: "6px", borderRadius: "6px", border: "1px solid #1e293b", overflow: "hidden" });',
@@ -2248,7 +2256,8 @@
       '    var arrow = document.createElement("span"); arrow.textContent = String.fromCharCode(9656); arrow.style.flexShrink = "0";',
       '    var titleEl = document.createElement("span");',
       '    Object.assign(titleEl.style, { flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" });',
-      '    titleEl.textContent = "#" + count + (rec.resend ? " \\u21bb " : " ") + rec.method + " " + String(rec.url).replace(location.origin, "");',
+      '    var label = "#" + count + (rec.resend ? " \\u21bb " : " ") + rec.method + " " + String(rec.url).replace(location.origin, "");',
+      '    titleEl.textContent = label;',
       '    var pre = document.createElement("pre");',
       '    Object.assign(pre.style, { whiteSpace: "pre-wrap", wordBreak: "break-all", margin: "0", padding: "8px", color: "#94a3b8", background: "#0b1220", display: "none" });',
       '    pre.textContent = "menunggu" + String.fromCharCode(8230);',
@@ -2276,7 +2285,8 @@
       '    box.append(h, pre);',
       '    body.insertBefore(box, body.firstChild);',
       '    entries.push({ pre: pre, arrow: arrow });',
-      '    records.push(rec);',
+      '    byKey[key] = { box: box, pre: pre, titleEl: titleEl, label: label, count: 1, rec: rec };',
+      '    uniq.push(byKey[key]);',
       '    rec.slot = pre;',
       '    return pre;',
       '  }',
