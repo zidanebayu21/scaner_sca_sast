@@ -103,7 +103,7 @@
   <div id="app">
     <header>
       <div>
-        <h1>Scanner Security <span class="ver" title="v1.1">1.1</span></h1>
+        <h1>Scanner Security <span class="ver" title="v1.2">1.2</span></h1>
         <p>{{ t('tagline') }}</p>
       </div>
       <div class="topbar">
@@ -259,6 +259,33 @@
         </div>
         <div class="log" v-if="logs.length"><div v-for="(l, i) in logs" :key="i">{{ l }}</div></div>
         <p class="muted" v-html="t('sca_sources')"></p>
+      </section>
+
+      <!-- EOL runtime/framework -->
+      <section v-else-if="tab === 'eol'">
+        <h2 style="margin-top:0">{{ t('eol_title') }}</h2>
+        <p class="muted" v-html="t('eol_intro')"></p>
+        <div class="actions">
+          <button class="btn" :disabled="eolBusy || !activeItems.length" @click="runEol">{{ eolBusy ? t('eol_checking') : t('eol_btn') }}</button>
+          <span class="muted" v-if="!activeItems.length">{{ t('eol_nofiles') }}</span>
+        </div>
+        <div class="muted" v-if="eolDone && !eolResults.length">{{ t('eol_nocomp') }}</div>
+        <table v-if="eolResults.length">
+          <thead><tr><th>{{ t('th_project') }}</th><th>{{ t('eol_comp') }}</th><th>{{ t('eol_ver') }}</th><th>{{ t('eol_status') }}</th><th>{{ t('eol_detail') }}</th><th>{{ t('lic_col') }}</th><th>{{ t('lic_allow') }}</th><th>{{ t('lic_limit') }}</th></tr></thead>
+          <tbody>
+            <tr v-for="(r, i) in eolResults" :key="i">
+              <td>{{ r.project }}</td>
+              <td>{{ r.label }}<div class="muted" style="font-size:11px">{{ r.file }}<span v-if="r.from"> · {{ r.from }}</span></div></td>
+              <td>{{ r.ver }}</td>
+              <td :class="eolClass(r.status)">{{ eolStatusText(r.status) }}</td>
+              <td class="muted">{{ eolDetail(r) }}</td>
+              <td>{{ r.license || '—' }}</td>
+              <td class="ok" style="font-size:12px">{{ licAllow(r) }}</td>
+              <td class="muted" style="font-size:12px">{{ licLimit(r) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="muted" style="margin-top:10px" v-html="t('eol_note')"></p>
       </section>
 
       <!-- DAST pasif -->
@@ -557,7 +584,7 @@
       { key: 'osv-vuln', group: 'sca', name: 'OSV.dev — detail advisory', url: 'GET https://api.osv.dev/v1/vulns/{id}', use: 'Severity, CWE, ringkasan, dan versi perbaikan per advisory.', sends: 'ID advisory (GHSA-…, ALPINE-CVE-…)', when: 'Selalu bila ada temuan' },
       { key: 'epss', group: 'sca', name: 'FIRST — EPSS', url: 'GET https://api.first.org/data/v1/epss?cve=…', use: 'Probabilitas sebuah CVE dieksploitasi.', sends: 'ID CVE', when: 'Opsi "EPSS & CISA KEV"' },
       { key: 'kev', group: 'sca', name: 'CISA KEV (mirror GitHub)', url: 'GET https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json', use: 'Daftar CVE yang sudah dieksploitasi di dunia nyata.', sends: 'tidak ada (hanya mengunduh daftar)', when: 'Opsi "EPSS & CISA KEV"' },
-      { key: 'eol', group: 'docker', name: 'endoflife.date', url: 'GET https://endoflife.date/api/{produk}.json', use: 'Status EOL base image (Node, Python, Alpine, Debian, …).', sends: 'nama produk, mis. nodejs', when: 'Scan Dockerfile' },
+      { key: 'eol', group: 'docker', name: 'endoflife.date', url: 'GET https://endoflife.date/api/{produk}.json', use: 'Status EOL base image Docker dan runtime/framework (Node, Go, .NET, PHP, Angular, Vue, Laravel, …).', sends: 'nama produk, mis. nodejs', when: 'Scan Dockerfile & tab EOL' },
       { key: 'gh-api', group: 'scrape', name: 'GitHub REST API', url: 'GET https://api.github.com/repos/{owner}/{repo}[/git/trees/{ref}]', use: 'Mencari file yang bisa dipindai di repo GitHub.', sends: 'owner/repo, branch; token bila diisi', when: 'Ambil dari link GitHub' },
       { key: 'gh-raw', group: 'scrape', name: 'GitHub raw', url: 'GET https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}', use: 'Mengunduh isi file dari repo publik.', sends: 'path file', when: 'Ambil dari link GitHub (publik)' },
       { key: 'gl-api', group: 'scrape', name: 'GitLab REST API', url: 'GET https://gitlab.com/api/v4/projects/{path}/repository/…', use: 'Daftar dan isi file repo GitLab.', sends: 'path proyek, branch; token bila diisi', when: 'Ambil dari link GitLab' },
@@ -1275,6 +1302,98 @@
       if (d <= now) return { status: 'eol', cycle: hit.cycle, latest: hit.latest, note: 'EOL sejak ' + eol };
       const days = Math.round((d - now) / 86400000);
       return { status: days < 180 ? 'soon' : 'ok', cycle: hit.cycle, latest: hit.latest, note: 'EOL ' + eol + ' (' + days + ' hari lagi)' };
+    }
+
+    // ============================================================
+    //  Cek EOL runtime & framework dari file package (endoflife.date).
+    //  Kategori: Insecure Deployment — Unpatched Application
+    //  (OWASP A06:2021 Vulnerable & Outdated Components; CWE-1104 Use of
+    //  Unmaintained Third Party Components). Runtime/framework yang sudah EOL
+    //  tidak lagi menerima patch keamanan.
+    // ============================================================
+    function cleanVer(s) { const m = rx1(/(\d+(?:\.\d+)*)/g, String(s)); return m ? m[1] : ''; }
+    const EOL_RANK = { eol: 3, soon: 2, unknown: 1, ok: 0, loading: 0 };
+    // Lisensi tiap runtime/framework (SPDX) + ringkasan hak (boleh) dan batasan.
+    // Ringkasan mengikuti kategori choosealicense.com (permissions/conditions/limitations).
+    const COMPONENT_LICENSE = {
+      nodejs: 'MIT', go: 'BSD-3-Clause', dotnet: 'MIT', dotnetfx: 'Proprietary', php: 'PHP-3.01',
+      angular: 'MIT', vue: 'MIT', laravel: 'MIT', symfony: 'MIT', nextjs: 'MIT', nuxt: 'MIT', django: 'BSD-3-Clause', rails: 'MIT'
+    };
+    const LICENSE_INFO = {
+      'MIT': { allow: ['commercial', 'modify', 'distribute', 'private'], limit: ['keep-copyright', 'no-warranty'] },
+      'Apache-2.0': { allow: ['commercial', 'modify', 'distribute', 'private', 'patent'], limit: ['keep-copyright', 'state-changes', 'no-trademark', 'no-warranty'] },
+      'BSD-3-Clause': { allow: ['commercial', 'modify', 'distribute', 'private'], limit: ['keep-copyright', 'no-endorsement', 'no-warranty'] },
+      'BSD-2-Clause': { allow: ['commercial', 'modify', 'distribute', 'private'], limit: ['keep-copyright', 'no-warranty'] },
+      'PHP-3.01': { allow: ['commercial', 'modify', 'distribute', 'private'], limit: ['keep-copyright', 'name-restriction', 'no-warranty'] },
+      'GPL-3.0': { allow: ['commercial', 'modify', 'distribute', 'private', 'patent'], limit: ['disclose-source', 'same-license', 'state-changes', 'keep-copyright', 'no-warranty'] },
+      'LGPL-3.0': { allow: ['commercial', 'modify', 'distribute', 'private', 'patent'], limit: ['disclose-source', 'same-license-lib', 'state-changes', 'keep-copyright', 'no-warranty'] },
+      'MPL-2.0': { allow: ['commercial', 'modify', 'distribute', 'private', 'patent'], limit: ['disclose-source-file', 'keep-copyright', 'no-trademark', 'no-warranty'] },
+      'Proprietary': { allow: ['private'], limit: ['no-redistribute', 'vendor-terms', 'no-warranty'] }
+    };
+    // Framework (dari daftar package) -> slug endoflife.date.
+    const FRAMEWORK_MAP = {
+      '@angular/core': { slug: 'angular', label: 'Angular' }, 'vue': { slug: 'vue', label: 'Vue' },
+      'laravel/framework': { slug: 'laravel', label: 'Laravel' }, 'symfony/symfony': { slug: 'symfony', label: 'Symfony' },
+      'next': { slug: 'nextjs', label: 'Next.js' }, 'nuxt': { slug: 'nuxt', label: 'Nuxt' },
+      'django': { slug: 'django', label: 'Django' }, 'rails': { slug: 'rails', label: 'Ruby on Rails' }
+    };
+    // Versi runtime level-manifest (hilang setelah dipadatkan, jadi diambil saat impor).
+    function extractRuntimes(type, name, text) {
+      const out = [], n = String(name).toLowerCase();
+      try {
+        if (type === 'npm-pkg') {
+          const node = (JSON.parse(text).engines || {}).node;
+          if (node) out.push({ slug: 'nodejs', ver: cleanVer(node), label: 'Node.js', from: 'engines.node' });
+        }
+        if (n.endsWith('.nvmrc')) { const v = cleanVer(text); if (v) out.push({ slug: 'nodejs', ver: v, label: 'Node.js', from: '.nvmrc' }); }
+        if (type === 'go-mod') { const m = rx1(/^go\s+(\d+(?:\.\d+)*)/gm, text); if (m) out.push({ slug: 'go', ver: m[1], label: 'Go', from: 'go.mod' }); }
+        if (type === 'composer') {
+          const j = JSON.parse(text), php = (j.require && j.require.php) || (((j.config || {}).platform || {}).php);
+          if (php) out.push({ slug: 'php', ver: cleanVer(php), label: 'PHP', from: 'composer: php' });
+        }
+        if (type === 'nuget-proj') {
+          [...String(text).matchAll(/<TargetFrameworks?>([^<]+)<\/TargetFrameworks?>/gi)].forEach(mm => {
+            mm[1].split(';').forEach(raw => {
+              const tf = raw.trim().toLowerCase();
+              if (!tf || tf.indexOf('netstandard') === 0) return;
+              if (tf.indexOf('netcoreapp') === 0) out.push({ slug: 'dotnet', ver: cleanVer(tf), label: '.NET Core', from: tf });
+              else if (/^net\d+\.\d+/.test(tf)) out.push({ slug: 'dotnet', ver: cleanVer(tf), label: '.NET', from: tf });
+              else { const fw = rx1(/^net(\d)(\d+)$/g, tf); if (fw) out.push({ slug: 'dotnetfx', ver: fw[1] + '.' + fw[2], label: '.NET Framework', from: tf }); }
+            });
+          });
+        }
+      } catch (e) { /* manifest tidak terparse: lewati */ }
+      return out.filter(x => x.ver);
+    }
+    function itemPackages(it) {
+      try { return it.compact ? expandCompact(it.text) : (PARSERS[it.type] ? PARSERS[it.type](it.text) : []); }
+      catch (e) { return []; }
+    }
+    function frameworksOf(it) {
+      const out = [];
+      itemPackages(it).forEach(p => {
+        const fw = FRAMEWORK_MAP[String(p.name).toLowerCase()];
+        if (fw && p.version) out.push({ slug: fw.slug, label: fw.label, ver: cleanVer(p.version), from: p.name });
+      });
+      return out;
+    }
+    // Versi struktur-data dari checkEol untuk tab EOL (status + data mentah, agar bisa dilokalkan).
+    async function eolCheck(slug, ver) {
+      if (!eolCache[slug]) eolCache[slug] = apiFetch('eol', 'https://endoflife.date/api/' + slug + '.json').then(r => r.ok ? r.json() : []).catch(() => []);
+      const cycles = await eolCache[slug];
+      if (!cycles.length) return { status: 'unknown' };
+      const parts = String(ver).split('.');
+      let hit = null;
+      for (const n of [3, 2, 1]) { const key = parts.slice(0, n).join('.'); hit = cycles.find(c => String(c.cycle) === key); if (hit) break; }
+      if (!hit) hit = cycles.find(c => String(c.cycle).startsWith(parts[0] + '.'));
+      if (!hit) return { status: 'unknown' };
+      const eol = hit.eol;
+      if (eol === false || eol == null) return { status: 'ok', cycle: hit.cycle, latest: hit.latest, eol: null };
+      if (eol === true) return { status: 'eol', cycle: hit.cycle, latest: hit.latest, eol: true };
+      const d = new Date(eol), now = new Date();
+      if (d <= now) return { status: 'eol', cycle: hit.cycle, latest: hit.latest, eol: eol };
+      const days = Math.round((d - now) / 86400000);
+      return { status: days < 180 ? 'soon' : 'ok', cycle: hit.cycle, latest: hit.latest, eol: eol, days: days };
     }
 
     // paket yang di-install lewat RUN
@@ -2687,6 +2806,7 @@
     const TABS_KEY = 'scaVisibleTabs';
     const TAB_LIST = [
       { key: 'sca', label: 'SCA & Dockerfile' },
+      { key: 'eol', label: 'EOL runtime/framework' },
       { key: 'dast', label: 'DAST pasif (URL)' },
       { key: 'sast', label: 'SAST (Kode)' },
       { key: 'jwt', label: 'JWT Decode' },
@@ -2780,7 +2900,8 @@
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
-          sastResults: [], sastDone: false
+          sastResults: [], sastDone: false,
+          eolResults: [], eolBusy: false, eolDone: false
         };
       },
       computed: {
@@ -3009,6 +3130,35 @@
         },
         grpText(g, f) { return trData('grp_' + g.key + '_' + f, g[f]); },
         apiText(a, f) { return trData('api_' + a.key + '_' + f, a[f]); },
+        async runEol() {
+          this.eolBusy = true; this.eolDone = false; this.eolResults = [];
+          const seen = new Set(), rows = [];
+          for (const it of this.activeItems) {
+            [...(it.runtimes || []), ...frameworksOf(it)].forEach(c => {
+              if (!c.ver) return;
+              const key = it.project + '|' + c.slug + '|' + c.ver;
+              if (seen.has(key)) return;
+              seen.add(key);
+              rows.push({ project: it.project, file: it.name, slug: c.slug, label: c.label, ver: c.ver, from: c.from || '', license: COMPONENT_LICENSE[c.slug] || '', status: 'loading' });
+            });
+          }
+          this.eolResults = rows;
+          await pool(rows, 4, async row => { Object.assign(row, await eolCheck(row.slug, row.ver)); });
+          rows.sort((a, b) => EOL_RANK[b.status] - EOL_RANK[a.status]);
+          this.eolDone = true; this.eolBusy = false;
+        },
+        eolClass(s) { return s === 'eol' ? 'sev-HIGH' : s === 'soon' ? 'sev-MEDIUM' : s === 'ok' ? 'ok' : 'muted'; },
+        licAllow(r) { const L = LICENSE_INFO[r.license]; return L ? L.allow.map(c => tr('lic_' + c)).join(', ') : '—'; },
+        licLimit(r) { const L = LICENSE_INFO[r.license]; return L ? L.limit.map(c => tr('lic_' + c)).join(', ') : '—'; },
+        eolStatusText(s) { return tr('eol_s_' + s); },
+        eolDetail(r) {
+          if (r.status === 'loading') return '…';
+          if (r.status === 'unknown') return tr('eol_d_unknown');
+          const latest = r.latest ? ' · ' + tr('eol_latest') + ' ' + r.latest : '';
+          if (r.status === 'eol') return tr('eol_d_eol') + (r.eol && r.eol !== true ? ' (' + r.eol + ')' : '') + latest;
+          if (r.status === 'soon') return tr('eol_d_soon').replace('{d}', r.days != null ? r.days : '?') + (r.eol ? ' (' + r.eol + ')' : '') + latest;
+          return tr('eol_d_ok') + latest;
+        },
         async runDast() {
           const links = this.dastText.split(/[\s,]+/).filter(Boolean).slice(0, 10);
           if (!links.length) return;
@@ -3058,7 +3208,8 @@
           const proj = (project || this.project).trim() || projectFromContent(type, text) || DEFAULT_PROJECT;
           const same = x => x.project.toLowerCase() === proj.toLowerCase() && x.name.toLowerCase() === name.toLowerCase();
           const old = this.items.find(same);
-          const fresh = { id: old ? old.id : this.nextId++, project: proj, name, type, ...toStoredForm(type, text), enabled: old ? old.enabled : true };
+          const runtimes = extractRuntimes(type, name, text); // ditangkap sebelum dipadatkan (cek EOL)
+          const fresh = { id: old ? old.id : this.nextId++, project: proj, name, type, ...toStoredForm(type, text), runtimes, enabled: old ? old.enabled : true };
           if (old) Object.assign(old, fresh); else this.items.push(fresh);
         },
         // Yang sudah tersimpan diprioritaskan; file baru yang tidak muat tetap dipakai di sesi ini tetapi hilang saat halaman dimuat ulang.
