@@ -103,14 +103,14 @@ window.APP_I18N = {
         rate_hint_all: 'Semua {n} request gagal terhubung. ', rate_hint_all2: 'Untuk endpoint yang butuh cookie sesi atau diblokir CORS, pakai Opsi 2 (skrip same-origin) di bawah.', rate_hint_some: '{e} dari {n} request gagal — ',
         rto_hint_all: 'Semua {n} percobaan gagal terhubung. ', rto_hint_all2: 'Streaming upload butuh HTTPS/HTTP-2 + izin CORS; untuk endpoint yang butuh cookie atau diblokir CORS, pakai Opsi 2.', rto_hint_some: '{e} dari {n} percobaan gagal — ',
         log_grade: 'nilai ', log_fail_dash: 'gagal — ', log_findings: ' temuan', log_idb_empty: 'tidak ada di InternetDB',
-        rep_h1: 'Laporan Scan SCA & Dockerfile', rep_created: 'Dibuat', rep_files: 'file', rep_source: 'sumber', rep_sona_active: 'Sonatype Guide aktif', rep_omitdev: 'devDependencies diabaikan',
+        rep_h1: 'Laporan Scan SCA & Dockerfile', rep_created: 'Dibuat', rep_files: 'file', rep_source: 'sumber', rep_omitdev: 'devDependencies diabaikan',
         rep_api_title: 'API publik yang dipanggil', rep_dl_csv: 'Unduh CSV', rep_report_title: 'Laporan Scan SCA', rep_fail_process: 'Gagal diproses: ', rep_unique_pkg: 'package unik', rep_skipped_dev: 'dilewati (dev)',
         rep_note_osv: 'Sumber CVE/CWE: data OSV (GHSA dan alias NVD). Temuan yang hanya ada di database berbayar/privat (mis. Sonatype) tidak ikut; untuk itu gunakan <span class="mono">scan_sca.ps1</span>.',
         rep_th_no: 'No', rep_th_package: 'Package', rep_th_installed: 'Terpasang → Update ke', rep_th_bump: 'Jenis', rep_th_sev: 'Tingkat', rep_th_cve: 'CVE', rep_th_cwe: 'CWE', rep_th_adv: 'Advisory', rep_th_epss: 'EPSS', rep_th_kev: 'KEV', rep_th_scope: 'Tipe',
         rep_th_line: 'Baris', rep_th_stage: 'Stage', rep_th_image: 'Image', rep_th_tag: 'Tag', rep_th_support: 'Status dukungan (endoflife.date)', rep_th_rule: 'Aturan', rep_th_detail: 'Detail', rep_th_suggestion: 'Saran',
         rep_th_group: 'Kelompok', rep_th_api: 'API', rep_th_endpoint: 'Endpoint', rep_th_purpose: 'Tujuan', rep_th_datasent: 'Data yang dikirim', rep_th_calls: 'Panggilan',
         rep_c_scanned: 'package dipindai', rep_c_vuln: 'package rentan', rep_c_adv: 'advisory unik', rep_c_kev: 'di CISA KEV', rep_c_nofix: 'tanpa versi aman',
-        rep_no_vuln: 'Tidak ada kerentanan yang ditemukan di ', rep_item: 'item', rep_no_safe_unknown: 'versi aman tidak diketahui (data Sonatype tanpa rentang versi)', rep_no_safe: 'BELUM ADA versi aman', rep_partial_tip: 'Sebagian advisory belum punya perbaikan',
+        rep_no_vuln: 'Tidak ada kerentanan yang ditemukan di ', rep_item: 'item', rep_no_safe: 'BELUM ADA versi aman', rep_partial_tip: 'Sebagian advisory belum punya perbaikan',
         rep_still: ' masih terdampak: ', rep_advN: ' advisory', rep_yes: 'YA', rep_direct: ', langsung', rep_transitive: ', transitif',
         rep_nofix_note: 'Baris merah = package yang belum punya versi aman di data OSV. Pantau rilis upstream, ganti/hapus package, atau catat sebagai accepted risk.', rep_fix_cmds: 'Perintah perbaikan',
         rep_os_note: 'Paket OS (Alpine/Debian): versi "Update ke" dihitung dari data OSV dan belum tentu tersedia di repo distro yang dipakai image. Jika base image sudah EOL atau versi tidak ditemukan saat build, naikkan tag base image.',
@@ -252,14 +252,14 @@ window.APP_I18N = {
         rate_hint_all: 'All {n} requests failed to connect. ', rate_hint_all2: 'For endpoints that need the session cookie or are blocked by CORS, use Option 2 (same-origin script) below.', rate_hint_some: '{e} of {n} requests failed — ',
         rto_hint_all: 'All {n} attempts failed to connect. ', rto_hint_all2: 'Streaming upload needs HTTPS/HTTP-2 + CORS permission; for endpoints that need cookies or are blocked by CORS, use Option 2.', rto_hint_some: '{e} of {n} attempts failed — ',
         log_grade: 'grade ', log_fail_dash: 'failed — ', log_findings: ' findings', log_idb_empty: 'not in InternetDB',
-        rep_h1: 'SCA & Dockerfile Scan Report', rep_created: 'Generated', rep_files: 'files', rep_source: 'source', rep_sona_active: 'Sonatype Guide active', rep_omitdev: 'devDependencies ignored',
+        rep_h1: 'SCA & Dockerfile Scan Report', rep_created: 'Generated', rep_files: 'files', rep_source: 'source', rep_omitdev: 'devDependencies ignored',
         rep_api_title: 'Public APIs called', rep_dl_csv: 'Download CSV', rep_report_title: 'SCA Scan Report', rep_fail_process: 'Failed to process: ', rep_unique_pkg: 'unique packages', rep_skipped_dev: 'skipped (dev)',
         rep_note_osv: 'CVE/CWE source: OSV data (GHSA and NVD aliases). Findings only in paid/private databases (e.g. Sonatype) are not included; use <span class="mono">scan_sca.ps1</span> for those.',
         rep_th_no: 'No', rep_th_package: 'Package', rep_th_installed: 'Installed → Update to', rep_th_bump: 'Bump', rep_th_sev: 'Severity', rep_th_cve: 'CVE', rep_th_cwe: 'CWE', rep_th_adv: 'Advisory', rep_th_epss: 'EPSS', rep_th_kev: 'KEV', rep_th_scope: 'Scope',
         rep_th_line: 'Line', rep_th_stage: 'Stage', rep_th_image: 'Image', rep_th_tag: 'Tag', rep_th_support: 'Support status (endoflife.date)', rep_th_rule: 'Rule', rep_th_detail: 'Detail', rep_th_suggestion: 'Suggestion',
         rep_th_group: 'Group', rep_th_api: 'API', rep_th_endpoint: 'Endpoint', rep_th_purpose: 'Purpose', rep_th_datasent: 'Data sent', rep_th_calls: 'Calls',
         rep_c_scanned: 'packages scanned', rep_c_vuln: 'vulnerable packages', rep_c_adv: 'unique advisories', rep_c_kev: 'in CISA KEV', rep_c_nofix: 'no safe version',
-        rep_no_vuln: 'No vulnerabilities found in ', rep_item: 'items', rep_no_safe_unknown: 'safe version unknown (Sonatype data without version ranges)', rep_no_safe: 'NO safe version', rep_partial_tip: 'Some advisories have no fix yet',
+        rep_no_vuln: 'No vulnerabilities found in ', rep_item: 'items', rep_no_safe: 'NO safe version', rep_partial_tip: 'Some advisories have no fix yet',
         rep_still: ' still affected: ', rep_advN: ' advisories', rep_yes: 'YES', rep_direct: ', direct', rep_transitive: ', transitive',
         rep_nofix_note: 'Red row = package with no safe version in OSV data yet. Watch upstream releases, replace/remove the package, or record as accepted risk.', rep_fix_cmds: 'Fix commands',
         rep_os_note: 'OS packages (Alpine/Debian): the "Update to" version is computed from OSV data and may not be available in the distro repo the image uses. If the base image is EOL or the version is not found at build time, bump the base image tag.',
@@ -374,6 +374,6 @@ window.APP_I18N = {
         '« dekripsi: ': '« decrypted: ', '« header res: ': '« res headers: ', '« respons: ': '« response: ', '« status: ': '« status: ',
         '» body req: ': '» req body: ', '» header req: ': '» req headers: ', '» sebelum dienkripsi: ': '» before encryption: ',
         // Tabel file tersimpan (SCA & EOL)
-        'Tanpa nama': 'Unnamed', '{n} advisory unik, mengambil detail...': '{n} unique advisories, fetching details...'
+        'Tanpa nama': 'Unnamed', 'Daftar file': 'File list', 'ekosistem': 'ecosystem', 'terpasang': 'installed', 'update_ke': 'update_to', 'jenis_update': 'update_type', '{n} advisory unik, mengambil detail...': '{n} unique advisories, fetching details...'
       }
 };
