@@ -501,11 +501,11 @@
     // host mati, dan protokol sebagai "Failed to fetch" yang sama, jadi diberi
     // dugaan + saran. Offline dideteksi lewat navigator.onLine.
     function friendlyFetchError(e) {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'Perangkat sedang offline — periksa koneksi internet, lalu coba ulang.';
-      if (e && e.name === 'AbortError') return 'Dibatalkan.';
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return tr('err_offline');
+      if (e && e.name === 'AbortError') return tr('err_aborted');
       const m = (e && e.message) || String(e || '');
-      if (/failed to fetch|networkerror|load failed|terminated/i.test(m)) return 'Gagal terhubung — kemungkinan diblokir CORS, host tidak dapat dijangkau, atau butuh HTTPS/HTTP-2. Coba Opsi 2 (same-origin) di bawah, atau klik lagi untuk coba ulang.';
-      return m || 'Gagal (sebab tidak diketahui).';
+      if (/failed to fetch|networkerror|load failed|terminated/i.test(m)) return tr('err_network');
+      return m || tr('err_unknown');
     }
 
     // ---- Perbandingan versi (semver longgar; juga revisi Alpine "-r0")
@@ -804,7 +804,7 @@
       const entries = Array.from(map.values());
       if (!entries.length) return entries;
 
-      log('Query OSV.dev untuk ' + entries.length + ' package...');
+      log(tr('log_osv_query').replace('{n}', entries.length));
       const idLists = await osvBatch(entries.map(e => ({ name: e.name, version: e.version, eco: e.eco })));
       const ids = new Set();
       idLists.forEach(l => l.forEach(i => ids.add(i)));
@@ -849,7 +849,7 @@
       if (opts.enrich && cveSet.size) {
         const epss = {}, kev = new Set();
         try {
-          log('Mengambil EPSS untuk ' + cveSet.size + ' CVE...');
+          log(tr('log_epss').replace('{n}', cveSet.size));
           const list = Array.from(cveSet), chunks = [];
           for (let i = 0; i < list.length; i += 50) chunks.push(list.slice(i, i + 50));
           await pool(chunks, 4, async ch => {
@@ -858,12 +858,12 @@
             const j = await res.json();
             (j.data || []).forEach(d => { epss[d.cve] = parseFloat(d.epss); });
           });
-        } catch (e) { log('EPSS gagal: ' + e.message); }
+        } catch (e) { log(tr('log_epss_fail') + e.message); }
         try {
-          log('Mengambil daftar CISA KEV...');
+          log(tr('log_kev'));
           const res = await apiFetch('kev', 'https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json');
           if (res.ok) { const j = await res.json(); (j.vulnerabilities || []).forEach(x => kev.add(x.cveID)); }
-        } catch (e) { log('KEV gagal: ' + e.message); }
+        } catch (e) { log(tr('log_kev_fail') + e.message); }
         entries.forEach(e => e.vulns.forEach(v => {
           v.cves.forEach(c => {
             if (epss[c] !== undefined && (v.epss === null || epss[c] > v.epss)) v.epss = epss[c];
@@ -946,7 +946,7 @@
     // Hanya dibaca sebagai data (JSON.parse + Object.keys); tidak ada eval/HTML mentah (OWASP ASVS 5.2.4, 1.5.1).
     function parseProjectAssets(text) {
       const j = JSON.parse(text), out = [], targets = j && j.targets;
-      if (!targets || typeof targets !== 'object') throw new Error('project.assets.json tidak valid: bagian "targets" tidak ada');
+      if (!targets || typeof targets !== 'object') throw new Error(tr('err_project_assets'));
       const fws = (j.project && j.project.frameworks) || {};
       const directNames = new Set();
       let isTest = false;
@@ -971,7 +971,7 @@
     }
     function parseCsproj(text) {
       const doc = new DOMParser().parseFromString(text, 'application/xml');
-      if (doc.querySelector('parsererror')) throw new Error('XML tidak valid');
+      if (doc.querySelector('parsererror')) throw new Error(tr('err_xml_invalid'));
       const out = [];
       doc.querySelectorAll('PackageReference, PackageVersion').forEach(n => {
         const name = n.getAttribute('Include') || n.getAttribute('Update');
@@ -996,7 +996,7 @@
 
     function parsePomXml(text) {
       const doc = new DOMParser().parseFromString(text, 'application/xml');
-      if (doc.querySelector('parsererror')) throw new Error('XML tidak valid');
+      if (doc.querySelector('parsererror')) throw new Error(tr('err_xml_invalid'));
       const txt = (el, tag) => { for (const c of el.children) if (c.localName === tag) return c.textContent.trim(); return ''; };
       const props = {}, managed = {}, out = [];
       for (const c of doc.documentElement.children) {
@@ -1498,7 +1498,7 @@
         if (st.internal) continue;
         const row = { line: st.line, stage: st.name || '-', image: st.img.name, tag: st.img.tag || (st.img.digest ? '@digest' : '(latest)'), checks: [] };
         for (const t of eolTargets(st.img)) {
-          log('Cek EOL ' + t.label + ' ' + t.ver + '...');
+          log(tr('log_eol_check').replace('{x}', t.label + ' ' + t.ver));
           const r = await checkEol(t);
           row.checks.push(Object.assign({ label: t.label, ver: t.ver }, r));
           if (r.status === 'eol') add(st.line, 'Base image sudah EOL: ' + t.label + ' ' + t.ver, 'HIGH', r.note, 'Naikkan ke versi yang masih didukung.');
@@ -1860,11 +1860,11 @@
 
     function parseSourceUrl(raw) {
       let u;
-      try { u = new URL(raw.trim()); } catch (e) { throw new Error('Link tidak valid: ' + raw); }
+      try { u = new URL(raw.trim()); } catch (e) { throw new Error(tr('err_link_invalid') + raw); }
       const host = u.hostname.toLowerCase();
       const parts = u.pathname.split('/').filter(Boolean).map(decodeURIComponent);
       if (host === 'github.com' || host === 'www.github.com') {
-        if (parts.length < 2) throw new Error('Link GitHub harus memuat owner/repo: ' + raw);
+        if (parts.length < 2) throw new Error(tr('err_gh_ownerrepo') + raw);
         const o = { kind: 'github', owner: parts[0], repo: parts[1].replace(/\.git$/, ''), ref: '', path: '', isFile: false };
         if (['blob', 'tree', 'raw'].includes(parts[2]) && parts[3]) {
           o.ref = parts[3]; o.path = parts.slice(4).join('/'); o.isFile = parts[2] !== 'tree' && !!o.path;
@@ -1885,7 +1885,7 @@
             o.ref = rest[1]; o.path = rest.slice(2).join('/'); o.isFile = rest[0] !== 'tree' && !!o.path;
           }
         }
-        if (o.project.split('/').length < 2) throw new Error('Link GitLab harus memuat grup/proyek: ' + raw);
+        if (o.project.split('/').length < 2) throw new Error(tr('err_gl_groupproj') + raw);
         return o;
       }
       return { kind: 'url', url: u.href, path: parts[parts.length - 1] || u.hostname };
@@ -1950,11 +1950,11 @@
       if (!r.ok) throw await httpErr(r, src.owner + '/' + src.repo, !!token);
       const info = await r.json();
       const ref = src.ref || info.default_branch;
-      log('GitHub ' + info.full_name + ' (' + (info.private ? 'private' : 'publik') + ', branch ' + ref + ')');
+      log('GitHub ' + info.full_name + ' (' + (info.private ? tr('lbl_private') : tr('lbl_public')) + ', branch ' + ref + ')');
       const tr = await apiFetch('gh-api', base + '/git/trees/' + encodeURIComponent(ref) + '?recursive=1', { headers: hdr });
       if (!tr.ok) throw await httpErr(tr, 'Daftar file', !!token);
       const tj = await tr.json();
-      if (tj.truncated) log('Peringatan: daftar file repo terlalu besar dan dipotong oleh GitHub.');
+      if (tj.truncated) log(tr('log_repo_truncated'));
       const paths = (tj.tree || []).filter(x => x.type === 'blob').map(x => x.path);
       return await downloadPicked(pickScannable(paths, src.path), src.repo, (p) => get(ref, p), log);
     }
@@ -1986,8 +1986,8 @@
     }
 
     async function downloadPicked(picked, repoName, getFn, log) {
-      if (!picked.length) { log('Tidak ada file yang bisa dipindai (lockfile / Dockerfile / package.json / .csproj).'); return []; }
-      if (picked.length > MAX_REPO_FILES) log('Ditemukan ' + picked.length + ' file, hanya ' + MAX_REPO_FILES + ' teratas (paling dekat root) yang diambil.');
+      if (!picked.length) { log(tr('log_no_scannable')); return []; }
+      if (picked.length > MAX_REPO_FILES) log(tr('log_found_files').replace('{n}', picked.length).replace('{m}', MAX_REPO_FILES));
       const list = picked.slice(0, MAX_REPO_FILES), out = [];
       await pool(list, 5, async p => {
         try { out.push({ name: repoName + '/' + p, text: await getFn(p) }); log('  + ' + p); }
@@ -1998,10 +1998,10 @@
     }
 
     async function fetchDirect(src, log) {
-      log('Mengunduh ' + src.url);
+      log(tr('log_download').replace('{x}', src.url));
       let res;
       try { res = await apiFetch('url', src.url); }
-      catch (e) { throw new Error('Gagal mengunduh (kemungkinan server tujuan tidak mengizinkan CORS). Buka link lalu simpan/tempel isinya: ' + src.url); }
+      catch (e) { throw new Error(tr('err_download_cors') + src.url); }
       if (!res.ok) throw await httpErr(res, src.path, false);
       return [{ name: src.path, text: await res.text() }];
     }
@@ -2090,7 +2090,7 @@
       const res = await apiFetch('ht', 'https://api.hackertarget.com/httpheaders/?q=' + encodeURIComponent(url));
       const t = await res.text();
       if (!/^\s*HTTP\//i.test(t)) {
-        if (/quota|exceeded|limit/i.test(t)) throw new Error('Kuota harian HackerTarget habis (±50 request/hari tanpa key)');
+        if (/quota|exceeded|limit/i.test(t)) throw new Error(tr('err_ht_quota'));
         throw new Error('HackerTarget: ' + t.trim().slice(0, 120));
       }
       return parseHeaders(t);
@@ -2178,19 +2178,19 @@
     async function dastCheck(raw, log, opts) {
       const res = { input: raw, error: '', findings: [], obs: null, obsErr: '', headers: null, hdrErr: '', net: null };
       let u;
-      try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { res.error = 'URL tidak valid'; return res; }
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') { res.error = 'Hanya http/https yang didukung'; return res; }
+      try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { res.error = tr('err_url_invalid'); return res; }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') { res.error = tr('err_only_http'); return res; }
       res.url = u.href; res.host = u.hostname;
-      if (isPrivateHost(u.hostname)) { res.error = 'Host lokal/internal tidak bisa dijangkau layanan publik (butuh scan_dast.ps1 dari jaringan Anda).'; return res; }
-      log('Memeriksa ' + u.href + '...');
+      if (isPrivateHost(u.hostname)) { res.error = tr('err_private_host'); return res; }
+      log(tr('log_checking').replace('{x}', u.href));
       const [o, h] = await Promise.allSettled([observatoryScan(u.hostname), fetchHeaders(u.href)]);
       if (o.status === 'fulfilled') res.obs = o.value; else res.obsErr = o.reason.message;
       if (h.status === 'fulfilled') { res.headers = h.value; res.findings = analyzeHeaders(u, h.value); } else res.hdrErr = h.reason.message;
-      log('  Observatory: ' + (res.obs ? 'nilai ' + res.obs.grade + ' (' + res.obs.score + ')' : 'gagal — ' + res.obsErr) + ' · header: ' + (res.headers ? res.findings.length + ' temuan' : 'gagal — ' + res.hdrErr));
+      log('  Observatory: ' + (res.obs ? tr('log_grade') + res.obs.grade + ' (' + res.obs.score + ')' : tr('log_fail_dash') + res.obsErr) + ' · header: ' + (res.headers ? res.findings.length + tr('log_findings') : tr('log_fail_dash') + res.hdrErr));
       if (opts && opts.net) {
         res.net = await netScan(res.host);
         const idb = res.net.idb;
-        log('  DNS: ' + (res.net.ips.length ? res.net.ips.join(', ') : '-') + ' · port: ' + (idb ? (idb.empty ? 'tidak ada di InternetDB' : idb.ports.join(', ')) : 'gagal — ' + res.net.idbErr));
+        log('  DNS: ' + (res.net.ips.length ? res.net.ips.join(', ') : '-') + ' · port: ' + (idb ? (idb.empty ? tr('log_idb_empty') : idb.ports.join(', ')) : tr('log_fail_dash') + res.net.idbErr));
       }
       return res;
     }
@@ -2923,8 +2923,8 @@
         rateErrorHint() {
           const r = this.rl.results, errs = r.filter(x => x.status === 'error');
           if (!errs.length) return '';
-          if (errs.length === r.length) return 'Semua ' + r.length + ' request gagal terhubung. ' + (errs[0].error || '') + ' Untuk endpoint yang butuh cookie sesi atau diblokir CORS, pakai Opsi 2 (skrip same-origin) di bawah.';
-          return errs.length + ' dari ' + r.length + ' request gagal — ' + (errs[0].error || '');
+          if (errs.length === r.length) return tr('rate_hint_all').replace('{n}', r.length) + (errs[0].error || '') + ' ' + tr('rate_hint_all2');
+          return tr('rate_hint_some').replace('{e}', errs.length).replace('{n}', r.length) + (errs[0].error || '');
         },
         rtoScript() { return this.rto.url.trim() ? buildRtoScript(this.rto) : ''; },
         rtoBookmarklet() { return this.rtoScript ? 'javascript:' + encodeURIComponent(this.rtoScript) : ''; },
@@ -2936,8 +2936,8 @@
         rtoErrorHint() {
           const r = this.rto.results, errs = r.filter(x => x.outcome === 'error');
           if (!errs.length) return '';
-          if (errs.length === r.length) return 'Semua ' + r.length + ' percobaan gagal terhubung. ' + (errs[0].label || '') + ' Streaming upload butuh HTTPS/HTTP-2 + izin CORS; untuk endpoint yang butuh cookie atau diblokir CORS, pakai Opsi 2.';
-          return errs.length + ' dari ' + r.length + ' percobaan gagal — ' + (errs[0].label || '');
+          if (errs.length === r.length) return tr('rto_hint_all').replace('{n}', r.length) + (errs[0].label || '') + ' ' + tr('rto_hint_all2');
+          return tr('rto_hint_some').replace('{e}', errs.length).replace('{n}', r.length) + (errs[0].label || '');
         },
         activeItems() { return this.items.filter(it => it.enabled); },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
@@ -3004,7 +3004,7 @@
         copyHookScript() {
           navigator.clipboard.writeText(HOOK_SCRIPT)
             .then(() => { this.hookCopied = true; setTimeout(() => { this.hookCopied = false; }, 2000); })
-            .catch(() => { this.hookMsg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
+            .catch(() => { this.hookMsg = tr('clip_fail'); });
         },
         parseRlCurl() {
           if (!/^\s*curl\b/.test(this.rl.curl)) return;
@@ -3014,7 +3014,7 @@
         copyRateScript() {
           navigator.clipboard.writeText(this.rateScript)
             .then(() => { this.rl.copied = true; setTimeout(() => { this.rl.copied = false; }, 2000); })
-            .catch(() => { this.rl.msg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
+            .catch(() => { this.rl.msg = tr('clip_fail'); });
         },
         async runRateDirect() {
           const rl = this.rl, headers = {};
@@ -3037,7 +3037,7 @@
           const lines = ['index,status,ms,retry_after', ...this.rl.results.map(r => [r.i, r.status, r.ms, r.retryAfter || ''].join(','))];
           navigator.clipboard.writeText(lines.join('\n'))
             .then(() => { this.rl.csvCopied = true; setTimeout(() => { this.rl.csvCopied = false; }, 2000); })
-            .catch(() => { this.rl.msg = 'Gagal menyalin ke clipboard.'; });
+            .catch(() => { this.rl.msg = tr('clip_fail_short'); });
         },
         parseRtoCurl() {
           if (!/^\s*curl\b/.test(this.rto.curl)) return;
@@ -3073,13 +3073,13 @@
         copyRtoScript() {
           navigator.clipboard.writeText(this.rtoScript)
             .then(() => { this.rto.copied = true; setTimeout(() => { this.rto.copied = false; }, 2000); })
-            .catch(() => { this.rto.msg = 'Gagal menyalin ke clipboard. Pilih teksnya secara manual lalu salin.'; });
+            .catch(() => { this.rto.msg = tr('clip_fail'); });
         },
         copyRtoCsv() {
           const lines = ['index,outcome,ms,sent,total,status', ...this.rto.results.map(r => [r.i, r.outcome, r.ms, r.sent, r.total, r.status].join(','))];
           navigator.clipboard.writeText(lines.join('\n'))
             .then(() => { this.rto.csvCopied = true; setTimeout(() => { this.rto.csvCopied = false; }, 2000); })
-            .catch(() => { this.rto.msg = 'Gagal menyalin ke clipboard.'; });
+            .catch(() => { this.rto.msg = tr('clip_fail_short'); });
         },
         setSideW(w) {
           this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, Math.round(w)));
@@ -3173,8 +3173,8 @@
             this.dastUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
             const d = new Date(), p2 = n => String(n).padStart(2, '0');
             this.dastName = d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '_laporan_dast.html';
-            log('Selesai. Laporan siap.');
-            if (w) w.location.href = this.dastUrl; else log('Popup diblokir browser: klik "Buka laporan lagi".');
+            log(tr('log_done'));
+            if (w) w.location.href = this.dastUrl; else log(tr('log_popup_blocked'));
           } catch (e) {
             this.dastError = 'Pemeriksaan gagal: ' + e.message;
             if (w) w.close();
@@ -3196,7 +3196,7 @@
               log('== ' + link);
               const files = await fetchFromUrl(link, this.token.trim(), log);
               files.forEach(f => { this.addItem(f.name, f.text, this.project.trim() || projectFromLink(link)); added++; });
-            } catch (e) { log('GAGAL: ' + e.message); }
+            } catch (e) { log(tr('failed') + ': ' + e.message); }
           }
           log(added ? added + ' file ditambahkan ke daftar. Klik "Scan & buka laporan".' : 'Tidak ada file yang ditambahkan.');
           if (added) this.urlText = '';
@@ -3239,10 +3239,10 @@
             toAdd.push(f);
           }
           for (const f of toAdd) this.addItem(f.name, await f.text());
-          this.error = big ? big + ' file dilewati (lebih dari 20 MB).'
-            : (filterImportant && !toAdd.length ? 'Tidak ada file dependency dikenali pada yang Anda seret.' : '');
+          this.error = big ? tr('msg_files_big').replace('{n}', big)
+            : (filterImportant && !toAdd.length ? tr('msg_no_dep') : '');
           this.dropMsg = filterImportant
-            ? toAdd.length + ' file dependency ditambahkan' + (skipped ? ' · ' + skipped + ' file lain dilewati otomatis' : '')
+            ? tr('msg_added').replace('{n}', toAdd.length) + (skipped ? tr('msg_skipped_auto').replace('{n}', skipped) : '')
             : '';
         },
         async onDrop(e) {
@@ -3273,13 +3273,13 @@
           try {
             if (it.type === 'docker') { res.docker = await analyzeDocker(it.text, log, opts); return res; }
             const parse = PARSERS[it.type];
-            if (!parse) throw new Error('Jenis file tidak dikenali. Pilih jenis secara manual.');
+            if (!parse) throw new Error(tr('err_unknown_type'));
             let pkgs = it.compact ? expandCompact(it.text) : parse(it.text);
             res.note = TYPE_NOTES[it.type] || '';
             if (pkgs.unpinned) res.note += ' ' + pkgs.unpinned + ' baris tidak dipin dan dilewati.';
             if (opts.omitDev) { const n = pkgs.length; pkgs = pkgs.filter(p => !p.dev); res.skipped = n - pkgs.length; }
             log(it.name + ': ' + pkgs.length + ' package terbaca');
-            if (!pkgs.length) throw new Error('Tidak ada package yang terbaca dari file ini.' + (TYPE_NOTES[it.type] ? ' ' + TYPE_NOTES[it.type] : ''));
+            if (!pkgs.length) throw new Error(tr('err_no_packages') + (TYPE_NOTES[it.type] ? ' ' + TYPE_NOTES[it.type] : ''));
             res.entries = await scanPackages(pkgs, log, opts);
           } catch (e) { res.error = e.message; }
           return res;
@@ -3297,9 +3297,9 @@
             this.reportUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
             const d = new Date(), p = n => String(n).padStart(2, '0');
             this.reportName = d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + '_laporan_scan.html';
-            this.log('Selesai. Laporan siap.');
+            this.log(tr('log_done'));
             if (w) w.location.href = this.reportUrl;
-            else this.log('Popup diblokir browser: klik "Buka laporan lagi".');
+            else this.log(tr('log_popup_blocked'));
           } catch (e) {
             this.error = 'Scan gagal: ' + e.message;
             if (w) w.close();
