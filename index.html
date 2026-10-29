@@ -584,6 +584,87 @@
           </table>
         </div>
       </section>
+
+      <!-- Cek Basic Middleware: uji defensif apakah security-middleware memblokir input buruk -->
+      <section v-else-if="tab === 'mw'">
+        <h2 style="margin-top:0">{{ t('mw_title') }}</h2>
+        <p class="muted" v-html="t('mw_intro')"></p>
+        <div class="row" style="margin-top:8px">
+          <input type="text" v-model="mw.method" style="max-width:90px" />
+          <input type="text" v-model="mw.url" placeholder="https://host:port/path" />
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label>{{ t('mw_delay') }} <input type="number" v-model.number="mw.delayMs" min="0" max="5000" style="max-width:100px" /></label>
+          <label>{{ t('mw_sizes') }}
+            <input type="number" v-model.number="mw.sizesKb[0]" min="1" max="4096" style="max-width:80px" />
+            <input type="number" v-model.number="mw.sizesKb[1]" min="1" max="4096" style="max-width:80px" />
+            <input type="number" v-model.number="mw.sizesKb[2]" min="1" max="4096" style="max-width:80px" /> KB</label>
+        </div>
+
+        <h3 style="margin-top:20px">{{ t('opt1_head') }}</h3>
+        <p class="muted" v-html="t('mw_opt1_desc')"></p>
+        <div class="actions">
+          <button class="btn" :disabled="mw.busy || !mw.url.trim()" @click="mwRunAll">{{ mw.busy ? t('running') : t('mw_run_all') }}</button>
+          <button class="btn gray" :disabled="mw.busy || !mwResults.length" @click="mwRunFailed">{{ t('mw_run_failed') }}</button>
+          <button class="btn gray" v-if="mw.busy" @click="mwStopRun">{{ t('stop') }}</button>
+          <button class="btn gray" v-if="mwResults.length" @click="mwCopyCsv">{{ mw.csvCopied ? t('copied') : t('copy_csv') }}</button>
+          <button class="btn gray" v-if="mwResults.length" @click="mwCopyJson">{{ mw.jsonCopied ? t('copied') : t('mw_copy_json') }}</button>
+        </div>
+        <div class="muted" v-if="mwResults.length">{{ mwSummary }}</div>
+        <table v-if="mwResults.length" style="margin-top:8px">
+          <thead><tr>
+            <th>{{ t('mw_th_cat') }}</th><th>{{ t('mw_th_name') }}</th><th>{{ t('mw_th_surface') }}</th>
+            <th>{{ t('mw_th_status') }}</th><th>{{ t('mw_th_msg') }}</th><th>{{ t('mw_th_verdict') }}</th><th>{{ t('mw_th_expect') }}</th><th></th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="r in mwResults" :key="r.key">
+              <td>{{ t('mw_cat_' + r.cat) }}</td>
+              <td>{{ r.name }}<span v-if="r.size"> · {{ r.size }}KB</span></td>
+              <td>{{ r.method }} · {{ t('mw_sf_' + r.surface) }}</td>
+              <td>{{ r.status }}</td>
+              <td class="muted" style="max-width:280px;word-break:break-word">{{ r.message }}</td>
+              <td :class="mwVerdictClass(r.verdict)">{{ t('mw_v_' + r.verdict) }}</td>
+              <td class="muted">{{ r.expect }}</td>
+              <td><button class="lnk" @click="mwLoadProbeToEditor(r)">{{ t('mw_load') }}</button></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 style="margin-top:20px">{{ t('mw_editor_title') }}</h3>
+        <p class="muted">{{ t('mw_editor_desc') }}</p>
+        <div class="row" style="margin-top:8px">
+          <input type="text" v-model="mw.editor.method" style="max-width:90px" />
+          <input type="text" v-model="mw.editor.url" placeholder="https://host:port/path" />
+        </div>
+        <label class="muted" style="display:block;margin-top:8px">{{ t('mw_ed_headers') }}</label>
+        <textarea v-model="mw.editor.headers" placeholder="Content-Type: application/json" style="min-height:60px;font-size:12px"></textarea>
+        <label class="muted" style="display:block;margin-top:8px">{{ t('mw_ed_body') }}</label>
+        <textarea v-model="mw.editor.body" style="min-height:70px;font-size:12px"></textarea>
+        <div class="actions">
+          <button class="btn" :disabled="mw.editor.busy || !mw.editor.url.trim()" @click="mwManualSend">{{ mw.editor.busy ? t('running') : t('mw_ed_send') }}</button>
+          <span class="muted" v-if="mw.editor.msg">{{ mw.editor.msg }}</span>
+        </div>
+        <div class="bad" v-if="mw.editor.error" style="margin-top:4px">{{ mw.editor.error }}</div>
+        <div class="log" v-if="mw.editor.status !== null" style="max-height:260px">
+          <div><b>{{ t('mw_ed_status') }}:</b> {{ mw.editor.status }}</div>
+          <div v-if="mw.editor.respHeaders" style="margin-top:4px"><b>{{ t('mw_ed_resphdr') }}:</b>
+{{ mw.editor.respHeaders }}</div>
+          <div v-if="mw.editor.respBody" style="margin-top:4px"><b>{{ t('mw_ed_respbody') }}:</b>
+{{ mw.editor.respBody }}</div>
+        </div>
+
+        <h3 style="margin-top:20px">{{ t('opt2_head') }}</h3>
+        <p class="muted" v-html="t('mw_opt2_desc')"></p>
+        <template v-if="mwScript">
+          <textarea readonly :value="mwScript" style="min-height:80px;font-size:11px"></textarea>
+          <div class="actions">
+            <button class="btn gray" @click="copyMwScript">{{ mw.copied ? t('copied') : t('copy_script') }}</button>
+            <a class="btn blue" :href="mwBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="mw.msg = t('bookmark_msg')">{{ t('drag_bookmark') }}</a>
+          </div>
+          <div class="muted" v-if="mw.msg" style="color:#f59e0b">{{ mw.msg }}</div>
+        </template>
+        <div class="muted" style="margin-top:6px">{{ t('mw_note') }}</div>
+      </section>
     </main>
     </div>
   </div>
@@ -4775,6 +4856,168 @@
       ].join('\n'));
     }
 
+    // ============================================================
+    //  Tab "Cek Basic Middleware": uji konformansi DEFENSIF apakah security
+    //  middleware target benar-benar MEMBLOKIR input buruk/berbahaya (harness
+    //  uji ASVS / ala ZAP active-scan terhadap aplikasi milik sendiri) -- BUKAN
+    //  untuk menyerang. Hanya untuk sistem yang Anda berwenang menguji.
+    //  Rujukan: OWASP ASVS v4 V5 (Validation, Sanitization & Encoding),
+    //  OWASP A03:2021 Injection, CWE-20 Improper Input Validation.
+    // ============================================================
+    // Util request-probe MURNI (tanpa ketergantungan luar) supaya definisi probe
+    // jadi SATU sumber kebenaran: dipakai langsung oleh app (Opsi 1) dan disisipkan
+    // apa adanya ke skrip Opsi 2 lewat .toString() -- menghindari duplikasi (SonarQube).
+    function mwQ(url, qs) { return url + (url.indexOf('?') >= 0 ? '&' : '?') + qs; }
+    function mwBaseBody() { return '{"username":"test","password":"test"}'; }
+    function mwJsonHdr() { return [['Content-Type', 'application/json']]; }
+    function mwRepeat(ch, n) { return new Array(Math.max(0, n) + 1).join(ch); }
+    // Verdict DEFENSIF: status blok (400/413/431) = pertahanan bekerja (LULUS);
+    // lolos ke aplikasi (2xx/401/403/500) = celah (GAGAL); gagal jaringan/CORS/TLS = ERROR.
+    function mwVerdictOf(status, hadError) {
+      if (hadError) return 'ERROR';
+      return (status === 400 || status === 413 || status === 431) ? 'LULUS' : 'GAGAL';
+    }
+    // Pesan server dari body {"message":"Request ditolak: ..."}; dipotong aman (anti layout-break).
+    function mwExtractMsg(txt) {
+      if (!txt) return '';
+      try { var j = JSON.parse(txt); if (j && j.message) return String(j.message).slice(0, 200); } catch (e) { /* bukan JSON */ }
+      return String(txt).replace(/\s+/g, ' ').trim().slice(0, 160);
+    }
+    // Bangun SATU request sengaja-buruk dari spesifikasi probe deklaratif.
+    // Tiap 'op' menguji satu aturan middleware (lihat label i18n mw_p_*).
+    function mwBuildReq(p, cfg, size) {
+      var method = cfg.method || 'POST';
+      var url = cfg.url, headers = mwJsonHdr(), body = mwBaseBody(), i, a;
+      switch (p.op) {
+        case 'dupQuery': url = mwQ(url, 'id=1&id=2'); break;
+        case 'dupHeader': headers.push(['X-Probe-Dup', '1'], ['X-Probe-Dup', '2']); break;
+        case 'dupCookie': headers.push(['Cookie', 'a=1; a=2']); break;
+        case 'dupJsonKey': body = '{"a":1,"a":2}'; break;
+        case 'bufQuery': url = mwQ(url, 'buf=' + mwRepeat('A', size * 1024)); break;
+        case 'bufBody': body = '{"data":"' + mwRepeat('A', size * 1024) + '"}'; break;
+        case 'qsLen': url = mwQ(url, 'x=' + mwRepeat('A', 4200)); break;
+        case 'qsCount': a = []; for (i = 0; i < 60; i++) a.push('p' + i + '=1'); url = mwQ(url, a.join('&')); break;
+        case 'hdrLen': headers.push(['X-Long', mwRepeat('A', 4200)]); break;
+        case 'hdrCount': for (i = 0; i < 110; i++) headers.push(['X-H' + i, '1']); break;
+        case 'badCt': headers = [['Content-Type', 'text/plain']]; break;
+        case 'badJson': body = '{bad'; break;
+        case 'deepJson': body = '{"a":' + mwRepeat('[', 400) + '1' + mwRepeat(']', 400) + '}'; break;
+        case 'inject': a = {}; a[p.field] = p.payload; a.password = 'test'; body = JSON.stringify(a); break;
+        case 'ctrlChar': url = mwQ(url, 'q=%00'); break;
+        case 'unknownCookie': headers.push(['Cookie', '__mw_probe=' + Math.random().toString(36).slice(2)]); break;
+        default: break;
+      }
+      return { method: method, url: url, headers: headers, body: body, surface: p.surface };
+    }
+    // SATU sumber kebenaran daftar probe. st = status blok yang diharapkan, msg = substring
+    // pesan server yang diharapkan (toleran/substring), escalating = keluarga ukuran (stop-on-first-block),
+    // cookie = butuh set header Cookie (dilarang fetch -> ERROR dari Opsi 1), base = kunci i18n induk.
+    const MW_PROBES = (function () {
+      var P = [
+        { id: 'dupquery', op: 'dupQuery', cat: 'dup', surface: 'query', st: [400], msg: 'parameter dengan nama ganda' },
+        { id: 'dupheader', op: 'dupHeader', cat: 'dup', surface: 'header', st: [400, 431], msg: 'header ganda', limited: 'header' },
+        { id: 'dupcookie', op: 'dupCookie', cat: 'dup', surface: 'cookie', st: [400], msg: 'cookie dengan nama ganda', cookie: true },
+        { id: 'dupjson', op: 'dupJsonKey', cat: 'dup', surface: 'body', st: [400], msg: 'parameter dengan nama ganda' },
+        { id: 'bufquery', op: 'bufQuery', cat: 'buf', surface: 'query', st: [400], msg: 'panjang parameter melebihi batas', escalating: true },
+        { id: 'bufbody', op: 'bufBody', cat: 'buf', surface: 'body', st: [400, 413], msg: 'ukuran body melebihi batas', escalating: true },
+        { id: 'qslen', op: 'qsLen', cat: 'buf', surface: 'query', st: [400], msg: 'panjang query string melebihi batas' },
+        { id: 'qscount', op: 'qsCount', cat: 'buf', surface: 'query', st: [400], msg: 'jumlah parameter melebihi batas' },
+        { id: 'hdrlen', op: 'hdrLen', cat: 'buf', surface: 'header', st: [431, 400], msg: 'ukuran header melebihi batas' },
+        { id: 'hdrcount', op: 'hdrCount', cat: 'buf', surface: 'header', st: [431], msg: 'jumlah header melebihi batas' },
+        { id: 'badct', op: 'badCt', cat: 'ctjson', surface: 'header', st: [400], msg: 'format body tidak didukung' },
+        { id: 'badjson', op: 'badJson', cat: 'ctjson', surface: 'body', st: [400], msg: 'format JSON tidak valid' },
+        { id: 'deepjson', op: 'deepJson', cat: 'ctjson', surface: 'body', st: [400], msg: 'struktur body terlalu dalam' },
+        { id: 'ctrl', op: 'ctrlChar', cat: 'charcookie', surface: 'query', st: [400], msg: 'karakter tidak valid' },
+        { id: 'unkcookie', op: 'unknownCookie', cat: 'charcookie', surface: 'cookie', st: [400], msg: 'cookie yang tidak dikenal', cookie: true }
+      ];
+      // Sanitize (CWE-89 SQLi, CWE-79 XSS, CWE-77/78 Command/Path): satu payload = satu probe,
+      // dibangkitkan dari daftar payload tunggal agar tidak ada duplikasi definisi.
+      var SAN = [
+        { base: 'sqli', msg: 'pola yang tidak diizinkan', payloads: ["' OR 1=1 --", 'UNION SELECT 1,2,3 FROM users', '; DROP TABLE x', 'information_schema.tables'] },
+        { base: 'xss', msg: 'masukan yang tidak diizinkan', payloads: ['<script>alert(1)<\/script>', 'javascript:alert(1)', 'x onerror=alert(1)'] },
+        { base: 'cmd', msg: 'pola yang tidak diizinkan', payloads: ['; ls -la', '$(whoami)', '/etc/passwd', '../../etc/passwd'] }
+      ];
+      SAN.forEach(function (s) {
+        s.payloads.forEach(function (pl, i) {
+          P.push({ id: s.base + (i + 1), base: s.base, op: 'inject', cat: 'sanitize', surface: 'body', st: [400], msg: s.msg, payload: pl, field: 'username' });
+        });
+      });
+      return P;
+    })();
+    // Normalisasi ukuran buffer (KB) ke bilangan bulat 1..4096.
+    function mwSizeList(arr) {
+      return (arr || []).map(function (n) { return Math.max(1, Math.min(4096, Math.round(Number(n) || 1))); });
+    }
+    // Skrip Opsi 2 (same-origin, cookie sesi ikut) -- MENIRU buildRateScript/buildRtoScript.
+    // Fungsi probe murni disisipkan via .toString() + daftar probe diserialisasi (satu sumber kebenaran).
+    function buildMwScript(cfg) {
+      var payload = JSON.stringify({ url: cfg.url, method: cfg.method || 'POST', delay: clampNum(cfg.delayMs, 0, 5000), sizes: mwSizeList(cfg.sizesKb) });
+      var shared = [mwQ, mwBaseBody, mwJsonHdr, mwRepeat, mwVerdictOf, mwExtractMsg, mwBuildReq].map(function (f) { return '  ' + f.toString(); });
+      return localizeScript([
+        '(function () {',
+        '  if (window.__mwHook) window.__mwHook.close();',
+        '  var cfg = ' + payload + ';',
+        '  var MW_PROBES = ' + JSON.stringify(MW_PROBES) + ';'
+      ].concat(shared).concat([
+        ...MKBTN_LINES,
+        '  var panel = document.createElement("div");',
+        '  Object.assign(panel.style, { position: "fixed", left: "12px", bottom: "12px", width: "460px", height: "400px", minWidth: "280px", minHeight: "170px", maxWidth: "90vw", maxHeight: "90vh", resize: "both", overflow: "hidden", background: "#0f172a", color: "#e2e8f0", font: "12px/1.4 Consolas,monospace", border: "1px solid #334155", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,.4)", zIndex: 2147483647, display: "flex", flexDirection: "column" });',
+        '  var head = document.createElement("div");',
+        '  Object.assign(head.style, { display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderBottom: "1px solid #334155", background: "#1e293b", borderRadius: "8px 8px 0 0", flexShrink: "0" });',
+        '  var title = document.createElement("b"); title.textContent = "Cek Middleware"; title.style.flex = "1";',
+        '  var summary = document.createElement("div");',
+        '  Object.assign(summary.style, { padding: "6px 10px", color: "#94a3b8", borderBottom: "1px solid #1e293b", flexShrink: "0" });',
+        '  summary.textContent = "bersiap...";',
+        '  var body = document.createElement("div");',
+        '  Object.assign(body.style, { overflow: "auto", padding: "6px 10px", flex: "1" });',
+        '  var stopped = false, rows = [], counts = { LULUS: 0, GAGAL: 0, ERROR: 0 };',
+        '  var stopBtn = mkBtn("stop", function () { stopped = true; });',
+        '  var jsonBtn = mkBtn("salin json", function () {',
+        '    navigator.clipboard.writeText(JSON.stringify(rows, null, 2));',
+        '    var old = jsonBtn.textContent; jsonBtn.textContent = "tersalin"; setTimeout(function () { jsonBtn.textContent = old; }, 1200);',
+        '  });',
+        '  var closeBtn = mkBtn(String.fromCharCode(10005), function () { stopped = true; panel.remove(); });',
+        '  head.append(title, stopBtn, jsonBtn, closeBtn);',
+        '  panel.append(head, summary, body);',
+        '  document.body.appendChild(panel);',
+        '  function addRow(r) {',
+        '    rows.push(r); counts[r.verdict] = (counts[r.verdict] || 0) + 1;',
+        '    var row = document.createElement("div");',
+        '    row.style.color = r.verdict === "LULUS" ? "#4ade80" : r.verdict === "GAGAL" ? "#f87171" : "#94a3b8";',
+        '    row.textContent = "[" + r.verdict + "] " + r.name + " " + String.fromCharCode(183) + " " + r.status + (r.message ? " " + String.fromCharCode(183) + " " + r.message.slice(0, 60) : "");',
+        '    body.insertBefore(row, body.firstChild);',
+        '    summary.textContent = "LULUS:" + counts.LULUS + "  GAGAL:" + counts.GAGAL + "  ERROR:" + counts.ERROR;',
+        '  }',
+        '  function wait() { return new Promise(function (r) { setTimeout(r, cfg.delay); }); }',
+        '  async function doProbe(p, size) {',
+        '    var r = { key: p.id + (size != null ? "@" + size + "kb" : ""), cat: p.cat, name: p.id + (p.payload ? (" " + p.payload) : "") + (size != null ? " " + size + "KB" : ""), surface: p.surface, status: "", verdict: "ERROR", message: "", expect: p.st.join("/") + " " + String.fromCharCode(183) + " " + p.msg };',
+        '    if (p.op === "dupCookie") { r.message = "tidak dapat menduplikasi cookie via fetch"; addRow(r); return r; }',
+        '    var req = mwBuildReq(p, cfg, size || 2), cleanup = null;',
+        '    if (p.op === "unknownCookie") { var cn = "__mw_probe_" + Date.now(); document.cookie = cn + "=1; path=/"; cleanup = function () { document.cookie = cn + "=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"; }; req.headers = req.headers.filter(function (h) { return h[0].toLowerCase() !== "cookie"; }); }',
+        '    try {',
+        '      var H = new Headers(); req.headers.forEach(function (h) { try { H.append(h[0], h[1]); } catch (e) { /* header dilarang browser */ } });',
+        '      var noBody = req.method === "GET" || req.method === "HEAD";',
+        '      var res = await fetch(req.url, { method: req.method, headers: H, body: noBody ? undefined : req.body, credentials: "include" });',
+        '      r.status = res.status; var txt = ""; try { txt = await res.text(); } catch (e) { /* body tak terbaca */ }',
+        '      r.message = mwExtractMsg(txt); r.verdict = mwVerdictOf(res.status, false);',
+        '    } catch (e) { r.status = "error"; r.verdict = "ERROR"; r.message = e.message; }',
+        '    if (cleanup) cleanup();',
+        '    addRow(r); return r;',
+        '  }',
+        '  (async function run() {',
+        '    for (var i = 0; i < MW_PROBES.length && !stopped; i++) {',
+        '      var p = MW_PROBES[i];',
+        '      if (p.escalating) { for (var s = 0; s < cfg.sizes.length && !stopped; s++) { var rr = await doProbe(p, cfg.sizes[s]); if (rr.verdict === "LULUS") break; await wait(); } }',
+        '      else { await doProbe(p, null); }',
+        '      if (!stopped) await wait();',
+        '    }',
+        '    summary.textContent = "selesai " + String.fromCharCode(183) + " LULUS:" + counts.LULUS + "  GAGAL:" + counts.GAGAL + "  ERROR:" + counts.ERROR;',
+        '  })();',
+        '  window.__mwHook = { close: function () { stopped = true; panel.remove(); } };',
+        '})();'
+      ]).join('\n'));
+    }
+
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
     // Daftar tab atas + kunci localStorage untuk setelan tab mana yang ditampilkan.
@@ -4789,7 +5032,8 @@
       { key: 'decode', label: 'Smart Decode' },
       { key: 'dbg', label: 'Hook Debug' },
       { key: 'rate', label: 'Rate Limiter (dari curl)' },
-      { key: 'rto', label: 'RTO (kirim lambat)' }
+      { key: 'rto', label: 'RTO (kirim lambat)' },
+      { key: 'mw', label: 'Cek Basic Middleware' }
     ];
     const DEFAULT_PROJECT = 'Tanpa nama';
     // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
@@ -4856,6 +5100,9 @@
           hookCopied: false, hookMsg: '',
           rl: { err: '', curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
           rto: { err: '', curl: '', method: 'POST', url: '', headers: [], body: '', kbps: 8, sizeKb: 64, count: 1, delay: 500, copied: false, csvCopied: false, msg: '', busy: false, stop: false, ctl: null, results: [] },
+          // Cek Basic Middleware: target punya user sendiri; default dapat diedit.
+          mw: { url: 'https://34.101.205.225:8002/auth/login', method: 'POST', delayMs: 150, sizesKb: [2, 10, 500], busy: false, stop: false, copied: false, csvCopied: false, jsonCopied: false, msg: '', editor: { method: 'POST', url: 'https://34.101.205.225:8002/auth/login', headers: 'Content-Type: application/json', body: '{"username":"test","password":"test"}', busy: false, status: null, respHeaders: '', respBody: '', error: '', msg: '' } },
+          mwResults: [],
           sideW: 330, resizing: false, persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -4902,6 +5149,13 @@
           if (!errs.length) return '';
           if (errs.length === r.length) return tr('rto_hint_all').replace('{n}', r.length) + (errs[0].label || '') + ' ' + tr('rto_hint_all2');
           return tr('rto_hint_some').replace('{e}', errs.length).replace('{n}', r.length) + (errs[0].label || '');
+        },
+        mwScript() { return this.mw.url.trim() ? buildMwScript(this.mw) : ''; },
+        mwBookmarklet() { return this.mwScript ? 'javascript:' + encodeURIComponent(this.mwScript) : ''; },
+        mwSummary() {
+          const c = { LULUS: 0, GAGAL: 0, ERROR: 0 };
+          this.mwResults.forEach(r => { c[r.verdict] = (c[r.verdict] || 0) + 1; });
+          return tr('mw_sum_pass') + ': ' + c.LULUS + ' · ' + tr('mw_sum_fail') + ': ' + c.GAGAL + ' · ' + tr('mw_sum_err') + ': ' + c.ERROR;
         },
         activeItems() { return this.items.filter(it => it.enabled); },
         allEnabled() { return this.items.length > 0 && this.activeItems.length === this.items.length; },
@@ -5176,6 +5430,124 @@
           navigator.clipboard.writeText(lines.join('\n'))
             .then(() => { this.rto.csvCopied = true; setTimeout(() => { this.rto.csvCopied = false; }, 2000); })
             .catch(() => { this.rto.msg = tr('clip_fail_short'); });
+        },
+        // ---- Cek Basic Middleware (uji konformansi defensif; ASVS V5 / CWE-20) ----
+        mwSizes() { return mwSizeList(this.mw.sizesKb); },
+        mwProbeName(p) {
+          const base = tr('mw_p_' + (p.base || p.id));
+          return p.payload ? base + ' · ' + p.payload : base;
+        },
+        mwVerdictClass(v) { return v === 'LULUS' ? 'ok' : v === 'GAGAL' ? 'sev-HIGH' : 'muted'; },
+        mwUpsert(row) {
+          const idx = this.mwResults.findIndex(r => r.key === row.key);
+          if (idx >= 0) this.mwResults.splice(idx, 1, row); else this.mwResults.push(row);
+        },
+        mwDelay() { return new Promise(r => setTimeout(r, clampNum(this.mw.delayMs, 0, 5000))); },
+        // Jalankan satu probe (opsional ukuran untuk keluarga escalating) lalu simpan hasilnya.
+        async mwDo(probe, size) {
+          const key = probe.id + (size != null ? '@' + size + 'kb' : '');
+          const row = { key, probeId: probe.id, size: size || null, cat: probe.cat, name: this.mwProbeName(probe),
+            surface: probe.surface, method: this.mw.method || 'POST', status: '', message: '', verdict: 'ERROR',
+            expect: probe.st.join('/') + ' · ' + probe.msg };
+          // Cookie-probe tak dapat diuji dari Opsi 1: browser melarang set header Cookie (gunakan Opsi 2).
+          if (probe.cookie) { row.message = tr('mw_cookie_limited'); this.mwUpsert(row); return row; }
+          const req = mwBuildReq(probe, this.mw, size || 2);
+          try {
+            const headers = new Headers();
+            req.headers.forEach(([k, v]) => { try { headers.append(k, v); } catch (e) { /* header dilarang browser */ } });
+            const noBody = req.method === 'GET' || req.method === 'HEAD';
+            const res = await fetch(req.url, { method: req.method, headers, body: noBody ? undefined : req.body, credentials: 'omit' });
+            row.status = res.status;
+            let txt = ''; try { txt = await res.text(); } catch (e) { /* body tak terbaca */ }
+            row.message = mwExtractMsg(txt);
+            row.verdict = mwVerdictOf(res.status, false);
+            // Header ganda via fetch digabung browser (bukan duplikat sejati) -> hasil kurang pasti.
+            if (probe.limited === 'header') row.message = (row.message ? row.message + ' · ' : '') + tr('mw_header_merged');
+          } catch (e) {
+            row.status = 'error'; row.verdict = 'ERROR'; row.message = friendlyFetchError(e);
+          }
+          this.mwUpsert(row);
+          return row;
+        },
+        // Jalankan semua probe sekuensial (ala spider ZAP) dengan jeda; keluarga escalating stop-on-first-block.
+        async mwRunAll() {
+          const mw = this.mw;
+          mw.busy = true; mw.stop = false; this.mwResults = [];
+          const sizes = this.mwSizes();
+          for (const p of MW_PROBES) {
+            if (mw.stop) break;
+            if (p.escalating) {
+              for (const sz of sizes) {
+                if (mw.stop) break;
+                const r = await this.mwDo(p, sz);
+                if (r.verdict === 'LULUS') break; // sudah diblok -> ukuran lebih besar redundant
+                await this.mwDelay();
+              }
+            } else {
+              await this.mwDo(p, null);
+            }
+            if (!mw.stop) await this.mwDelay();
+          }
+          mw.busy = false;
+        },
+        // Ulangi hanya probe yang GAGAL/ERROR (tanpa mengganggu yang sudah LULUS).
+        async mwRunFailed() {
+          const mw = this.mw;
+          const todo = this.mwResults.filter(r => r.verdict === 'GAGAL' || r.verdict === 'ERROR');
+          mw.busy = true; mw.stop = false;
+          for (const r of todo) {
+            if (mw.stop) break;
+            const p = MW_PROBES.find(x => x.id === r.probeId);
+            if (p) { await this.mwDo(p, r.size); await this.mwDelay(); }
+          }
+          mw.busy = false;
+        },
+        mwStopRun() { this.mw.stop = true; },
+        // Muat request satu probe ke editor manual (ala Postman) untuk diubah & dikirim ulang.
+        mwLoadProbeToEditor(r) {
+          const p = MW_PROBES.find(x => x.id === r.probeId);
+          if (!p) return;
+          const req = mwBuildReq(p, this.mw, r.size || 2);
+          const ed = this.mw.editor;
+          ed.method = req.method; ed.url = req.url;
+          ed.headers = req.headers.map(([k, v]) => k + ': ' + v).join('\n');
+          ed.body = (req.method === 'GET' || req.method === 'HEAD') ? '' : req.body;
+          ed.msg = tr('mw_loaded');
+        },
+        async mwManualSend() {
+          const ed = this.mw.editor;
+          ed.busy = true; ed.error = ''; ed.status = null; ed.respHeaders = ''; ed.respBody = ''; ed.msg = '';
+          try {
+            const headers = new Headers();
+            ed.headers.split(/\r?\n/).forEach(line => {
+              const i = line.indexOf(':');
+              if (i > 0) { try { headers.append(line.slice(0, i).trim(), line.slice(i + 1).trim()); } catch (e) { /* header dilarang */ } }
+            });
+            const noBody = ed.method === 'GET' || ed.method === 'HEAD' || !ed.body;
+            const res = await fetch(ed.url, { method: ed.method || 'GET', headers, body: noBody ? undefined : ed.body, credentials: 'omit' });
+            ed.status = res.status;
+            const hs = []; res.headers.forEach((v, k) => hs.push(k + ': ' + v)); ed.respHeaders = hs.join('\n');
+            ed.respBody = (await res.text()).slice(0, 4000);
+          } catch (e) { ed.error = friendlyFetchError(e); }
+          ed.busy = false;
+        },
+        copyMwScript() {
+          navigator.clipboard.writeText(this.mwScript)
+            .then(() => { this.mw.copied = true; setTimeout(() => { this.mw.copied = false; }, 2000); })
+            .catch(() => { this.mw.msg = tr('clip_fail'); });
+        },
+        mwCopyCsv() {
+          const head = ['category', 'name', 'method', 'surface', 'status', 'verdict', 'expect', 'message'];
+          const rows = [head, ...this.mwResults.map(r => [r.cat, r.name, r.method, r.surface, r.status, r.verdict, r.expect, r.message])];
+          const csv = '﻿' + rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+          navigator.clipboard.writeText(csv)
+            .then(() => { this.mw.csvCopied = true; setTimeout(() => { this.mw.csvCopied = false; }, 2000); })
+            .catch(() => { this.mw.msg = tr('clip_fail_short'); });
+        },
+        mwCopyJson() {
+          navigator.clipboard.writeText(JSON.stringify(this.mwResults, null, 2))
+            .then(() => { this.mw.jsonCopied = true; setTimeout(() => { this.mw.jsonCopied = false; }, 2000); })
+            .catch(() => { this.mw.msg = tr('clip_fail_short'); });
         },
         setSideW(w) {
           this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, Math.round(w)));
