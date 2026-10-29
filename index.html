@@ -24,6 +24,9 @@
     .side-tools { display: flex; justify-content: space-between; gap: 8px; margin: 10px 0 4px; }
     .lnk { background: none; border: 0; color: #93c5fd; cursor: pointer; font-size: 12px; padding: 2px 0; }
     .lnk:hover { text-decoration: underline; }
+    .side-sec { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 14px; }
+    .tab-opt { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+    .tab-opt input { cursor: pointer; }
     .grp { margin-top: 14px; }
     .grp-h { font-weight: 700; font-size: 13px; color: #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 3px; border-bottom: 2px solid #1e40af; }
     .grp-d { margin: 4px 0 2px; font-size: 12px; }
@@ -79,7 +82,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.36</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.38</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -111,19 +114,20 @@
           </div>
         </div>
       </div>
+      <div class="side-sec">
+        <h2 style="margin:0 0 4px">Menu yang tampil</h2>
+        <p class="muted" style="margin:0 0 8px">Centang menu yang ingin tampil di bilah atas. Setelan tersimpan di browser ini.</p>
+        <label class="tab-opt" v-for="t in tabList" :key="t.key">
+          <input type="checkbox" v-model="visibleTabs[t.key]" @change="onToggleTab(t.key)" /> {{ t.label }}
+        </label>
+      </div>
       <div class="resizer" :class="{ drag: resizing }" title="Geser untuk mengubah lebar (klik dua kali untuk reset)"
            @pointerdown.prevent="startResize" @pointermove="doResize" @pointerup="endResize" @pointercancel="endResize" @dblclick="setSideW(330)"></div>
     </aside>
 
     <main>
       <div class="tabs">
-        <button :class="{ active: tab === 'sca' }" @click="tab = 'sca'">SCA &amp; Dockerfile</button>
-        <button :class="{ active: tab === 'dast' }" @click="tab = 'dast'">DAST pasif (URL)</button>
-        <button :class="{ active: tab === 'sast' }" @click="tab = 'sast'">SAST (Kode)</button>
-        <button :class="{ active: tab === 'jwt' }" @click="tab = 'jwt'">JWT Decode</button>
-        <button :class="{ active: tab === 'dbg' }" @click="tab = 'dbg'">Hook Debug</button>
-        <button :class="{ active: tab === 'rate' }" @click="tab = 'rate'">Rate Limiter (dari curl)</button>
-        <button :class="{ active: tab === 'rto' }" @click="tab = 'rto'">RTO (kirim lambat)</button>
+        <button v-for="t in shownTabs" :key="t.key" :class="{ active: tab === t.key }" @click="tab = t.key">{{ t.label }}</button>
       </div>
 
       <!-- SCA + Docker -->
@@ -2514,6 +2518,17 @@
 
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
+    // Daftar tab atas + kunci localStorage untuk setelan tab mana yang ditampilkan.
+    const TABS_KEY = 'scaVisibleTabs';
+    const TAB_LIST = [
+      { key: 'sca', label: 'SCA & Dockerfile' },
+      { key: 'dast', label: 'DAST pasif (URL)' },
+      { key: 'sast', label: 'SAST (Kode)' },
+      { key: 'jwt', label: 'JWT Decode' },
+      { key: 'dbg', label: 'Hook Debug' },
+      { key: 'rate', label: 'Rate Limiter (dari curl)' },
+      { key: 'rto', label: 'RTO (kirim lambat)' }
+    ];
     const DEFAULT_PROJECT = 'Tanpa nama';
     // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
     function projectFromContent(type, text) {
@@ -2562,6 +2577,7 @@
       data() {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
+          tabList: TAB_LIST, visibleTabs: {},
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
           hookCopied: false, hookMsg: '',
@@ -2575,6 +2591,7 @@
       },
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
+        shownTabs() { return this.tabList.filter(t => this.visibleTabs[t.key]); },
         jwt() { return decodeJwt(this.jwtText); },
         hookScript() { return HOOK_SCRIPT; },
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
@@ -2601,6 +2618,13 @@
       },
       created() {
         try { const w = parseInt(localStorage.getItem(SIDE_KEY), 10); if (w) this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, w)); } catch (e) { /* abaikan */ }
+        // Setelan tab yang tampil; localStorage kosong/rusak -> semua tab tampil.
+        let savedTabs = null;
+        try { savedTabs = JSON.parse(localStorage.getItem(TABS_KEY) || 'null'); } catch (e) { savedTabs = null; }
+        const vis = {};
+        TAB_LIST.forEach(t => { vis[t.key] = savedTabs && typeof savedTabs[t.key] === 'boolean' ? savedTabs[t.key] : true; });
+        this.visibleTabs = vis;
+        if (!vis[this.tab]) { const first = TAB_LIST.find(t => vis[t.key]); if (first) this.tab = first.key; }
         // Hapus token Sonatype yang pernah tersimpan oleh versi sebelumnya.
         try { localStorage.removeItem('scaSonatype'); } catch (e) { /* localStorage tidak tersedia: abaikan */ }
         try {
@@ -2618,6 +2642,16 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
+        // Simpan setelan tab yang tampil; jaga minimal satu tetap tampil dan
+        // pindahkan tab aktif bila yang sedang dibuka disembunyikan.
+        onToggleTab(key) {
+          if (!this.shownTabs.length) { this.visibleTabs[key] = true; return; }
+          if (!this.visibleTabs[this.tab]) this.tab = this.shownTabs[0].key;
+          this.saveVisibleTabs();
+        },
+        saveVisibleTabs() {
+          try { localStorage.setItem(TABS_KEY, JSON.stringify(this.visibleTabs)); } catch (e) { /* abaikan */ }
+        },
         copyHookScript() {
           navigator.clipboard.writeText(HOOK_SCRIPT)
             .then(() => { this.hookCopied = true; setTimeout(() => { this.hookCopied = false; }, 2000); })
