@@ -7,7 +7,7 @@ Aplikasi HTML-only (Vue 3 via CDN) untuk memeriksa keamanan proyek langsung di b
 
 ## Tema & Bahasa
 
-Di kanan atas ada dua toggle: **tema terang/gelap** (☀️/🌙, tersimpan di browser) dan **bahasa** (ID/EN). Default Bahasa Indonesia; versi Inggris dibuka di path `/en/` — mis. `https://zidanebayu21.github.io/scaner_sca_sast/en/`. File `en/index.html` adalah **salinan persis** `index.html`; bahasa dideteksi dari path URL (`/en/`), jadi setiap perubahan `index.html` perlu disalin ulang ke `en/index.html`.
+Di kanan atas ada dua toggle: **tema terang/gelap** (☀️/🌙, tersimpan di browser) dan **bahasa** (ID/EN). Default Bahasa Indonesia; versi Inggris dibuka di `/en/` — mis. `https://zidanebayu21.github.io/scaner_sca_sast/en/`. Bahasa dideteksi dari query `?lang=` → path `/en/` → localStorage → default `id`. `en/index.html` **bukan** salinan, melainkan stub kecil yang mengarahkan ke `../?lang=en`, jadi `index.html` tetap satu-satunya sumber dan tak perlu disalin ulang saat berubah.
 
 ## Cara Pakai
 

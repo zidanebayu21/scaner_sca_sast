@@ -2812,18 +2812,15 @@
           try { localStorage.setItem(THEME_KEY, this.theme); } catch (e) { /* abaikan */ }
           this.applyTheme();
         },
-        // Pindah bahasa: di GitHub Pages arahkan ke URL /en/ (atau akar) agar bisa
-        // dibagikan; di file lokal cukup pakai ?lang= + muat ulang.
+        // Pindah bahasa secara portabel: cukup set ?lang= lalu muat ulang (jalan di
+        // GitHub Pages maupun file lokal). URL /en/ hanya stub yang mengarah ke sini.
         toggleLang() {
           const next = this.lang === 'en' ? 'id' : 'en';
           try { localStorage.setItem(LANG_KEY, next); } catch (e) { /* abaikan */ }
-          const path = location.pathname;
-          if (location.protocol === 'http:' || location.protocol === 'https:') {
-            if (next === 'en') location.href = /(^|\/)en(\/|$)/.test(path) ? location.href : path.replace(/\/?$/, '/') + 'en/';
-            else location.href = path.replace(/\/en\/?$/, '/');
-          } else {
-            const u = new URL(location.href); u.searchParams.set('lang', next); location.href = u.href;
-          }
+          const u = new URL(location.href);
+          u.pathname = u.pathname.replace(/\/en\/?$/, '/'); // kalau sempat di /en/, kembali ke akar
+          u.searchParams.set('lang', next);
+          location.href = u.href;
         },
         // Simpan setelan tab yang tampil; jaga minimal satu tetap tampil dan
         // pindahkan tab aktif bila yang sedang dibuka disembunyikan.
