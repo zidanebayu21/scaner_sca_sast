@@ -82,7 +82,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.39</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.40</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -346,9 +346,10 @@
           <button class="btn gray" v-if="rl.results.length" @click="copyRateCsv">{{ rl.csvCopied ? 'Tersalin' : 'Salin CSV' }}</button>
         </div>
         <div class="muted" v-if="rl.results.length">{{ rl.results.length }} / {{ rl.count }} · {{ rateCounts }}</div>
+        <div class="bad" v-if="rateErrorHint" style="margin-top:6px">{{ rateErrorHint }}</div>
         <div class="log" v-if="rl.results.length" style="max-height:220px;overflow:auto">
           <div v-for="r in [...rl.results].reverse()" :key="r.i" :class="r.status === 429 ? 'sev-MEDIUM' : (r.status === 'error' || r.status >= 400) ? 'sev-HIGH' : 'ok'">
-            #{{ r.i }} {{ r.status }} · {{ r.ms }}ms<span v-if="r.retryAfter"> · Retry-After: {{ r.retryAfter }}</span>
+            #{{ r.i }} {{ r.status === 'error' ? 'GAGAL' : r.status }} · {{ r.ms }}ms<span v-if="r.status === 429"> · kena rate limit</span><span v-if="r.retryAfter"> · Retry-After: {{ r.retryAfter }}</span><span v-if="r.error"> · {{ r.error }}</span>
           </div>
         </div>
 
@@ -391,6 +392,7 @@
           <button class="btn gray" v-if="rto.busy" @click="stopRto">Stop</button>
           <button class="btn gray" v-if="rto.results.length" @click="copyRtoCsv">{{ rto.csvCopied ? 'Tersalin' : 'Salin CSV' }}</button>
         </div>
+        <div class="bad" v-if="rtoErrorHint" style="margin-top:6px">{{ rtoErrorHint }}</div>
         <div class="log" v-if="rto.results.length" style="max-height:220px;overflow:auto">
           <div v-for="r in [...rto.results].reverse()" :key="r.i" :class="r.outcome === 'reset' ? 'sev-MEDIUM' : (r.outcome === 'error') ? 'sev-HIGH' : 'ok'">
             #{{ r.i }} {{ r.label }} · {{ r.ms }}ms · terkirim {{ r.sent }}/{{ r.total }} B<span v-if="r.status"> · status {{ r.status }}</span>
@@ -446,6 +448,17 @@
         workers.push((async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } })());
       }
       await Promise.all(workers);
+    }
+
+    // Pesan error fetch yang mudah dipahami: browser menyamarkan kegagalan CORS,
+    // host mati, dan protokol sebagai "Failed to fetch" yang sama, jadi diberi
+    // dugaan + saran. Offline dideteksi lewat navigator.onLine.
+    function friendlyFetchError(e) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'Perangkat sedang offline — periksa koneksi internet, lalu coba ulang.';
+      if (e && e.name === 'AbortError') return 'Dibatalkan.';
+      const m = (e && e.message) || String(e || '');
+      if (/failed to fetch|networkerror|load failed|terminated/i.test(m)) return 'Gagal terhubung — kemungkinan diblokir CORS, host tidak dapat dijangkau, atau butuh HTTPS/HTTP-2. Coba Opsi 2 (same-origin) di bawah, atau klik lagi untuk coba ulang.';
+      return m || 'Gagal (sebab tidak diketahui).';
     }
 
     // ---- Perbandingan versi (semver longgar; juga revisi Alpine "-r0")
@@ -2633,12 +2646,24 @@
           });
           return Object.entries(c).map(([k, n]) => k + ':' + n).join('  ');
         },
+        rateErrorHint() {
+          const r = this.rl.results, errs = r.filter(x => x.status === 'error');
+          if (!errs.length) return '';
+          if (errs.length === r.length) return 'Semua ' + r.length + ' request gagal terhubung. ' + (errs[0].error || '') + ' Untuk endpoint yang butuh cookie sesi atau diblokir CORS, pakai Opsi 2 (skrip same-origin) di bawah.';
+          return errs.length + ' dari ' + r.length + ' request gagal — ' + (errs[0].error || '');
+        },
         rtoScript() { return this.rto.url.trim() ? buildRtoScript(this.rto) : ''; },
         rtoBookmarklet() { return this.rtoScript ? 'javascript:' + encodeURIComponent(this.rtoScript) : ''; },
         rtoEta() {
           const secs = (clampNum(this.rto.sizeKb, 1, 10240) * 1024 * 8) / (clampNum(this.rto.kbps, 2, 100000) * 1000);
           if (!isFinite(secs) || secs <= 0) return '—';
           return secs < 90 ? secs.toFixed(1) + ' dtk' : (secs / 60).toFixed(1) + ' mnt';
+        },
+        rtoErrorHint() {
+          const r = this.rto.results, errs = r.filter(x => x.outcome === 'error');
+          if (!errs.length) return '';
+          if (errs.length === r.length) return 'Semua ' + r.length + ' percobaan gagal terhubung. ' + (errs[0].label || '') + ' Streaming upload butuh HTTPS/HTTP-2 + izin CORS; untuk endpoint yang butuh cookie atau diblokir CORS, pakai Opsi 2.';
+          return errs.length + ' dari ' + r.length + ' percobaan gagal — ' + (errs[0].label || '');
         },
         activeItems() { return this.items.filter(it => it.enabled); },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
@@ -2706,7 +2731,7 @@
               const res = await fetch(rl.url, { method: rl.method, headers, body: noBody ? undefined : rl.body, credentials: 'omit' });
               rl.results.push({ i, status: res.status, ms: Math.round(performance.now() - t0), retryAfter: res.headers.get('retry-after') });
             } catch (e) {
-              rl.results.push({ i, status: 'error', ms: Math.round(performance.now() - t0), error: e.message });
+              rl.results.push({ i, status: 'error', ms: Math.round(performance.now() - t0), error: friendlyFetchError(e) });
             }
             if (i < rl.count && rl.delay && !rl.stop) await new Promise(r => setTimeout(r, rl.delay));
           }
@@ -2742,7 +2767,7 @@
             } catch (e) {
               const reset = !rto.stop && sent > 0 && sent < bytes.length;
               rto.results.push({ i, outcome: rto.stop ? 'stop' : reset ? 'reset' : 'error', status: '', ms: Math.round(performance.now() - t0), sent, total: bytes.length,
-                label: rto.stop ? 'dihentikan' : reset ? 'koneksi diputus server (kemungkinan read timeout)' : ('gagal: ' + e.message) });
+                label: rto.stop ? 'dihentikan' : reset ? 'koneksi diputus server (kemungkinan read timeout)' : friendlyFetchError(e) });
             }
             rto.ctl = null;
             if (i < rto.count && rto.delay && !rto.stop) await new Promise(r => setTimeout(r, rto.delay));
