@@ -71,6 +71,11 @@
     .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     td input[type=text], section > input[type=text] { width: 100%; box-sizing: border-box; }
     td.editable { cursor: text; } .cell-edit { min-width: 120px; }
+    .fi-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-top: 14px; background: var(--panel-bg); }
+    .fi-card h3 { margin: 0 0 8px; word-break: break-all; } .fi-card h4 { margin: 14px 0 6px; }
+    table.kv th { width: 220px; text-align: left; vertical-align: top; } table.kv td { word-break: break-all; }
+    code.hash { font-size: 12px; word-break: break-all; } .fi-list { margin: 0; padding-left: 4px; list-style: none; } .fi-list li { margin: 3px 0; }
+    .pill.warnp { background: #78350f; color: #fde68a; } .sev-INFO { color: var(--muted); }
     pre.json { margin: 0; padding: 12px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
     textarea { width: 100%; min-height: 160px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
     input[type=text], input[type=password], input[type=number], select { padding: 7px 10px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
@@ -495,6 +500,46 @@
       </section>
 
       <!-- Smart Decode: buka lapisan encoding/token/ciphertext bertingkat -->
+      <!-- Analisis file (lokal) -->
+      <section v-else-if="tab === 'file'">
+        <h2 style="margin-top:0">{{ t('fi_title') }}</h2>
+        <p class="muted" v-html="t('fi_intro')"></p>
+        <div class="drop" :class="{ over: fi.over }" @dragover.prevent="fi.over = true" @dragleave.prevent="fi.over = false" @drop.prevent="onFiDrop" @click="$refs.fiFile.click()">
+          <div v-html="t('fi_drop')"></div>
+          <input ref="fiFile" type="file" multiple hidden @change="onFiPick" />
+        </div>
+        <div class="actions" v-if="fi.results.length">
+          <button class="btn gray" :disabled="fi.busy" @click="downloadFiJson">{{ t('fi_export') }}</button>
+          <button class="btn gray" :disabled="fi.busy" @click="fi.results = []">{{ t('fi_clear') }}</button>
+          <span class="muted" v-if="fi.busy">{{ t('fi_busy') }}</span>
+        </div>
+        <div class="fi-card" v-for="(r, i) in fi.results" :key="i">
+          <h3>{{ r.name }} <span v-if="!r.busy" class="pill" :class="fiVerdictClass(r)">{{ t('fi_v_' + fiVerdictOf(r)) }}</span></h3>
+          <div v-if="r.busy" class="muted">{{ t('fi_busy') }}</div>
+          <template v-else>
+            <table class="kv"><tbody><tr v-for="row in fiIdentity(r)" :key="row[0]"><th>{{ row[0] }}</th><td>{{ row[1] }}</td></tr></tbody></table>
+            <h4>{{ t('fi_hash_title') }}</h4>
+            <table class="kv"><tbody>
+              <tr v-for="(h, algo) in r.hashes" :key="algo"><th>{{ algo }}</th><td><code class="hash">{{ h }}</code> <button class="lnk" @click="copyFiHash(h)">{{ fi.copied === h ? t('fi_copied') : t('fi_copy') }}</button></td></tr>
+            </tbody></table>
+            <div class="row" v-if="Object.keys(r.hashes).length"><input type="text" v-model="r.verify" :placeholder="t('fi_verify_ph')" spellcheck="false" /></div>
+            <div v-if="fiVerifyOf(r)" :class="fiVerifyOf(r).ok ? 'ok' : 'bad'" style="margin-top:4px">{{ fiVerifyOf(r).text }}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">{{ t('fi_hash_note') }}</div>
+            <h4>{{ t('fi_integ_title') }}</h4>
+            <ul class="fi-list"><li v-for="(x, k) in r.integ" :key="k" :class="x.ok === true ? 'ok' : x.ok === false ? 'bad' : 'sev-MEDIUM'">{{ x.ok === true ? '✓' : x.ok === false ? '✗' : '!' }} {{ x.msg }}</li></ul>
+            <h4>{{ t('fi_find_title') }}</h4>
+            <div v-if="!r.finds.length" class="ok">{{ t('fi_find_none') }}</div>
+            <table v-else><thead><tr><th>{{ t('th_sev') }}</th><th>{{ t('fi_th_finding') }}</th></tr></thead><tbody>
+              <tr v-for="(f, k) in r.finds" :key="k"><td :class="'sev-' + f.sev">{{ fiSevText(f.sev) }}</td><td>{{ f.msg }}<div v-if="f.link"><a :href="f.link" target="_blank" rel="noopener noreferrer">{{ t('fi_map') }}</a></div></td></tr>
+            </tbody></table>
+            <details :open="r.meta.length <= 40"><summary>{{ t('fi_meta_title') }} ({{ r.meta.length }})</summary>
+              <table class="kv"><tbody><tr v-for="(m, k) in r.meta" :key="k"><th>{{ m[0] }}</th><td>{{ m[1] }}</td></tr></tbody></table>
+            </details>
+          </template>
+        </div>
+        <p class="muted" style="margin-top:12px">{{ t('fi_note') }}</p>
+      </section>
+
       <section v-else-if="tab === 'decode'">
         <h2 style="margin-top:0">{{ t('dec_title') }}</h2>
         <p class="muted">{{ t('dec_intro') }}</p>
@@ -623,7 +668,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.5';
+    const APP_VERSION = '1.6';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -3474,6 +3519,808 @@
     // @@DECODE-END
 
     // ============================================================
+    //  Analisis file (lokal, drag-drop): cocokkan magic bytes vs ekstensi, hash (MD5/SHA-1/
+    //  SHA-256/SHA-512) + verifikasi checksum, cek integritas struktur, konten berbahaya
+    //  (script di SVG, JavaScript/aksi otomatis di PDF, macro Office, GPS di EXIF), dan metadata.
+    //  Isi file hanya dibaca di browser dan tidak dikirim ke mana pun; hasil ditampilkan
+    //  sebagai teks (interpolasi Vue), XML diurai DOMParser (tidak memuat entitas eksternal).
+    //  Rujukan: OWASP File Upload Cheat Sheet; OWASP ASVS 4.0.3 V12.2.1 (tipe file divalidasi
+    //  dari isi, bukan ekstensi), V12.1, V8.3.4 (data sensitif tersembunyi); CWE-434, CWE-22
+    //  (Zip Slip), CWE-409 (zip bomb), CWE-611 (XXE), CWE-359 (lokasi GPS); RFC 1321 (MD5),
+    //  FIPS 180-4 (SHA), RFC 2083 (PNG), ISO 32000 (PDF), CIPA DC-008 (EXIF), PKWARE APPNOTE (ZIP).
+    // ============================================================
+    // @@FILE-START (penanda ekstraksi untuk uji node)
+    const FI_I18N = {
+      id: {
+        fi_m_dim: 'Dimensi (header)', fi_m_comment: 'Komentar JPEG', fi_m_created: 'Dibuat (mvhd)', fi_m_duration: 'Durasi (mvhd)', fi_m_compiled: 'Waktu kompilasi', fi_m_pdfver: 'Versi PDF', fi_m_pages: 'Jumlah halaman', fi_m_entries: 'Jumlah entri', fi_m_unzipped: 'Total ukuran asli', fi_m_encoding: 'Encoding', fi_m_lines: 'Baris', fi_m_resolution: 'Resolusi video', fi_m_duration_b: 'Durasi (browser)', fi_k_text: 'Teks',
+        tab_file: 'Analisis file', fi_title: 'Analisis file (magic bytes, hash, metadata)',
+        fi_intro: 'Seret file apa pun (PDF, foto, audio, video, dokumen Office, arsip, SVG, executable, …). Dicek <b>di browser ini saja</b>: jenis asli dari <b>magic bytes</b> dibanding ekstensi, <b>hash</b> MD5/SHA-1/SHA-256/SHA-512 untuk dicocokkan dengan checksum resmi, <b>integritas</b> struktur (rusak/terpotong), <b>konten berbahaya</b> (script di SVG, JavaScript/aksi otomatis di PDF, macro di Office, data tersisip), dan <b>metadata</b> (EXIF/GPS foto, info PDF, properti Office, tag audio, durasi video).',
+        fi_drop: '<b>Seret file ke sini</b> atau klik untuk memilih (bisa banyak sekaligus, maks 256 MB per file)',
+        fi_busy: 'Menganalisis…', fi_export: 'Unduh hasil (JSON)', fi_clear: 'Bersihkan', fi_copy: 'salin', fi_copied: 'tersalin',
+        fi_v_ok: 'Aman', fi_v_warn: 'Perlu dicek', fi_v_danger: 'Berbahaya',
+        fi_id_name: 'Nama', fi_id_size: 'Ukuran', fi_id_modified: 'Diubah (menurut sistem)', fi_id_browser: 'MIME dari browser',
+        fi_id_detected: 'Jenis asli (magic bytes)', fi_id_expect: 'Ekstensi yang cocok', fi_id_magic: 'Byte awal (hex)', fi_id_entropy: 'Entropi',
+        fi_unknown: 'tidak dikenali', fi_none: '(tanpa ekstensi)',
+        fi_hash_title: 'Hash & verifikasi checksum',
+        fi_verify_ph: 'Tempel checksum resmi (hex MD5/SHA-1/SHA-256/SHA-512, baris "hash  nama-file", atau SRI sha256-…/sha512-…)',
+        fi_hash_match: '✓ Cocok dengan {x} — file identik dengan yang dipublikasikan.',
+        fi_hash_mismatch: '✗ Tidak cocok ({x}) — file berbeda: rusak saat unduh, versi lain, atau sudah diubah.',
+        fi_hash_badinput: 'Format checksum tidak dikenali.',
+        fi_hash_note: 'MD5/SHA-1 cukup untuk mendeteksi file rusak, tetapi tidak untuk membuktikan keaslian (rentan collision). Untuk keaslian, cocokkan SHA-256/SHA-512 dari sumber resmi (HTTPS) atau verifikasi tanda tangan digital (GPG/Authenticode).',
+        fi_integ_title: 'Integritas struktur', fi_find_title: 'Temuan keamanan', fi_find_none: 'Tidak ada temuan.', fi_th_finding: 'Temuan',
+        fi_meta_title: 'Metadata', fi_map: 'Buka lokasi di OpenStreetMap', fi_sev_info: 'Info',
+        fi_note: 'Batasan: analisis statis tanpa antivirus — "Aman" berarti tidak ada pola berbahaya yang dikenali, bukan jaminan bebas malware. Objek PDF yang terkompresi dibuka bila memungkinkan; file terenkripsi tidak bisa diperiksa isinya.',
+        fi_err_big: 'File lebih dari 256 MB — dilewati.', fi_err_read: 'Gagal membaca file: {x}',
+        // integritas
+        fi_i_ok_struct: 'Struktur {x} utuh.', fi_i_trunc: 'File terpotong/rusak: {x}.',
+        fi_i_pdf_eof: 'penanda akhir %%EOF tidak ada', fi_i_pdf_xref: 'startxref tidak ditemukan (tabel referensi silang hilang)',
+        fi_i_png_iend: 'chunk IEND tidak ada', fi_i_png_crc: '{x} chunk dengan CRC salah', fi_i_jpeg_eoi: 'penanda akhir JPEG (FFD9) tidak ada',
+        fi_i_gif_end: 'byte trailer GIF (0x3B) tidak ada', fi_i_size_decl: 'ukuran di header {x} byte, file sebenarnya lebih kecil',
+        fi_i_zip_eocd: 'End of Central Directory ZIP tidak ditemukan', fi_i_zip_cd: 'central directory ZIP tidak lengkap/rusak', fi_i_zip_local: '{x} entri ZIP menunjuk ke header lokal yang salah',
+        fi_i_zip64: 'ZIP64 — daftar isi tidak diurai',
+        fi_i_box: 'box "{x}" melewati akhir file', fi_i_moov: 'box moov (indeks video) tidak ada — rekaman tidak selesai atau rusak',
+        fi_i_pe: 'header PE tidak valid', fi_i_json: 'JSON tidak valid: {x}', fi_i_xml: 'XML tidak valid', fi_i_text_ok: 'Teks valid ({x}).',
+        fi_i_img_ok: 'Gambar berhasil didekode browser ({x}).', fi_i_img_fail: 'Browser gagal mendekode gambar — kemungkinan rusak atau format tidak didukung.',
+        fi_i_media_ok: 'Media berhasil dibaca browser (durasi {x}).', fi_i_media_fail: 'Browser tidak bisa membaca media — rusak, terpotong, atau codec tidak didukung Chrome.',
+        fi_i_unknown: 'Format tidak dikenali — integritas struktur tidak bisa dicek (hash tetap bisa dipakai).',
+        fi_i_nosubtle: 'WebCrypto tidak tersedia (halaman bukan HTTPS/file lokal) — hanya MD5 yang dihitung.',
+        // temuan
+        fi_s_mismatch: 'Ekstensi .{x} tidak cocok dengan isi file ({y}).',
+        fi_s_disguised: 'File {y} disamarkan dengan ekstensi .{x} — pola umum unggahan berbahaya (CWE-434).',
+        fi_s_double_ext: 'Ekstensi ganda/menipu: "{x}".', fi_s_rtlo: 'Nama file memakai karakter kontrol arah (RTLO) untuk menyamarkan ekstensi.',
+        fi_s_exec: 'File executable ({x}) — jangan dijalankan bila sumbernya tidak tepercaya.',
+        fi_s_polyglot: 'Kode skrip "{x}" ditemukan di dalam file biner (offset {y}) — kemungkinan polyglot/webshell.',
+        fi_s_appended_zip: 'Ada arsip ZIP yang ditempel setelah akhir {x} (polyglot/steganografi).',
+        fi_s_trailing: '{x} byte data tambahan setelah penanda akhir file.',
+        fi_s_svg_script: 'SVG berisi \x3Cscript> — dieksekusi bila SVG dibuka langsung/disajikan dari domain Anda (stored XSS).',
+        fi_s_svg_event: 'SVG/HTML berisi event handler ({x}) yang bisa menjalankan JavaScript.',
+        fi_s_js_uri: 'Ada URI javascript: di dalam file.', fi_s_foreign: 'SVG memakai <foreignObject> (bisa menyisipkan HTML).',
+        fi_s_xxe: 'Deklarasi DOCTYPE/ENTITY — berisiko XXE bila diurai server (CWE-611).', fi_s_ext_ref: '{x} referensi ke sumber eksternal (http/https).',
+        fi_s_html: 'File HTML — bila diunggah lalu disajikan dari domain Anda, script di dalamnya ikut berjalan.',
+        fi_s_php: 'Kode PHP{x} — berpotensi webshell bila diunggah ke server.', fi_s_script: 'Skrip shell/interpreter (shebang {x}).',
+        fi_s_pdf_js: 'PDF berisi JavaScript (/JavaScript atau /JS).', fi_s_pdf_open: 'PDF punya aksi otomatis saat dibuka (/OpenAction).',
+        fi_s_pdf_aa: 'PDF punya aksi tambahan otomatis (/AA) pada halaman/field.', fi_s_pdf_launch: 'PDF bisa menjalankan program eksternal (/Launch).',
+        fi_s_pdf_embed: 'PDF berisi file tertanam (/EmbeddedFile).', fi_s_pdf_rich: 'PDF berisi konten RichMedia/Flash.',
+        fi_s_pdf_submit: 'PDF berisi form yang mengirim data (/SubmitForm).', fi_s_pdf_xfa: 'PDF memakai formulir XFA.',
+        fi_s_pdf_hexname: 'Nama objek PDF disamarkan dengan escape hex (mis. /J#61vaScript) — teknik umum PDF berbahaya.',
+        fi_s_pdf_uri: '{x} tautan (/URI) di dalam PDF.', fi_s_pdf_enc: 'PDF terenkripsi — sebagian isi tidak bisa diperiksa.',
+        fi_s_macro: 'Dokumen berisi macro VBA ({x}).{y}', fi_s_macro_ext: ' Ekstensi .{x} biasanya tanpa macro — mencurigakan.',
+        fi_s_activex: 'Dokumen berisi kontrol ActiveX.', fi_s_ole_embed: '{x} objek OLE tertanam.',
+        fi_s_remote_tpl: 'Relasi eksternal "{x}" → {y} (template/objek jarak jauh, teknik CVE-2017-0199/Follina).',
+        fi_s_ext_links: '{x} hyperlink eksternal di dokumen.', fi_s_rtf_obj: 'RTF berisi objek OLE tertanam{x}.',
+        fi_s_zip_slip: 'Entri arsip dengan path traversal: "{x}" (Zip Slip, CWE-22).', fi_s_zip_enc: '{x} entri arsip terenkripsi (tidak bisa diperiksa).',
+        fi_s_zip_bomb: 'Rasio kompresi {x}× — indikasi zip bomb (CWE-409).', fi_s_zip_exec: 'Arsip berisi file executable/skrip: {x}.',
+        fi_s_gps: 'Lokasi GPS tersimpan di metadata: {x} — hapus sebelum dibagikan (privasi, CWE-359).',
+        fi_s_exif_owner: 'Metadata berisi identitas pemilik/serial perangkat: {x}.'
+      },
+      en: {
+        fi_m_dim: 'Dimensions (header)', fi_m_comment: 'JPEG comment', fi_m_created: 'Created (mvhd)', fi_m_duration: 'Duration (mvhd)', fi_m_compiled: 'Compile time', fi_m_pdfver: 'PDF version', fi_m_pages: 'Pages', fi_m_entries: 'Entries', fi_m_unzipped: 'Total uncompressed size', fi_m_encoding: 'Encoding', fi_m_lines: 'Lines', fi_m_resolution: 'Video resolution', fi_m_duration_b: 'Duration (browser)', fi_k_text: 'Text',
+        tab_file: 'File analysis', fi_title: 'File analysis (magic bytes, hash, metadata)',
+        fi_intro: 'Drop any file (PDF, photo, audio, video, Office document, archive, SVG, executable, …). Checked <b>in this browser only</b>: real type from <b>magic bytes</b> vs. extension, MD5/SHA-1/SHA-256/SHA-512 <b>hashes</b> to compare with the official checksum, structural <b>integrity</b> (corrupt/truncated), <b>dangerous content</b> (script in SVG, JavaScript/auto actions in PDF, Office macros, appended data), and <b>metadata</b> (photo EXIF/GPS, PDF info, Office properties, audio tags, video duration).',
+        fi_drop: '<b>Drop files here</b> or click to choose (multiple allowed, max 256 MB each)',
+        fi_busy: 'Analyzing…', fi_export: 'Download results (JSON)', fi_clear: 'Clear', fi_copy: 'copy', fi_copied: 'copied',
+        fi_v_ok: 'Safe', fi_v_warn: 'Review', fi_v_danger: 'Dangerous',
+        fi_id_name: 'Name', fi_id_size: 'Size', fi_id_modified: 'Modified (per system)', fi_id_browser: 'Browser MIME',
+        fi_id_detected: 'Real type (magic bytes)', fi_id_expect: 'Matching extensions', fi_id_magic: 'First bytes (hex)', fi_id_entropy: 'Entropy',
+        fi_unknown: 'unrecognized', fi_none: '(no extension)',
+        fi_hash_title: 'Hash & checksum verification',
+        fi_verify_ph: 'Paste the official checksum (hex MD5/SHA-1/SHA-256/SHA-512, a "hash  file-name" line, or SRI sha256-…/sha512-…)',
+        fi_hash_match: '✓ Matches {x} — the file is identical to the published one.',
+        fi_hash_mismatch: '✗ Does not match ({x}) — the file differs: corrupted download, another version, or modified.',
+        fi_hash_badinput: 'Checksum format not recognized.',
+        fi_hash_note: 'MD5/SHA-1 are fine for detecting corruption but not for proving authenticity (collision-prone). For authenticity compare SHA-256/SHA-512 from an official (HTTPS) source or verify a digital signature (GPG/Authenticode).',
+        fi_integ_title: 'Structural integrity', fi_find_title: 'Security findings', fi_find_none: 'No findings.', fi_th_finding: 'Finding',
+        fi_meta_title: 'Metadata', fi_map: 'Open location in OpenStreetMap', fi_sev_info: 'Info',
+        fi_note: 'Limitations: static analysis, not an antivirus — "Safe" means no known dangerous pattern was found, not a malware-free guarantee. Compressed PDF objects are inflated when possible; encrypted files cannot be inspected.',
+        fi_err_big: 'File larger than 256 MB — skipped.', fi_err_read: 'Failed to read the file: {x}',
+        fi_i_ok_struct: '{x} structure is intact.', fi_i_trunc: 'File truncated/corrupt: {x}.',
+        fi_i_pdf_eof: 'the %%EOF end marker is missing', fi_i_pdf_xref: 'startxref not found (cross-reference table missing)',
+        fi_i_png_iend: 'IEND chunk missing', fi_i_png_crc: '{x} chunk(s) with a bad CRC', fi_i_jpeg_eoi: 'JPEG end marker (FFD9) missing',
+        fi_i_gif_end: 'GIF trailer byte (0x3B) missing', fi_i_size_decl: 'header declares {x} bytes, the file is smaller',
+        fi_i_zip_eocd: 'ZIP End of Central Directory not found', fi_i_zip_cd: 'ZIP central directory incomplete/corrupt', fi_i_zip_local: '{x} ZIP entries point to a wrong local header',
+        fi_i_zip64: 'ZIP64 — entry list not parsed',
+        fi_i_box: 'box "{x}" runs past the end of the file', fi_i_moov: 'moov box (video index) missing — unfinished recording or corrupt',
+        fi_i_pe: 'invalid PE header', fi_i_json: 'Invalid JSON: {x}', fi_i_xml: 'Invalid XML', fi_i_text_ok: 'Valid text ({x}).',
+        fi_i_img_ok: 'Image decoded by the browser ({x}).', fi_i_img_fail: 'The browser failed to decode the image — likely corrupt or unsupported format.',
+        fi_i_media_ok: 'Media read by the browser (duration {x}).', fi_i_media_fail: 'The browser cannot read the media — corrupt, truncated, or a codec Chrome does not support.',
+        fi_i_unknown: 'Unrecognized format — structure cannot be checked (hashes still apply).',
+        fi_i_nosubtle: 'WebCrypto unavailable (page not HTTPS/local file) — only MD5 computed.',
+        fi_s_mismatch: 'Extension .{x} does not match the content ({y}).',
+        fi_s_disguised: '{y} file disguised with a .{x} extension — a common malicious upload pattern (CWE-434).',
+        fi_s_double_ext: 'Double/deceptive extension: "{x}".', fi_s_rtlo: 'File name uses a right-to-left override (RTLO) character to disguise the extension.',
+        fi_s_exec: 'Executable file ({x}) — do not run it if the source is untrusted.',
+        fi_s_polyglot: 'Script code "{x}" found inside a binary file (offset {y}) — possible polyglot/webshell.',
+        fi_s_appended_zip: 'A ZIP archive is appended after the end of the {x} (polyglot/steganography).',
+        fi_s_trailing: '{x} bytes of extra data after the end-of-file marker.',
+        fi_s_svg_script: 'SVG contains \x3Cscript> — runs when the SVG is opened directly/served from your domain (stored XSS).',
+        fi_s_svg_event: 'SVG/HTML contains event handlers ({x}) that can run JavaScript.',
+        fi_s_js_uri: 'A javascript: URI is present in the file.', fi_s_foreign: 'SVG uses <foreignObject> (can embed HTML).',
+        fi_s_xxe: 'DOCTYPE/ENTITY declaration — XXE risk if parsed server-side (CWE-611).', fi_s_ext_ref: '{x} reference(s) to external (http/https) resources.',
+        fi_s_html: 'HTML file — if uploaded and served from your domain, its scripts run too.',
+        fi_s_php: 'PHP code{x} — potential webshell if uploaded to a server.', fi_s_script: 'Shell/interpreter script (shebang {x}).',
+        fi_s_pdf_js: 'PDF contains JavaScript (/JavaScript or /JS).', fi_s_pdf_open: 'PDF has an automatic action on open (/OpenAction).',
+        fi_s_pdf_aa: 'PDF has automatic additional actions (/AA) on pages/fields.', fi_s_pdf_launch: 'PDF can launch an external program (/Launch).',
+        fi_s_pdf_embed: 'PDF contains embedded files (/EmbeddedFile).', fi_s_pdf_rich: 'PDF contains RichMedia/Flash content.',
+        fi_s_pdf_submit: 'PDF contains a form that submits data (/SubmitForm).', fi_s_pdf_xfa: 'PDF uses XFA forms.',
+        fi_s_pdf_hexname: 'PDF object names are hex-escaped (e.g. /J#61vaScript) — a common malicious-PDF technique.',
+        fi_s_pdf_uri: '{x} link(s) (/URI) in the PDF.', fi_s_pdf_enc: 'PDF is encrypted — part of its content cannot be inspected.',
+        fi_s_macro: 'Document contains VBA macros ({x}).{y}', fi_s_macro_ext: ' The .{x} extension normally has no macros — suspicious.',
+        fi_s_activex: 'Document contains ActiveX controls.', fi_s_ole_embed: '{x} embedded OLE object(s).',
+        fi_s_remote_tpl: 'External relationship "{x}" → {y} (remote template/object, CVE-2017-0199/Follina technique).',
+        fi_s_ext_links: '{x} external hyperlink(s) in the document.', fi_s_rtf_obj: 'RTF contains an embedded OLE object{x}.',
+        fi_s_zip_slip: 'Archive entry with path traversal: "{x}" (Zip Slip, CWE-22).', fi_s_zip_enc: '{x} encrypted archive entries (cannot be inspected).',
+        fi_s_zip_bomb: 'Compression ratio {x}× — zip bomb indicator (CWE-409).', fi_s_zip_exec: 'Archive contains executables/scripts: {x}.',
+        fi_s_gps: 'GPS location stored in metadata: {x} — strip it before sharing (privacy, CWE-359).',
+        fi_s_exif_owner: 'Metadata contains owner/device serial identity: {x}.'
+      }
+    };
+    Object.keys(FI_I18N).forEach(l => { I18N[l] = Object.assign({}, FI_I18N[l], I18N[l] || {}); });
+
+    const FI_MAX_BYTES = 256 * 1024 * 1024;
+    const FI_SCAN_SLICE = 32 * 1024 * 1024; // pola teks dicari di 32 MB awal + 32 MB akhir
+    const FI_XML_MAX = 4 * 1024 * 1024;
+    const u16le = (b, o) => b[o] | (b[o + 1] << 8);
+    const u16be = (b, o) => (b[o] << 8) | b[o + 1];
+    const u32le = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+    const u32be = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+    const syncsafe = (b, o) => ((b[o] & 127) << 21) | ((b[o + 1] & 127) << 14) | ((b[o + 2] & 127) << 7) | (b[o + 3] & 127);
+    function latin1(b, s, e) {
+      let out = '';
+      const end = Math.min(e === undefined ? b.length : e, b.length);
+      for (let i = s || 0; i < end; i += 0x8000) out += String.fromCharCode.apply(null, b.subarray(i, Math.min(end, i + 0x8000)));
+      return out;
+    }
+    const sigBytes = s => (typeof s === 'string' ? Array.from(s, c => c.charCodeAt(0)) : s);
+    function humanSize(n) {
+      const u = ['B', 'KB', 'MB', 'GB']; let i = 0, v = n;
+      while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+      return (i ? v.toFixed(2) : v) + ' ' + u[i] + (i ? ' (' + n.toLocaleString() + ' B)' : '');
+    }
+    function fmtDuration(s) {
+      if (!isFinite(s)) return '?';
+      const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = (s % 60).toFixed(s < 10 ? 2 : 0);
+      return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(sec.includes('.') ? 5 : 2, '0');
+    }
+    let crcTable = null;
+    function crc32(b) {
+      if (!crcTable) {
+        crcTable = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; }
+      }
+      let c = 0xFFFFFFFF;
+      for (let i = 0; i < b.length; i++) c = crcTable[(c ^ b[i]) & 255] ^ (c >>> 8);
+      return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    // ---- Tanda tangan magic bytes. exec = executable, script = teks yang bisa dieksekusi.
+    const FI_TIFF_EXT = ['tif', 'tiff', 'dng', 'nef', 'cr2', 'arw', 'orf', 'rw2'];
+    const FI_ZIP_EXT = ['zip', 'docx', 'docm', 'dotx', 'dotm', 'xlsx', 'xlsm', 'xltx', 'xltm', 'xlsb', 'pptx', 'pptm', 'potx', 'ppsx', 'ppsm', 'odt', 'ods', 'odp', 'odg', 'epub', 'jar', 'war', 'ear', 'apk', 'aab', 'xpi', 'vsix', 'nupkg', 'whl', 'ipa', 'kmz', '3mf', 'cbz'];
+    const FI_SIGS = [
+      { id: 'pdf', label: 'PDF', ext: ['pdf', 'ai'], mime: 'application/pdf', sig: '%PDF-' },
+      { id: 'png', label: 'PNG', ext: ['png', 'apng'], mime: 'image/png', sig: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], img: true },
+      { id: 'jpeg', label: 'JPEG', ext: ['jpg', 'jpeg', 'jpe', 'jfif'], mime: 'image/jpeg', sig: [0xFF, 0xD8, 0xFF], img: true },
+      { id: 'gif', label: 'GIF', ext: ['gif'], mime: 'image/gif', sig: 'GIF8', img: true },
+      { id: 'bmp', label: 'BMP', ext: ['bmp', 'dib'], mime: 'image/bmp', sig: 'BM', img: true },
+      { id: 'tiff', label: 'TIFF', ext: FI_TIFF_EXT, mime: 'image/tiff', sig: [0x49, 0x49, 0x2A, 0x00] },
+      { id: 'tiff', label: 'TIFF', ext: FI_TIFF_EXT, mime: 'image/tiff', sig: [0x4D, 0x4D, 0x00, 0x2A] },
+      { id: 'ico', label: 'ICO', ext: ['ico', 'cur'], mime: 'image/x-icon', sig: [0, 0, 1, 0], img: true },
+      { id: 'psd', label: 'Photoshop PSD', ext: ['psd', 'psb'], sig: '8BPS' },
+      { id: 'riff', label: 'RIFF', ext: [], sig: 'RIFF' },
+      { id: 'zip', label: 'ZIP', ext: FI_ZIP_EXT, mime: 'application/zip', sig: 'PK\x03\x04' },
+      { id: 'zip', label: 'ZIP', ext: FI_ZIP_EXT, mime: 'application/zip', sig: 'PK\x05\x06' },
+      { id: 'rar', label: 'RAR', ext: ['rar'], sig: 'Rar!\x1A\x07' },
+      { id: '7z', label: '7-Zip', ext: ['7z'], sig: [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C] },
+      { id: 'gz', label: 'GZIP', ext: ['gz', 'tgz', 'svgz'], sig: [0x1F, 0x8B] },
+      { id: 'bz2', label: 'BZIP2', ext: ['bz2', 'tbz2'], sig: 'BZh' },
+      { id: 'xz', label: 'XZ', ext: ['xz', 'txz'], sig: [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00] },
+      { id: 'mp3', label: 'MP3 (ID3)', ext: ['mp3'], mime: 'audio/mpeg', sig: 'ID3', media: true },
+      { id: 'mp3', label: 'MP3', ext: ['mp3', 'mp2'], mime: 'audio/mpeg', test: b => b[0] === 0xFF && (b[1] & 0xE0) === 0xE0 && (b[1] & 0x06) !== 0, media: true },
+      { id: 'aac', label: 'AAC (ADTS)', ext: ['aac'], mime: 'audio/aac', test: b => b[0] === 0xFF && (b[1] & 0xF6) === 0xF0, media: true },
+      { id: 'ogg', label: 'Ogg', ext: ['ogg', 'oga', 'ogv', 'opus', 'spx'], mime: 'audio/ogg', sig: 'OggS', media: true },
+      { id: 'flac', label: 'FLAC', ext: ['flac'], mime: 'audio/flac', sig: 'fLaC', media: true },
+      { id: 'bmff', label: 'MP4', ext: [], test: b => latin1(b, 4, 8) === 'ftyp' },
+      { id: 'mkv', label: 'Matroska/WebM', ext: ['mkv', 'webm', 'mka', 'mk3d'], mime: 'video/webm', sig: [0x1A, 0x45, 0xDF, 0xA3], media: true },
+      { id: 'pe', label: 'Windows PE (EXE/DLL)', ext: ['exe', 'dll', 'sys', 'scr', 'com', 'cpl', 'ocx', 'drv', 'efi', 'mui'], sig: 'MZ', exec: true },
+      { id: 'elf', label: 'ELF (Linux/Android)', ext: ['', 'so', 'elf', 'bin', 'o', 'out', 'ko'], sig: [0x7F, 0x45, 0x4C, 0x46], exec: true },
+      { id: 'macho', label: 'Mach-O (macOS)', ext: ['', 'dylib', 'bundle'], test: b => [0xFEEDFACE, 0xFEEDFACF, 0xCEFAEDFE, 0xCFFAEDFE].includes(u32be(b, 0)), exec: true },
+      { id: 'class', label: 'Java class', ext: ['class'], sig: [0xCA, 0xFE, 0xBA, 0xBE], exec: true },
+      { id: 'ole', label: 'OLE2 (Office lama: doc/xls/ppt, MSI, MSG)', ext: ['doc', 'dot', 'xls', 'xlt', 'ppt', 'pot', 'pps', 'msi', 'msg', 'vsd', 'pub'], sig: [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1] },
+      { id: 'rtf', label: 'RTF', ext: ['rtf', 'doc'], sig: '{\\rtf' },
+      { id: 'sqlite', label: 'SQLite', ext: ['sqlite', 'sqlite3', 'db', 'db3', 's3db'], sig: 'SQLite format 3\0' },
+      { id: 'wasm', label: 'WebAssembly', ext: ['wasm'], sig: '\0asm', exec: true },
+      { id: 'woff', label: 'WOFF', ext: ['woff'], sig: 'wOFF' },
+      { id: 'woff2', label: 'WOFF2', ext: ['woff2'], sig: 'wOF2' },
+      { id: 'font', label: 'TrueType/OpenType', ext: ['ttf', 'otf', 'ttc'], test: b => [0x00010000, 0x4F54544F, 0x74746366, 0x74727565].includes(u32be(b, 0)) },
+      { id: 'lnk', label: 'Windows shortcut (LNK)', ext: ['lnk'], sig: [0x4C, 0x00, 0x00, 0x00, 0x01, 0x14, 0x02, 0x00], exec: true },
+      { id: 'iso', label: 'ISO 9660', ext: ['iso'], test: b => latin1(b, 0x8001, 0x8006) === 'CD001' }
+    ];
+    // Sub-jenis RIFF dan ISO BMFF (ftyp brand).
+    const FI_RIFF = {
+      WAVE: { label: 'WAV', ext: ['wav'], mime: 'audio/wav', media: true },
+      WEBP: { label: 'WebP', ext: ['webp'], mime: 'image/webp', img: true },
+      'AVI ': { label: 'AVI', ext: ['avi'], mime: 'video/x-msvideo', media: true }
+    };
+    const FI_BRANDS = [
+      [/^qt/, { label: 'QuickTime MOV', ext: ['mov', 'qt', 'mp4'], mime: 'video/quicktime', media: true }],
+      [/^(heic|heix|hevc|heim|heis|mif1|msf1)/, { label: 'HEIC/HEIF', ext: ['heic', 'heif', 'hif'], mime: 'image/heic' }],
+      [/^avi[fs]/, { label: 'AVIF', ext: ['avif'], mime: 'image/avif', img: true }],
+      [/^M4[AB]/, { label: 'M4A (AAC)', ext: ['m4a', 'm4b', 'mp4'], mime: 'audio/mp4', media: true }],
+      [/^3g/, { label: '3GP', ext: ['3gp', '3g2', 'mp4'], mime: 'video/3gpp', media: true }],
+      [/^crx/, { label: 'Canon CR3', ext: ['cr3'] }],
+      [/./, { label: 'MP4', ext: ['mp4', 'm4v', 'm4a', 'mov', 'f4v'], mime: 'video/mp4', media: true }]
+    ];
+    const FI_TEXT_EXT = ['txt', 'csv', 'tsv', 'md', 'log', 'ini', 'cfg', 'conf', 'yml', 'yaml', 'toml', 'js', 'mjs', 'cjs', 'ts', 'css', 'scss', 'sql', 'env', 'properties', 'gradle', 'mod', 'sum', 'lock', 'gitignore', 'dockerfile', 'srt', 'vtt', 'ics', 'vcf', 'bat', 'cmd', 'ps1', 'vbs', 'reg', 'c', 'h', 'cpp', 'cs', 'java', 'go', 'rs', 'kt', 'swift', 'dart', 'vue', 'jsx', 'tsx', 'eml', 'pem', 'crt', 'key', 'asc', 'sig', ''];
+    const FI_TEXT_KINDS = {
+      svg: { label: 'SVG', ext: ['svg'], mime: 'image/svg+xml', script: true },
+      html: { label: 'HTML', ext: ['html', 'htm', 'xhtml', 'shtml', 'hta'], mime: 'text/html', script: true },
+      php: { label: 'PHP', ext: ['php', 'phtml', 'php3', 'php4', 'php5', 'php7', 'phar', 'inc'], mime: 'application/x-php', script: true },
+      script: { label: 'Script (shebang)', ext: ['sh', 'bash', 'zsh', 'py', 'pl', 'rb', 'js', 'cgi', ''], script: true },
+      xml: { label: 'XML', ext: ['xml', 'xsd', 'xsl', 'xslt', 'rss', 'atom', 'plist', 'config', 'csproj', 'props', 'resx', 'xaml', 'kml', 'gpx', 'xlf', 'pom', 'wsdl'], mime: 'application/xml' },
+      json: { label: 'JSON', ext: ['json', 'map', 'webmanifest', 'ipynb', 'geojson', 'har', 'lock', 'jsonld'], mime: 'application/json' },
+      text: { label: 'Text', ext: FI_TEXT_EXT, mime: 'text/plain' }
+    };
+    // Ekstensi milik format biner: teks berekstensi ini berarti salah jenis.
+    const FI_BINARY_EXT = new Set(FI_SIGS.flatMap(s => s.ext).concat(Object.values(FI_RIFF).flatMap(s => s.ext), FI_BRANDS.flatMap(([, s]) => s.ext)).filter(Boolean));
+
+    function fiDetect(b) {
+      const s = FI_SIGS.find(x => (x.test ? b.length > 8 && x.test(b) : startsWithBytes(b, sigBytes(x.sig))));
+      if (s) {
+        if (s.id === 'riff') return { ...s, ...(FI_RIFF[latin1(b, 8, 12)] || {}), sub: latin1(b, 8, 12) };
+        if (s.id === 'bmff') { const brand = latin1(b, 8, 12); return { ...s, ...FI_BRANDS.find(([re]) => re.test(brand))[1], brand }; }
+        return { ...s };
+      }
+      return fiTextKind(b);
+    }
+    function fiTextKind(b) {
+      const head = b.subarray(0, 8192);
+      let enc = 'utf-8';
+      if (head[0] === 0xFF && head[1] === 0xFE) enc = 'utf-16le';
+      else if (head[0] === 0xFE && head[1] === 0xFF) enc = 'utf-16be';
+      else if (head.includes(0)) return { id: 'unknown', label: tr('fi_unknown'), ext: [] };
+      const lo = new TextDecoder(enc).decode(head).replace(/^﻿/, '').trimStart().slice(0, 2048).toLowerCase();
+      let kind = 'text';
+      if (/<svg[\s>]/.test(lo)) kind = 'svg';
+      else if (lo.includes('<?php')) kind = 'php';
+      else if (/^(<!doctype html|<html|<head|<body|<script)/.test(lo)) kind = 'html';
+      else if (lo.startsWith('<?xml') || /^<[a-z][\w:.-]*[\s>]/.test(lo)) kind = 'xml';
+      else if (lo.startsWith('#!')) kind = 'script';
+      else if (/^[{[]/.test(lo)) kind = 'json';
+      return { id: kind, enc, text: true, ...FI_TEXT_KINDS[kind], label: kind === 'text' ? tr('fi_k_text') : FI_TEXT_KINDS[kind].label };
+    }
+
+    // ---- Konteks analisis: kumpulan integritas / temuan / metadata.
+    function fiContext(file, b) {
+      const r = { name: file.name, size: file.size, browserType: file.type || '—', modified: file.lastModified, det: null, hashes: {}, integ: [], finds: [], meta: [], verify: '', busy: false };
+      const full = b.length <= 2 * FI_SCAN_SLICE;
+      return {
+        file, b, n: b.length, r, full,
+        text: full ? latin1(b) : latin1(b, 0, FI_SCAN_SLICE) + latin1(b, b.length - FI_SCAN_SLICE),
+        good: (k, v) => r.integ.push({ ok: true, msg: dtr(k, v) }),
+        bad: (k, v) => r.integ.push({ ok: false, msg: dtr(k, v) }),
+        warnI: (k, v) => r.integ.push({ ok: null, msg: dtr(k, v) }),
+        trunc: what => r.integ.push({ ok: false, msg: dtr('fi_i_trunc', { x: what }) }),
+        find: (sev, k, v, link) => r.finds.push({ sev, msg: dtr(k, v), link: link || '' }),
+        meta: (k, v) => { if (v !== undefined && v !== null && v !== '' && !(typeof v === 'number' && isNaN(v))) r.meta.push([k, String(Array.isArray(v) ? v.join(', ') : v).slice(0, 600)]); }
+      };
+    }
+    // Data setelah penanda akhir (JPEG/PNG/GIF): ZIP tertempel = polyglot, selain itu catatan ringan.
+    function fiTrailing(ctx, from, what) {
+      const extra = ctx.n - from;
+      if (extra <= 0) return;
+      if (latin1(ctx.b, from, Math.min(ctx.n, from + 1048576)).includes('PK\x03\x04')) ctx.find('HIGH', 'fi_s_appended_zip', { x: what });
+      else if (extra > 16) ctx.find('LOW', 'fi_s_trailing', { x: extra.toLocaleString() });
+    }
+
+    // ---- EXIF (TIFF IFD) — dipakai JPEG, PNG eXIf, WebP EXIF, TIFF.
+    const EXIF_TAGS = {
+      0x010E: 'ImageDescription', 0x010F: 'Make', 0x0110: 'Model', 0x0112: 'Orientation', 0x0131: 'Software', 0x0132: 'DateTime',
+      0x013B: 'Artist', 0x8298: 'Copyright', 0x9003: 'DateTimeOriginal', 0x9004: 'DateTimeDigitized', 0x9010: 'OffsetTime',
+      0x829A: 'ExposureTime', 0x829D: 'FNumber', 0x8827: 'ISO', 0x920A: 'FocalLength', 0xA002: 'PixelXDimension', 0xA003: 'PixelYDimension',
+      0xA420: 'ImageUniqueID', 0xA430: 'CameraOwnerName', 0xA431: 'BodySerialNumber', 0xA433: 'LensMake', 0xA434: 'LensModel', 0xA435: 'LensSerialNumber'
+    };
+    const EXIF_SIZES = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+    function fiTiff(b, base) {
+      if (base + 8 > b.length) return null;
+      const le = b[base] === 0x49, u16 = o => (le ? u16le : u16be)(b, base + o), u32 = o => (le ? u32le : u32be)(b, base + o);
+      if (u16(2) !== 42) return null;
+      const tags = {}, gps = {};
+      const one = (type, off, i) => {
+        if (type === 3) return u16(off + i * 2);
+        if (type === 4 || type === 9) return u32(off + i * 4);
+        if (type === 5 || type === 10) return u32(off + i * 8) / (u32(off + i * 8 + 4) || 1);
+        return b[base + off + i];
+      };
+      const value = (type, count, at) => {
+        const size = (EXIF_SIZES[type] || 1) * count, off = size <= 4 ? at : u32(at);
+        if (base + off + size > b.length) return undefined;
+        if (type === 2) return latin1(b, base + off, base + off + count).replace(/\0+$/, '').trim();
+        const arr = [];
+        for (let i = 0; i < Math.min(count, 8); i++) arr.push(one(type, off, i));
+        return count === 1 ? arr[0] : arr;
+      };
+      const ifd = (off, sink, names, depth) => {
+        if (!off || depth > 3 || base + off + 2 > b.length) return;
+        const cnt = u16(off);
+        for (let i = 0; i < cnt && i < 512; i++) {
+          const e = off + 2 + i * 12;
+          if (base + e + 12 > b.length) break;
+          const tag = u16(e);
+          if (tag === 0x8769) ifd(u32(e + 8), sink, names, depth + 1);
+          else if (tag === 0x8825) ifd(u32(e + 8), gps, null, depth + 1);
+          else if (!names || names[tag]) { const v = value(u16(e + 2), u32(e + 4), e + 8); if (v !== undefined && v !== '') sink[names ? names[tag] : tag] = v; }
+        }
+      };
+      ifd(u32(4), tags, EXIF_TAGS, 0);
+      return { tags, gps };
+    }
+    const fiNum = v => (typeof v === 'number' ? +v.toFixed(4) : v);
+    function fiExif(ctx, base) {
+      const ex = fiTiff(ctx.b, base);
+      if (!ex) return;
+      Object.keys(ex.tags).forEach(k => ctx.meta('EXIF ' + k, Array.isArray(ex.tags[k]) ? ex.tags[k].map(fiNum) : fiNum(ex.tags[k])));
+      const owner = ['CameraOwnerName', 'BodySerialNumber', 'LensSerialNumber', 'Artist'].filter(k => ex.tags[k]).map(k => k + '=' + ex.tags[k]);
+      if (owner.length) ctx.find('LOW', 'fi_s_exif_owner', { x: owner.join(', ') });
+      const g = ex.gps, dms = a => (Array.isArray(a) ? a[0] + a[1] / 60 + a[2] / 3600 : a);
+      if (Array.isArray(g[2]) && Array.isArray(g[4])) {
+        const lat = dms(g[2]) * (g[1] === 'S' ? -1 : 1), lon = dms(g[4]) * (g[3] === 'W' ? -1 : 1);
+        if (isFinite(lat) && isFinite(lon) && (lat || lon)) fiGps(ctx, lat, lon, typeof g[6] === 'number' ? g[6] : null);
+      }
+    }
+    function fiGps(ctx, lat, lon, alt) {
+      const txt = lat.toFixed(6) + ', ' + lon.toFixed(6) + (alt !== null ? ' (alt ' + alt.toFixed(1) + ' m)' : '');
+      ctx.meta('GPS', txt);
+      ctx.find('MEDIUM', 'fi_s_gps', { x: txt }, 'https://www.openstreetmap.org/?mlat=' + lat.toFixed(6) + '&mlon=' + lon.toFixed(6) + '#map=16/' + lat.toFixed(6) + '/' + lon.toFixed(6));
+    }
+
+    // ---- Penangan per format
+    function fiJpeg(ctx) {
+      const b = ctx.b;
+      let o = 2;
+      while (o + 4 <= ctx.n && b[o] === 0xFF) {
+        const m = b[o + 1];
+        if (m === 0xD9 || m === 0xDA) break;
+        if (m === 0xFF || m === 0x01 || (m >= 0xD0 && m <= 0xD8)) { o += m === 0xFF ? 1 : 2; continue; }
+        const len = u16be(b, o + 2);
+        if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) ctx.meta(tr('fi_m_dim'), u16be(b, o + 7) + ' × ' + u16be(b, o + 5));
+        if (m === 0xE1 && latin1(b, o + 4, o + 10) === 'Exif\0\0') fiExif(ctx, o + 10);
+        if (m === 0xE1 && latin1(b, o + 4, o + 32) === 'http://ns.adobe.com/xap/1.0/') fiXmp(ctx, latin1(b, o + 33, o + 2 + len));
+        if (m === 0xFE) ctx.meta(tr('fi_m_comment'), utf8Strict(b.subarray(o + 4, o + 2 + len)) || '');
+        o += 2 + len;
+      }
+      let eoi = -1;
+      for (let i = ctx.n - 2; i >= Math.max(2, ctx.n - 64 * 1024 * 1024); i--) if (b[i] === 0xFF && b[i + 1] === 0xD9) { eoi = i; break; }
+      if (eoi < 0) { ctx.trunc(tr('fi_i_jpeg_eoi')); return; }
+      ctx.good('fi_i_ok_struct', { x: 'JPEG' });
+      fiTrailing(ctx, eoi + 2, 'JPEG');
+    }
+    function fiXmp(ctx, xml) {
+      [['xmp:CreatorTool', 'XMP CreatorTool'], ['photoshop:DateCreated', 'XMP DateCreated'], ['dc:creator', 'XMP Creator'], ['pdf:Producer', 'XMP Producer']].forEach(([tag, label]) => {
+        const m = rx1(new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>|' + tag + '="([^"]*)"', 'g'), xml);
+        if (m) ctx.meta(label, (m[1] || m[2] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+      });
+      const lat = rx1(/exif:GPSLatitude="([^"]+)"/g, xml);
+      if (lat) ctx.meta('XMP GPSLatitude', lat[1]);
+    }
+    function fiPng(ctx) {
+      const b = ctx.b;
+      let o = 8, iend = false, crcBad = 0;
+      while (o + 12 <= ctx.n) {
+        const len = u32be(b, o), type = latin1(b, o + 4, o + 8), d = o + 8;
+        if (d + len + 4 > ctx.n) { ctx.trunc(dtr('fi_i_box', { x: type })); return; }
+        if (crc32(b.subarray(o + 4, d + len)) !== u32be(b, d + len)) crcBad++;
+        if (type === 'IHDR') { ctx.meta(tr('fi_m_dim'), u32be(b, d) + ' × ' + u32be(b, d + 4)); ctx.meta('Bit depth / color type', b[d + 8] + ' / ' + b[d + 9]); }
+        if (type === 'tEXt' || type === 'iTXt') {
+          const z = b.indexOf(0, d);
+          if (z > d && z < d + len) {
+            const key = latin1(b, d, z);
+            const val = type === 'tEXt' ? latin1(b, z + 1, d + len) : (b[z + 1] ? '(compressed)' : utf8Strict(b.subarray(b.indexOf(0, b.indexOf(0, z + 3) + 1) + 1, d + len)) || '');
+            if (key === 'XML:com.adobe.xmp') fiXmp(ctx, val); else ctx.meta('PNG ' + key, val);
+          }
+        }
+        if (type === 'eXIf') fiExif(ctx, d);
+        o = d + len + 4;
+        if (type === 'IEND') { iend = true; break; }
+      }
+      if (!iend) ctx.trunc(tr('fi_i_png_iend'));
+      if (crcBad) ctx.bad('fi_i_trunc', { x: dtr('fi_i_png_crc', { x: crcBad }) });
+      if (iend && !crcBad) ctx.good('fi_i_ok_struct', { x: 'PNG' });
+      if (iend) fiTrailing(ctx, o, 'PNG');
+    }
+    function fiGif(ctx) {
+      ctx.meta(tr('fi_m_dim'), u16le(ctx.b, 6) + ' × ' + u16le(ctx.b, 8));
+      ctx.meta('Version', latin1(ctx.b, 0, 6));
+      let end = ctx.n - 1;
+      while (end > 6 && ctx.b[end] === 0) end--;
+      if (ctx.b[end] === 0x3B) ctx.good('fi_i_ok_struct', { x: 'GIF' }); else ctx.trunc(tr('fi_i_gif_end'));
+    }
+    function fiDeclaredSize(ctx, declared, label) {
+      if (declared > ctx.n) ctx.trunc(dtr('fi_i_size_decl', { x: declared.toLocaleString() }));
+      else { ctx.good('fi_i_ok_struct', { x: label }); if (ctx.n - declared > 16) ctx.find('LOW', 'fi_s_trailing', { x: (ctx.n - declared).toLocaleString() }); }
+    }
+    function fiBmp(ctx) {
+      const b = ctx.b, dv = new DataView(b.buffer, b.byteOffset);
+      ctx.meta(tr('fi_m_dim'), dv.getInt32(18, true) + ' × ' + Math.abs(dv.getInt32(22, true)));
+      ctx.meta('Bits per pixel', u16le(b, 28));
+      fiDeclaredSize(ctx, u32le(b, 2), 'BMP');
+    }
+    function fiRiff(ctx) {
+      const b = ctx.b;
+      fiDeclaredSize(ctx, u32le(b, 4) + 8, ctx.r.det.label);
+      for (let o = 12; o + 8 <= ctx.n;) {
+        const id = latin1(b, o, o + 4), size = u32le(b, o + 4), d = o + 8;
+        if (id === 'fmt ' && ctx.r.det.sub === 'WAVE') { ctx.meta('Channels', u16le(b, d + 2)); ctx.meta('Sample rate', u32le(b, d + 4) + ' Hz'); ctx.meta('Bits per sample', u16le(b, d + 14)); }
+        if (id === 'LIST' && latin1(b, d, d + 4) === 'INFO') {
+          for (let p = d + 4; p + 8 <= Math.min(ctx.n, d + size);) {
+            const sid = latin1(b, p, p + 4), ss = u32le(b, p + 4);
+            ctx.meta('RIFF ' + sid, latin1(b, p + 8, p + 8 + ss).replace(/\0+$/, ''));
+            p += 8 + ss + (ss & 1);
+          }
+        }
+        if (id === 'EXIF') fiExif(ctx, latin1(b, d, d + 6) === 'Exif\0\0' ? d + 6 : d);
+        if (id === 'XMP ') fiXmp(ctx, latin1(b, d, d + size));
+        o = d + size + (size & 1);
+      }
+    }
+    // QuickTime: string atom (©xyz, ©mak, ©mod, ©swr) = [len u16][lang u16][teks].
+    function fiQtString(b, text, start, tag) {
+      const i = text.indexOf('\xA9' + tag);
+      if (i < 0) return '';
+      const p = start + i + 4, len = u16be(b, p);
+      return len > 0 && len < 512 ? (utf8Strict(b.subarray(p + 4, p + 4 + len)) || '') : '';
+    }
+    function fiBmff(ctx) {
+      const b = ctx.b, boxes = [];
+      let o = 0, moov = null, ok = true;
+      while (o + 8 <= ctx.n) {
+        let size = u32be(b, o), hdr = 8;
+        const type = latin1(b, o + 4, o + 8);
+        if (size === 1) { size = u32be(b, o + 8) * 4294967296 + u32be(b, o + 12); hdr = 16; } else if (size === 0) size = ctx.n - o;
+        if (size < hdr || o + size > ctx.n) { ctx.trunc(dtr('fi_i_box', { x: type })); ok = false; break; }
+        boxes.push(type);
+        if (type === 'moov') moov = [o + hdr, o + size];
+        o += size;
+      }
+      ctx.meta('Brand (ftyp)', ctx.r.det.brand);
+      ctx.meta('Top-level boxes', boxes.slice(0, 20).join(' '));
+      const isImage = /HEIC|AVIF|CR3/.test(ctx.r.det.label);
+      if (!moov) { if (!isImage) { ctx.bad('fi_i_moov'); ok = false; } }
+      else {
+        const text = latin1(b, moov[0], Math.min(moov[1], moov[0] + 64 * 1024 * 1024)), mv = text.indexOf('mvhd');
+        if (mv >= 0) {
+          const p = moov[0] + mv + 4, v1 = b[p] === 1;
+          const ct = v1 ? u32be(b, p + 4) * 4294967296 + u32be(b, p + 8) : u32be(b, p + 4);
+          const ts = u32be(b, p + (v1 ? 20 : 12)), dur = v1 ? u32be(b, p + 24) * 4294967296 + u32be(b, p + 28) : u32be(b, p + 16);
+          if (ct > 2082844800) ctx.meta(tr('fi_m_created'), new Date((ct - 2082844800) * 1000).toISOString());
+          if (ts) ctx.meta(tr('fi_m_duration'), fmtDuration(dur / ts));
+        }
+        [['mak', 'Make'], ['mod', 'Model'], ['swr', 'Software'], ['day', 'Date']].forEach(([tag, label]) => ctx.meta(label, fiQtString(b, text, moov[0], tag)));
+        const loc = fiQtString(b, text, moov[0], 'xyz') || (text.includes('ISO6709') && (rx1(/[+-]\d{1,2}\.\d{3,}[+-]\d{1,3}\.\d{3,}[^\0]{0,12}/g, text) || [''])[0]);
+        const m = loc && rx1(/([+-]\d{1,2}\.\d+)([+-]\d{1,3}\.\d+)([+-]\d+(?:\.\d+)?)?/g, loc);
+        if (m) fiGps(ctx, parseFloat(m[1]), parseFloat(m[2]), m[3] ? parseFloat(m[3]) : null);
+      }
+      if (ok && (moov || isImage)) ctx.good('fi_i_ok_struct', { x: ctx.r.det.label });
+    }
+    const ID3_NAMES = { TIT2: 'Title', TPE1: 'Artist', TPE2: 'Album artist', TALB: 'Album', TDRC: 'Year', TYER: 'Year', TCON: 'Genre', TRCK: 'Track', TSSE: 'Encoder', TENC: 'Encoded by', TCOP: 'Copyright', TPUB: 'Publisher', COMM: 'Comment' };
+    function fiId3Text(d, comm) {
+      const enc = d[0], body = d.subarray(comm ? 4 : 1);
+      const s = new TextDecoder(['latin1', 'utf-16', 'utf-16be', 'utf-8'][enc] || 'latin1').decode(body).replace(/\0+$/, '');
+      return comm ? s.split('\0').pop() : s.replace(/\0/g, ' / ');
+    }
+    function fiMp3(ctx) {
+      const b = ctx.b;
+      if (ctx.r.det.sig !== 'ID3') return;
+      const ver = b[3], end = Math.min(ctx.n, 10 + syncsafe(b, 6));
+      ctx.meta('ID3', 'v2.' + ver);
+      let o = 10;
+      if (b[5] & 0x40) o += ver === 4 ? syncsafe(b, 10) : u32be(b, 10) + 4;
+      while (ver >= 3 && o + 10 <= end) {
+        const id = latin1(b, o, o + 4);
+        if (!/^[A-Z0-9]{4}$/.test(id)) break;
+        const sz = ver === 4 ? syncsafe(b, o + 4) : u32be(b, o + 4), d = b.subarray(o + 10, o + 10 + sz);
+        if (ID3_NAMES[id]) ctx.meta(ID3_NAMES[id], fiId3Text(d, id === 'COMM'));
+        if (id === 'APIC') ctx.meta('Cover art', (sz / 1024).toFixed(1) + ' KB');
+        o += 10 + sz;
+      }
+      if (10 + syncsafe(b, 6) > ctx.n) ctx.trunc(dtr('fi_i_size_decl', { x: (10 + syncsafe(b, 6)).toLocaleString() }));
+    }
+    const PE_MACHINE = { 0x14C: 'x86', 0x8664: 'x64', 0xAA64: 'ARM64', 0x1C0: 'ARM', 0x1C4: 'ARMv7' };
+    function fiPe(ctx) {
+      const b = ctx.b, pe = u32le(b, 0x3C);
+      if (pe + 24 > ctx.n || latin1(b, pe, pe + 4) !== 'PE\0\0') { ctx.bad('fi_i_pe'); return; }
+      const ts = u32le(b, pe + 8), chars = u16le(b, pe + 22), opt = u16le(b, pe + 24);
+      ctx.meta('Machine', PE_MACHINE[u16le(b, pe + 4)] || '0x' + u16le(b, pe + 4).toString(16));
+      ctx.meta(tr('fi_m_compiled'), ts ? new Date(ts * 1000).toISOString() : '');
+      ctx.meta('Type', (chars & 0x2000 ? 'DLL' : 'EXE') + (opt === 0x20B ? ' (PE32+)' : ' (PE32)'));
+      const net = ctx.text.includes('BSJB') && ctx.text.includes('mscoree.dll');
+      if (net) ctx.meta('Runtime', '.NET (CLR)');
+      ctx.good('fi_i_ok_struct', { x: 'PE' });
+    }
+    function fiElf(ctx) {
+      ctx.meta('Class', ctx.b[4] === 2 ? '64-bit' : '32-bit');
+      ctx.meta('Type', ({ 1: 'relocatable', 2: 'executable', 3: 'shared object', 4: 'core' })[u16le(ctx.b, 16)] || '?');
+    }
+    function fiOle(ctx) {
+      const t = ctx.text, u = s => s.split('').join('\0');
+      const vba = t.includes(u('_VBA_PROJECT')) || t.includes(u('VBA')) && t.includes(u('dir'));
+      if (vba) ctx.find('HIGH', 'fi_s_macro', { x: 'VBA (OLE)', y: '' });
+      if (t.includes(u('Ole10Native')) || t.includes(u('ObjectPool'))) ctx.find('MEDIUM', 'fi_s_ole_embed', { x: '≥1' });
+      if (t.includes(u('SummaryInformation'))) ctx.meta('OLE streams', 'SummaryInformation');
+      ctx.good('fi_i_ok_struct', { x: 'OLE2' });
+    }
+    function fiRtf(ctx) {
+      if (/\\object\b|\\objdata\b/.test(ctx.text)) ctx.find(/\\objupdate\b/.test(ctx.text) ? 'HIGH' : 'MEDIUM', 'fi_s_rtf_obj', { x: /\\objupdate\b/.test(ctx.text) ? ' (\\objupdate)' : '' });
+      ['author', 'operator', 'company', 'title', 'creatim', 'revtim'].forEach(k => {
+        const m = rx1(new RegExp('\\{\\\\' + k + '\\s?([^}]*)\\}', 'g'), ctx.text);
+        if (m) ctx.meta('RTF ' + k, m[1].replace(/\\(yr|mo|dy|hr|min)/g, ' ').trim());
+      });
+    }
+
+    // ---- PDF
+    const PDF_RISKS = [
+      [/\/(JavaScript|JS)\b/, 'HIGH', 'fi_s_pdf_js'], [/\/Launch\b/, 'HIGH', 'fi_s_pdf_launch'], [/\/OpenAction\b/, 'MEDIUM', 'fi_s_pdf_open'],
+      [/\/AA\b/, 'MEDIUM', 'fi_s_pdf_aa'], [/\/EmbeddedFiles?\b/, 'MEDIUM', 'fi_s_pdf_embed'], [/\/(RichMedia|Flash)\b/, 'MEDIUM', 'fi_s_pdf_rich'],
+      [/\/SubmitForm\b/, 'LOW', 'fi_s_pdf_submit'], [/\/XFA\b/, 'LOW', 'fi_s_pdf_xfa']
+    ];
+    function pdfString(raw) {
+      if (raw[0] === '<') {
+        const hex = raw.slice(1, -1).replace(/\s+/g, '');
+        const bytes = fromHex(hex.length % 2 ? hex + '0' : hex);
+        return bytes[0] === 0xFE && bytes[1] === 0xFF ? new TextDecoder('utf-16be').decode(bytes.subarray(2)) : latin1(bytes);
+      }
+      const s = raw.slice(1, -1).replace(/\\([nrtbf()\\]|[0-7]{1,3})/g, (m, c) => ({ n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' })[c] || (/^[0-7]+$/.test(c) ? String.fromCharCode(parseInt(c, 8)) : c));
+      return s.startsWith('\xFE\xFF') ? new TextDecoder('utf-16be').decode(Uint8Array.from(s.slice(2), ch => ch.charCodeAt(0))) : s;
+    }
+    function pdfDate(s) {
+      const m = rx1(/D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([Z+-][\d']*)?/g, s);
+      return m ? m[1] + '-' + (m[2] || '01') + '-' + (m[3] || '01') + ' ' + (m[4] || '00') + ':' + (m[5] || '00') + ':' + (m[6] || '00') + ' ' + (m[7] || '').replace(/'/g, '') : s;
+    }
+    // Object stream (ObjStm) dibuka agar kunci /JavaScript, /OpenAction, dll. di dalamnya ikut terbaca.
+    async function pdfInflated(ctx) {
+      if (!ctx.full) return '';
+      let out = '', count = 0;
+      for (const m of ctx.text.matchAll(/\/ObjStm\b[\s\S]{0,600}?stream\r?\n/g)) {
+        if (count++ > 400 || out.length > 16 * 1024 * 1024) break;
+        const start = m.index + m[0].length, end = ctx.text.indexOf('endstream', start);
+        if (end < 0 || end - start > 4 * 1024 * 1024) continue;
+        try { out += '\n' + latin1(await inflateBytes(ctx.b.subarray(start, end), 'deflate')); } catch (e) { /* stream bukan zlib/rusak: lewati */ }
+      }
+      return out;
+    }
+    async function fiPdf(ctx) {
+      const t = ctx.text, head = rx1(/%PDF-(\d\.\d)/g, t.slice(0, 1024));
+      ctx.meta(tr('fi_m_pdfver'), head ? head[1] : '?');
+      const tail = latin1(ctx.b, Math.max(0, ctx.n - 2048));
+      let ok = true;
+      if (!tail.includes('%%EOF')) { ctx.trunc(tr('fi_i_pdf_eof')); ok = false; }
+      if (!t.includes('startxref')) { ctx.bad('fi_i_trunc', { x: tr('fi_i_pdf_xref') }); ok = false; }
+      if (ok) ctx.good('fi_i_ok_struct', { x: 'PDF' });
+      const all = t + (await pdfInflated(ctx));
+      const unhex = nm => nm.replace(/#([0-9A-Fa-f]{2})/g, (x, h) => String.fromCharCode(parseInt(h, 16)));
+      const hexRe = /\/[A-Za-z0-9]*#[0-9A-Fa-f]{2}[A-Za-z0-9#]*/g;
+      if ([...all.matchAll(hexRe)].some(m => /^\/(JavaScript|JS|OpenAction|Launch|AA|EmbeddedFiles?|URI|ObjStm)$/.test(unhex(m[0])))) ctx.find('MEDIUM', 'fi_s_pdf_hexname');
+      const deobf = all.replace(hexRe, unhex);
+      PDF_RISKS.forEach(([re, sev, key]) => { if (re.test(deobf)) ctx.find(sev, key); });
+      const uris = [...deobf.matchAll(/\/URI\s*\(/g)].length;
+      if (uris) ctx.find('INFO', 'fi_s_pdf_uri', { x: uris });
+      if (/\/Encrypt\b/.test(t)) ctx.find('INFO', 'fi_s_pdf_enc');
+      const pages = [...deobf.matchAll(/\/Type\s*\/Page(?![s\w])/g)].length;
+      ctx.meta(tr('fi_m_pages'), pages || '?');
+      ['Title', 'Author', 'Subject', 'Keywords', 'Creator', 'Producer', 'CreationDate', 'ModDate'].forEach(k => {
+        const m = rx1(new RegExp('/' + k + '\\s*(\\((?:\\\\.|[^\\\\)])*\\)|<[0-9A-Fa-f\\s]*>)', 'g'), deobf);
+        if (m) { const v = pdfString(m[1]); ctx.meta('PDF ' + k, /Date$/.test(k) ? pdfDate(v) : v); }
+      });
+      const xmp = rx1(/<x:xmpmeta[\s\S]*?<\/x:xmpmeta>/g, all.slice(0, 8 * 1024 * 1024));
+      if (xmp) fiXmp(ctx, xmp[0]);
+    }
+
+    // ---- ZIP / Office / JAR / APK / ODF / EPUB
+    const OOXML_KIND = [['word/', 'Word (OOXML)', ['docx', 'docm', 'dotx', 'dotm']], ['xl/', 'Excel (OOXML)', ['xlsx', 'xlsm', 'xltx', 'xltm', 'xlsb']], ['ppt/', 'PowerPoint (OOXML)', ['pptx', 'pptm', 'potx', 'potm', 'ppsx', 'ppsm']], ['visio/', 'Visio (OOXML)', ['vsdx', 'vsdm']]];
+    const ZIP_EXEC_RE = /\.(exe|dll|scr|com|bat|cmd|ps1|vbs|vbe|js|jse|wsf|hta|lnk|msi|jar|sh|apk|iso|img)$/i;
+    const REMOTE_REL_RE = /(attachedTemplate|oleObject|frame|subDocument|externalLinkPath)$/i;
+    function zipEntries(ctx) {
+      const b = ctx.b;
+      let eocd = -1;
+      for (let i = ctx.n - 22; i >= Math.max(0, ctx.n - 65557); i--) if (u32le(b, i) === 0x06054b50) { eocd = i; break; }
+      if (eocd < 0) { ctx.trunc(tr('fi_i_zip_eocd')); return null; }
+      const count = u16le(b, eocd + 10), cdSize = u32le(b, eocd + 12), cdOff = u32le(b, eocd + 16);
+      if (cdOff === 0xFFFFFFFF || count === 0xFFFF) { ctx.warnI('fi_i_zip64'); return null; }
+      if (cdOff + cdSize > ctx.n) { ctx.trunc(tr('fi_i_zip_cd')); return null; }
+      const list = [];
+      for (let p = cdOff, k = 0; k < count && p + 46 <= ctx.n && u32le(b, p) === 0x02014b50; k++) {
+        const nl = u16le(b, p + 28);
+        list.push({ name: new TextDecoder().decode(b.subarray(p + 46, p + 46 + nl)), flags: u16le(b, p + 8), method: u16le(b, p + 10), csize: u32le(b, p + 20), size: u32le(b, p + 24), local: u32le(b, p + 42) });
+        p += 46 + nl + u16le(b, p + 30) + u16le(b, p + 32);
+      }
+      if (list.length !== count) ctx.bad('fi_i_trunc', { x: tr('fi_i_zip_cd') });
+      const badLocal = list.filter(e => e.local + 30 > ctx.n || u32le(b, e.local) !== 0x04034b50).length;
+      if (badLocal) ctx.bad('fi_i_trunc', { x: dtr('fi_i_zip_local', { x: badLocal }) });
+      else if (list.length === count) ctx.good('fi_i_ok_struct', { x: 'ZIP' });
+      return list;
+    }
+    async function zipText(ctx, e) {
+      if (!e || e.size > FI_XML_MAX || e.flags & 1) return '';
+      const p = e.local, off = p + 30 + u16le(ctx.b, p + 26) + u16le(ctx.b, p + 28), data = ctx.b.subarray(off, off + e.csize);
+      try { return new TextDecoder().decode(e.method === 0 ? data : await inflateBytes(data, 'deflate-raw')); } catch (err) { return ''; }
+    }
+    const xmlDoc = s => new DOMParser().parseFromString(s, 'application/xml');
+    const xmlVal = (doc, tag) => { const el = doc.getElementsByTagNameNS('*', tag)[0]; return el ? el.textContent.trim() : ''; };
+    async function fiZip(ctx) {
+      const list = zipEntries(ctx);
+      if (!list) return;
+      const names = list.map(e => e.name), byName = n => list.find(e => e.name === n), ext = ctx.r.ext;
+      const total = list.reduce((s, e) => s + e.size, 0), comp = list.reduce((s, e) => s + e.csize, 0);
+      ctx.meta(tr('fi_m_entries'), list.length);
+      ctx.meta(tr('fi_m_unzipped'), humanSize(total));
+      const kind = OOXML_KIND.find(([dir]) => names.includes('[Content_Types].xml') && names.some(n => n.startsWith(dir)));
+      const mimetype = byName('mimetype') ? (await zipText(ctx, byName('mimetype'))).trim() : '';
+      if (kind) Object.assign(ctx.r.det, { label: kind[1], ext: kind[2] });
+      else if (mimetype === 'application/epub+zip') Object.assign(ctx.r.det, { label: 'EPUB', ext: ['epub'] });
+      else if (mimetype.includes('opendocument')) Object.assign(ctx.r.det, { label: 'OpenDocument', ext: ['odt', 'ods', 'odp', 'odg', 'odf', 'ott'] });
+      else if (names.includes('AndroidManifest.xml')) Object.assign(ctx.r.det, { label: 'Android APK', ext: ['apk', 'aab', 'xapk'], exec: true });
+      else if (names.includes('META-INF/MANIFEST.MF')) Object.assign(ctx.r.det, { label: 'Java JAR', ext: ['jar', 'war', 'ear'], exec: true });
+      if (mimetype) ctx.meta('mimetype', mimetype);
+      // Keamanan arsip
+      const slip = names.find(n => /(^|[\\/])\.\.([\\/]|$)/.test(n) || /^([a-z]:)?[\\/]/i.test(n));
+      if (slip) ctx.find('HIGH', 'fi_s_zip_slip', { x: slip });
+      const enc = list.filter(e => e.flags & 1).length;
+      if (enc) ctx.find('LOW', 'fi_s_zip_enc', { x: enc });
+      if (comp && total / comp > 100 && total > 100 * 1024 * 1024) ctx.find('HIGH', 'fi_s_zip_bomb', { x: Math.round(total / comp) });
+      const execs = names.filter(n => ZIP_EXEC_RE.test(n));
+      if (execs.length && !ctx.r.det.exec) ctx.find('MEDIUM', 'fi_s_zip_exec', { x: execs.slice(0, 5).join(', ') + (execs.length > 5 ? ' …' : '') });
+      // Office: macro, ActiveX, OLE, relasi eksternal, properti dokumen
+      const vba = names.filter(n => /vbaProject\.bin$/i.test(n));
+      if (vba.length) ctx.find('HIGH', 'fi_s_macro', { x: vba.join(', '), y: /^(docx|xlsx|pptx|dotx|xltx|potx|ppsx)$/.test(ext) ? dtr('fi_s_macro_ext', { x: ext }) : '' });
+      if (names.some(n => /(^|\/)activeX\//i.test(n))) ctx.find('MEDIUM', 'fi_s_activex');
+      const ole = names.filter(n => /\/embeddings\/.*\.(bin|ole)$/i.test(n) || /oleObject\d*\.bin$/i.test(n)).length;
+      if (ole) ctx.find('MEDIUM', 'fi_s_ole_embed', { x: ole });
+      let links = 0;
+      for (const e of list.filter(x => /\.rels$/i.test(x.name)).slice(0, 80)) {
+        for (const m of (await zipText(ctx, e)).matchAll(/<Relationship\b[^>]*>/g)) {
+          if (!/TargetMode\s*=\s*"External"/i.test(m[0])) continue;
+          const type = (rx1(/Type\s*=\s*"([^"]*)"/g, m[0]) || [])[1] || '', target = (rx1(/Target\s*=\s*"([^"]*)"/g, m[0]) || [])[1] || '';
+          if (REMOTE_REL_RE.test(type)) ctx.find('HIGH', 'fi_s_remote_tpl', { x: type.split('/').pop(), y: target.slice(0, 200) });
+          else links++;
+        }
+      }
+      if (links) ctx.find('INFO', 'fi_s_ext_links', { x: links });
+      const core = await zipText(ctx, byName('docProps/core.xml')), app = await zipText(ctx, byName('docProps/app.xml')), odf = await zipText(ctx, byName('meta.xml'));
+      if (core) { const d = xmlDoc(core); ['title', 'subject', 'creator', 'keywords', 'description', 'lastModifiedBy', 'revision', 'created', 'modified', 'lastPrinted'].forEach(k => ctx.meta('Office ' + k, xmlVal(d, k))); }
+      if (app) { const d = xmlDoc(app); ['Application', 'AppVersion', 'Company', 'Manager', 'Template', 'Pages', 'Words', 'Slides', 'TotalTime'].forEach(k => ctx.meta('Office ' + k, xmlVal(d, k))); }
+      if (odf) { const d = xmlDoc(odf); ['generator', 'title', 'initial-creator', 'creator', 'creation-date', 'date', 'editing-duration'].forEach(k => ctx.meta('ODF ' + k, xmlVal(d, k))); }
+    }
+
+    // ---- File teks (SVG/HTML/XML/PHP/JSON/skrip)
+    const TEXT_RISKS = [
+      [/<script[\s>]/i, 'HIGH', 'fi_s_svg_script', ['svg']], [/javascript\s*:/i, 'HIGH', 'fi_s_js_uri', ['svg', 'xml']],
+      [/<foreignObject[\s>]/i, 'MEDIUM', 'fi_s_foreign', ['svg']], [/<!ENTITY\s|<!DOCTYPE[^>]*(SYSTEM|PUBLIC|\[)/i, 'HIGH', 'fi_s_xxe', ['svg', 'xml']]
+    ];
+    function fiText(ctx) {
+      const det = ctx.r.det, b = ctx.b.subarray(0, Math.min(ctx.n, 16 * 1024 * 1024));
+      const s = new TextDecoder(det.enc || 'utf-8').decode(b).replace(/^﻿/, '');
+      const lines = s.split('\n').length, crlf = s.includes('\r\n');
+      ctx.meta(tr('fi_m_encoding'), (det.enc || 'utf-8') + (ctx.b[0] === 0xEF || ctx.b[0] === 0xFF || ctx.b[0] === 0xFE ? ' (BOM)' : ''));
+      ctx.meta(tr('fi_m_lines'), lines.toLocaleString() + (crlf ? ' (CRLF)' : ' (LF)'));
+      if (det.id === 'json') {
+        try { JSON.parse(s); ctx.good('fi_i_text_ok', { x: 'JSON' }); } catch (e) { ctx.bad('fi_i_json', { x: e.message }); }
+      } else if (det.id === 'xml' || det.id === 'svg') {
+        const d = xmlDoc(s);
+        if (d.getElementsByTagName('parsererror').length) ctx.bad('fi_i_trunc', { x: tr('fi_i_xml') }); else ctx.good('fi_i_text_ok', { x: det.label });
+        if (det.id === 'svg') {
+          const root = d.documentElement;
+          ['width', 'height', 'viewBox'].forEach(a => ctx.meta('SVG ' + a, root && root.getAttribute(a)));
+          const gen = rx1(/<!--\s*Generator:\s*([^-]*)-->/g, s);
+          if (gen) ctx.meta('Generator', gen[1].trim());
+        }
+      } else if (utf8Strict(b) !== null || det.enc !== 'utf-8') ctx.good('fi_i_text_ok', { x: det.enc || 'UTF-8' });
+      TEXT_RISKS.forEach(([re, sev, key, kinds]) => { if (kinds.includes(det.id) && re.test(s)) ctx.find(sev, key); });
+      if (det.id === 'svg' || det.id === 'xml') {
+        const ev = [...new Set([...s.matchAll(/\s(on[a-z]+)\s*=/gi)].map(m => m[1].toLowerCase()))];
+        if (ev.length) ctx.find('HIGH', 'fi_s_svg_event', { x: ev.slice(0, 6).join(', ') });
+        const ext = [...s.matchAll(/(?:xlink:)?href\s*=\s*["']\s*(?:https?:)?\/\//gi)].length;
+        if (ext) ctx.find('LOW', 'fi_s_ext_ref', { x: ext });
+      }
+      if (det.id === 'html') ctx.find('MEDIUM', 'fi_s_html');
+      if (det.id === 'php') {
+        const fns = [...new Set([...s.matchAll(/\b(eval|assert|system|exec|shell_exec|passthru|popen|proc_open|base64_decode|gzinflate|str_rot13|move_uploaded_file)\s*\(/gi)].map(m => m[1].toLowerCase()))];
+        ctx.find('HIGH', 'fi_s_php', { x: fns.length ? ': ' + fns.join(', ') : '' });
+      }
+      if (det.id === 'script') ctx.find('MEDIUM', 'fi_s_script', { x: s.split('\n')[0].slice(0, 80) });
+    }
+
+    // ---- Pemeriksaan umum: ekstensi, nama menipu, polyglot
+    const DECEPTIVE_EXT_RE = /\.(pdf|docx?|xlsx?|pptx?|jpe?g|png|gif|txt|mp[34]|zip)\.(exe|scr|com|bat|cmd|pif|js|jse|vbs|vbe|wsf|hta|ps1|jar|lnk|msi|php\d?|phtml|asp|aspx|jsp|svg|html?)$/i;
+    function fiCheckName(ctx) {
+      const det = ctx.r.det, ext = ctx.r.ext, show = det.label;
+      if (/[‪-‮⁦-⁩]/.test(ctx.r.name)) ctx.find('HIGH', 'fi_s_rtlo');
+      if (DECEPTIVE_EXT_RE.test(ctx.r.name)) ctx.find('HIGH', 'fi_s_double_ext', { x: ctx.r.name });
+      if (det.exec) ctx.find(det.ext.includes(ext) ? 'MEDIUM' : 'HIGH', 'fi_s_exec', { x: det.label });
+      if (det.id === 'unknown') return;
+      const okExt = det.text && !det.script ? !FI_BINARY_EXT.has(ext) || det.ext.includes(ext) : det.ext.includes(ext);
+      if (okExt) return;
+      ctx.find(det.exec || det.script ? 'HIGH' : 'MEDIUM', det.exec || det.script ? 'fi_s_disguised' : 'fi_s_mismatch', { x: ext || tr('fi_none'), y: show });
+    }
+    const POLYGLOT_RE = /<\?php|<script[\s>]|<%@?\s|eval\s*\(\s*(base64_decode|gzinflate|atob)\s*\(/i;
+    function fiPolyglot(ctx) {
+      if (ctx.r.det.text || ['zip', 'gz', 'bz2', 'xz', '7z', 'rar', 'pe', 'elf', 'macho', 'wasm', 'class', 'sqlite', 'ole', 'unknown'].includes(ctx.r.det.id)) return;
+      const m = POLYGLOT_RE.exec(ctx.text);
+      if (m) ctx.find('HIGH', 'fi_s_polyglot', { x: m[0].trim(), y: '0x' + m.index.toString(16) });
+    }
+    // ---- Dekode oleh browser (Chrome): bukti gambar/media bisa dibaca = tidak rusak.
+    async function fiBrowserImage(ctx) {
+      try {
+        const bmp = await createImageBitmap(ctx.file);
+        ctx.good('fi_i_img_ok', { x: bmp.width + ' × ' + bmp.height });
+        bmp.close();
+      } catch (e) { ctx.bad('fi_i_img_fail'); }
+    }
+    function fiBrowserMedia(ctx) {
+      return new Promise(resolve => {
+        const el = document.createElement('video'), url = URL.createObjectURL(ctx.file);
+        const done = ok => {
+          clearTimeout(timer);
+          if (ok === true) {
+            const dur = fmtDuration(el.duration);
+            ctx.good('fi_i_media_ok', { x: dur });
+            ctx.meta(tr('fi_m_duration_b'), dur);
+            if (el.videoWidth) ctx.meta(tr('fi_m_resolution'), el.videoWidth + ' × ' + el.videoHeight);
+          } else if (ok === false) ctx.warnI('fi_i_media_fail');
+          el.removeAttribute('src'); el.load(); URL.revokeObjectURL(url);
+          resolve();
+        };
+        const timer = setTimeout(() => done(null), 10000);
+        el.preload = 'metadata'; el.muted = true;
+        el.onloadedmetadata = () => done(true);
+        el.onerror = () => done(false);
+        el.src = url;
+      });
+    }
+    const FI_HANDLERS = { jpeg: fiJpeg, png: fiPng, gif: fiGif, bmp: fiBmp, riff: fiRiff, bmff: fiBmff, mp3: fiMp3, pe: fiPe, elf: fiElf, ole: fiOle, rtf: fiRtf, pdf: fiPdf, zip: fiZip,
+      tiff: ctx => fiExif(ctx, 0), svg: fiText, html: fiText, php: fiText, script: fiText, xml: fiText, json: fiText, text: fiText };
+    const FI_HASH_ALGOS = ['SHA-1', 'SHA-256', 'SHA-512'];
+    async function fiHashes(ctx) {
+      const out = { MD5: toHex(md5(ctx.b)) };
+      const subtle = globalThis.crypto && globalThis.crypto.subtle;
+      if (!subtle) { ctx.warnI('fi_i_nosubtle'); return out; }
+      for (const a of FI_HASH_ALGOS) out[a] = toHex(new Uint8Array(await subtle.digest(a, ctx.b)));
+      return out;
+    }
+    async function inspectFile(file) {
+      const ext = (rx1(/\.([^./\\]+)$/g, file.name) || ['', ''])[1].toLowerCase();
+      if (file.size > FI_MAX_BYTES) return { name: file.name, size: file.size, ext, det: { label: '—', ext: [] }, hashes: {}, integ: [{ ok: false, msg: tr('fi_err_big') }], finds: [], meta: [], verify: '' };
+      const b = new Uint8Array(await file.arrayBuffer()), ctx = fiContext(file, b), r = ctx.r;
+      r.ext = ext;
+      r.det = fiDetect(b);
+      r.magic = toHex(b.subarray(0, 16)).replace(/(..)/g, '$1 ').trim();
+      r.entropy = shannon(b.subarray(0, Math.min(b.length, 4 * 1024 * 1024))).toFixed(2) + ' bit/byte';
+      const handler = FI_HANDLERS[r.det.id];
+      if (handler) await handler(ctx); else if (r.det.id === 'unknown') ctx.warnI('fi_i_unknown');
+      fiCheckName(ctx);
+      fiPolyglot(ctx);
+      if (r.det.img) await fiBrowserImage(ctx);
+      if (r.det.media) await fiBrowserMedia(ctx);
+      r.hashes = await fiHashes(ctx);
+      const rank = { HIGH: 0, MEDIUM: 1, LOW: 2, INFO: 3 };
+      r.finds.sort((a, c) => rank[a.sev] - rank[c.sev]);
+      return r;
+    }
+    function fiVerdict(r) {
+      if (r.finds.some(f => f.sev === 'HIGH')) return 'danger';
+      return r.finds.some(f => f.sev === 'MEDIUM') || r.integ.some(x => x.ok === false) ? 'warn' : 'ok';
+    }
+    // Checksum: hex (MD5/SHA-1/SHA-256/SHA-512, juga baris "hash  file"), atau SRI sha256-/sha512- (base64).
+    const HASH_BY_LEN = { 32: 'MD5', 40: 'SHA-1', 64: 'SHA-256', 128: 'SHA-512' };
+    function fiVerify(hashes, input) {
+      const s = String(input || '').trim();
+      if (!s) return null;
+      const sri = rx1(/^(sha256|sha512)-([A-Za-z0-9+/]+={0,2})$/gi, s);
+      const cands = sri ? [toHex(b64ToBytes(sri[2]))] : [...s.matchAll(/\b[0-9a-f]{32,128}\b/gi)].map(m => m[0].toLowerCase()).filter(h => HASH_BY_LEN[h.length]);
+      if (!cands.length) return { ok: false, text: tr('fi_hash_badinput') };
+      const hit = Object.keys(hashes).find(a => cands.includes(hashes[a]));
+      return hit ? { ok: true, text: dtr('fi_hash_match', { x: hit }) } : { ok: false, text: dtr('fi_hash_mismatch', { x: HASH_BY_LEN[cands[0].length] || '?' }) };
+    }
+    // @@FILE-END
+
+    // ============================================================
     //  Skrip "Hook tab lain": dipasang lewat console/bookmarklet DI TAB TARGET (bukan di sini).
     //  Menyadap fetch/XHR + SubtleCrypto.decrypt supaya request & hasil dekripsi asli terbaca
     //  apa adanya, sesaat setelah aplikasi target memanggilnya sendiri dengan key ephemeral-nya.
@@ -3964,6 +4811,7 @@
       { key: 'eol', label: 'EOL runtime/framework' },
       { key: 'dast', label: 'DAST pasif (URL)' },
       { key: 'sast', label: 'SAST (Kode)' },
+      { key: 'file', label: 'Analisis file' },
       { key: 'jwt', label: 'JWT Decode' },
       { key: 'decode', label: 'Smart Decode' },
       { key: 'dbg', label: 'Hook Debug' },
@@ -4043,6 +4891,7 @@
           license: true, sbomBusy: false, appVersion: APP_VERSION,
           editFields: ['project', 'name'], edit: { id: null, field: '', value: '' }, reupId: null,
           // Smart Decode: key/IV di form hanya di memori (tidak pernah ke localStorage)
+          fi: { results: [], busy: false, over: false, copied: '' },
           dec: { input: '', busy: false, chains: [], error: '', copied: '', note: '', form: decFormDefault(), tries: [], tryBusy: false },
           decSamples: DEC_SAMPLES, decEncs: ['auto', 'hex', 'base64', 'utf8'], decModes: ['CBC', 'GCM', 'CTR', 'ECB']
         };
@@ -4169,6 +5018,45 @@
           } finally {
             if (id === this.decRunId) d.busy = false;
           }
+        },
+        // ---- Analisis file
+        onFiPick(e) { const fl = Array.from(e.target.files); e.target.value = ''; this.inspectFiles(fl); },
+        onFiDrop(e) { this.fi.over = false; this.inspectFiles(Array.from(e.dataTransfer.files)); },
+        async inspectFiles(files) {
+          if (!files.length) return;
+          this.fi.busy = true;
+          for (const f of files) {
+            this.fi.results.unshift({ name: f.name, busy: true });
+            let r;
+            try { r = await inspectFile(f); } catch (err) { r = { name: f.name, det: { label: '—', ext: [] }, hashes: {}, integ: [{ ok: false, msg: dtr('fi_err_read', { x: err.message }) }], finds: [], meta: [], verify: '' }; }
+            const i = this.fi.results.findIndex(x => x.busy && x.name === f.name);
+            this.fi.results.splice(i, 1, r);
+          }
+          this.fi.busy = false;
+        },
+        fiVerdictOf(r) { return fiVerdict(r); },
+        fiVerdictClass(r) { const v = fiVerdict(r); return v === 'ok' ? 'okp' : v === 'danger' ? 'errp' : 'warnp'; },
+        fiVerifyOf(r) { return fiVerify(r.hashes, r.verify); },
+        fiSevText(sev) { return sev === 'INFO' ? tr('fi_sev_info') : sevL(sev); },
+        fiIdentity(r) {
+          const rows = [[tr('fi_id_name'), r.name], [tr('fi_id_size'), humanSize(r.size || 0)]];
+          if (r.modified) rows.push([tr('fi_id_modified'), new Date(r.modified).toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID')]);
+          rows.push([tr('fi_id_browser'), r.browserType || '—'], [tr('fi_id_detected'), r.det.label + (r.det.mime ? ' (' + r.det.mime + ')' : '')],
+            [tr('fi_id_expect'), r.det.ext.length ? r.det.ext.map(x => (x ? '.' + x : tr('fi_none'))).join(' ') : '—']);
+          if (r.magic) rows.push([tr('fi_id_magic'), r.magic], [tr('fi_id_entropy'), r.entropy]);
+          return rows;
+        },
+        copyFiHash(h) {
+          const p = navigator.clipboard ? navigator.clipboard.writeText(h) : Promise.reject(new Error('clipboard'));
+          p.then(() => { this.fi.copied = h; setTimeout(() => { this.fi.copied = ''; }, 1500); }).catch(() => { /* clipboard ditolak: abaikan */ });
+        },
+        downloadFiJson() {
+          const data = this.fi.results.filter(r => !r.busy).map(r => ({ name: r.name, size: r.size, detected: r.det.label, extension: r.ext, verdict: fiVerdict(r), hashes: r.hashes, integrity: r.integ, findings: r.finds, metadata: Object.fromEntries(r.meta) }));
+          const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+          const a = document.createElement('a');
+          a.href = url; a.download = 'analisis_file.json';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
         },
         clearDecode() { this.dec.input = ''; this.dec.note = ''; this.dec.form = decFormDefault(); },
         async loadDecSample(key) {
