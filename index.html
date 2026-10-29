@@ -6,90 +6,115 @@
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
   <style>
+    :root {
+      --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
+      --border: #334155; --text: #e2e8f0; --muted: #94a3b8; --accent: #2563eb;
+      --th-bg: #1e40af; --th-text: #fff; --link: #93c5fd; --code-bg: #1e293b;
+      --drop-over-bg: #172554; --pill-bg: #334155; --pill-text: #cbd5e1;
+      --ok: #4ade80; --bad: #f87171; --med: #fbbf24; --low: #60a5fa; --warn: #f59e0b;
+      --row-even: #111c33; --btn-text: #fff;
+    }
+    :root[data-theme="light"] {
+      --bg: #f8fafc; --header-bg: #fff; --panel-bg: #f1f5f9; --input-bg: #fff;
+      --border: #cbd5e1; --text: #0f172a; --muted: #475569; --accent: #2563eb;
+      --th-bg: #2563eb; --th-text: #fff; --link: #1d4ed8; --code-bg: #e2e8f0;
+      --drop-over-bg: #dbeafe; --pill-bg: #e2e8f0; --pill-text: #334155;
+      --ok: #15803d; --bad: #b91c1c; --med: #b45309; --low: #1d4ed8; --warn: #b45309;
+      --row-even: #f1f5f9; --btn-text: #fff;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: #0f172a; color: #e2e8f0; }
-    header { padding: 20px 32px; background: #1e293b; border-bottom: 1px solid #334155; }
+    body { margin: 0; font-family: system-ui, Segoe UI, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 20px 32px; background: var(--header-bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
     .ver { display: inline-block; vertical-align: super; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: #1d4ed8; color: #dbeafe; font-size: 11px; font-weight: 600; line-height: 18px; }
     header h1 { margin: 0; font-size: 22px; }
-    header p { margin: 4px 0 0; color: #94a3b8; font-size: 14px; }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    .topbar { display: flex; gap: 8px; flex-shrink: 0; }
+    .toggle { padding: 6px 12px; min-width: 42px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .toggle:hover { border-color: var(--accent); }
     .layout { display: grid; grid-template-columns: var(--side-w, 330px) minmax(0, 1fr); gap: 24px; max-width: 1480px; margin: 0 auto; padding: 0 20px; }
     .side { position: relative; }
     .resizer { position: absolute; top: 0; bottom: 0; right: -18px; width: 12px; cursor: col-resize; touch-action: none; border-radius: 6px; }
     .resizer::after { content: ''; position: absolute; top: 50%; left: 4px; width: 4px; height: 48px; margin-top: -24px; border-radius: 2px; background: #475569; }
-    .resizer:hover::after, .resizer.drag::after { background: #2563eb; }
+    .resizer:hover::after, .resizer.drag::after { background: var(--accent); }
     @media (max-width: 960px) { .resizer { display: none; } }
     main { min-width: 0; margin: 24px 0; padding: 0 0 48px; }
-    .side { margin-top: 24px; align-self: start; background: #111c33; border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; font-size: 13px; }
+    .side { margin-top: 24px; align-self: start; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 13px; }
     .side h2 { margin: 0 0 6px; font-size: 15px; }
     .side-tools { display: flex; justify-content: space-between; gap: 8px; margin: 10px 0 4px; }
-    .lnk { background: none; border: 0; color: #93c5fd; cursor: pointer; font-size: 12px; padding: 2px 0; }
+    .lnk { background: none; border: 0; color: var(--link); cursor: pointer; font-size: 12px; padding: 2px 0; }
     .lnk:hover { text-decoration: underline; }
-    .side-sec { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 14px; }
+    .side-sec { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
     .tab-opt { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
     .tab-opt input { cursor: pointer; }
     .grp { margin-top: 14px; }
-    .grp-h { font-weight: 700; font-size: 13px; color: #e2e8f0; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 3px; border-bottom: 2px solid #1e40af; }
+    .grp-h { font-weight: 700; font-size: 13px; color: var(--text); display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 3px; border-bottom: 2px solid var(--th-bg); }
     .grp-d { margin: 4px 0 2px; font-size: 12px; }
-    .api { border-top: 1px solid #334155; padding: 7px 0; }
+    .api { border-top: 1px solid var(--border); padding: 7px 0; }
     .api-h { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
     .api-h b { flex: 1; min-width: 0; font-size: 13px; }
-    .chev { color: #94a3b8; width: 10px; font-size: 11px; }
+    .chev { color: var(--muted); width: 10px; font-size: 11px; }
     .api-d { padding: 6px 0 2px 16px; }
-    .api code { display: block; word-break: break-all; font-size: 11px; margin: 0 0 5px; color: #93c5fd; }
+    .api code { display: block; word-break: break-all; font-size: 11px; margin: 0 0 5px; color: var(--link); }
     .api .muted { font-size: 12px; }
-    .pill { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: #334155; color: #cbd5e1; white-space: nowrap; }
+    .pill { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: var(--pill-bg); color: var(--pill-text); white-space: nowrap; }
     .pill.okp { background: #14532d; color: #bbf7d0; }
     .pill.errp { background: #7f1d1d; color: #fecaca; }
-    .sona { margin-top: 14px; border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; background: #111c33; }
+    .sona { margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--panel-bg); }
     .sona-h { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
     .sona-h b { flex: 1; }
     .sona-b { padding-top: 6px; }
-    .sona-b .row input[type=password] { flex: 1; min-width: 200px; padding: 7px 10px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
+    .sona-b .row input[type=password] { flex: 1; min-width: 200px; padding: 7px 10px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
     @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
-    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-    .tabs button { padding: 8px 16px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; border-radius: 6px; cursor: pointer; }
-    .tabs button.active { background: #2563eb; border-color: #2563eb; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tabs button { padding: 8px 16px; border: 1px solid var(--border); background: var(--header-bg); color: var(--text); border-radius: 6px; cursor: pointer; }
+    .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     td input[type=text], section > input[type=text] { width: 100%; box-sizing: border-box; }
-    pre.json { margin: 0; padding: 12px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
-    textarea { width: 100%; min-height: 160px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
-    input[type=text], select { padding: 7px 10px; background: #020617; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; }
+    pre.json { margin: 0; padding: 12px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+    textarea { width: 100%; min-height: 160px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
+    input[type=text], input[type=password], input[type=number], select { padding: 7px 10px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; }
     .actions { margin: 12px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    .btn { padding: 9px 20px; background: #16a34a; color: #fff; border: 0; border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
-    .btn.blue { background: #2563eb; }
+    .btn { padding: 9px 20px; background: #16a34a; color: var(--btn-text); border: 0; border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
+    .btn.blue { background: var(--accent); }
     .btn.gray { background: #475569; padding: 7px 14px; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
-    .drop { border: 2px dashed #475569; border-radius: 10px; padding: 34px 16px; text-align: center; color: #94a3b8; cursor: pointer; background: #111c33; transition: .15s; }
-    .drop.over { border-color: #2563eb; background: #172554; color: #e2e8f0; }
-    .drop b { color: #e2e8f0; }
+    .drop { border: 2px dashed #475569; border-radius: 10px; padding: 34px 16px; text-align: center; color: var(--muted); cursor: pointer; background: var(--panel-bg); transition: .15s; }
+    .drop.over { border-color: var(--accent); background: var(--drop-over-bg); color: var(--text); }
+    .drop b { color: var(--text); }
     .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
     .row input[type=text] { flex: 1; min-width: 200px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
-    th, td { border: 1px solid #334155; padding: 8px; text-align: left; vertical-align: top; }
-    th { background: #1e40af; }
-    tr:nth-child(even) td { background: #111c33; }
-    .ok { color: #4ade80; }
-    .bad { color: #f87171; font-weight: 600; }
-    .sev-HIGH { color: #f87171; } .sev-MEDIUM { color: #fbbf24; } .sev-LOW { color: #60a5fa; }
-    .muted { color: #94a3b8; font-size: 13px; }
-    .log { background: #020617; border: 1px solid #334155; border-radius: 6px; padding: 10px 12px; font-family: Consolas, monospace; font-size: 12px; max-height: 200px; overflow: auto; margin-top: 12px; }
+    th, td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+    th { background: var(--th-bg); color: var(--th-text); }
+    tr:nth-child(even) td { background: var(--row-even); }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); font-weight: 600; }
+    .sev-HIGH { color: var(--bad); } .sev-MEDIUM { color: var(--med); } .sev-LOW { color: var(--low); }
+    .muted { color: var(--muted); font-size: 13px; }
+    .log { background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-family: Consolas, monospace; font-size: 12px; max-height: 200px; overflow: auto; margin-top: 12px; }
     .log div { white-space: pre-wrap; }
     .opts { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; margin-top: 12px; }
     .opts label { cursor: pointer; }
-    a { color: #93c5fd; }
-    code { background: #1e293b; padding: 1px 5px; border-radius: 4px; }
+    a { color: var(--link); }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
   </style>
 </head>
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.42</span></h1>
-      <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
+      <div>
+        <h1>Scanner Security <span class="ver" title="v1.0">1.0</span></h1>
+        <p>{{ t('tagline') }}</p>
+      </div>
+      <div class="topbar">
+        <button class="toggle" @click="toggleTheme" :title="t('themeTip')">{{ theme === 'light' ? '🌙' : '☀️' }}</button>
+        <button class="toggle" @click="toggleLang" :title="t('langTip')">{{ lang === 'en' ? 'ID' : 'EN' }}</button>
+      </div>
     </header>
 
     <div class="layout" :style="{ '--side-w': sideW + 'px' }">
     <aside class="side">
-      <h2>API publik yang dipakai</h2>
-      <p class="muted">Semua panggilan langsung dari browser Anda ke layanan di bawah. Isi file/kode tidak diunggah ke server milik aplikasi ini; hanya data di baris "Dikirim" yang keluar.</p>
+      <h2>{{ t('sideApiTitle') }}</h2>
+      <p class="muted">{{ t('sideApiDesc') }}</p>
       <div class="side-tools">
         <button class="lnk" @click="apiOpen = !apiOpen">{{ apiOpen ? '▾ Sembunyikan semua API' : '▸ Tampilkan ' + apis.length + ' API' }}</button>
         <button class="lnk" v-if="apiOpen" @click="toggleAllDetail">{{ allDetailOpen ? 'Tutup semua detail' : 'Buka semua detail' }}</button>
@@ -115,10 +140,10 @@
         </div>
       </div>
       <div class="side-sec">
-        <h2 style="margin:0 0 4px">Menu yang tampil</h2>
-        <p class="muted" style="margin:0 0 8px">Centang menu yang ingin tampil di bilah atas. Setelan tersimpan di browser ini.</p>
-        <label class="tab-opt" v-for="t in tabList" :key="t.key">
-          <input type="checkbox" v-model="visibleTabs[t.key]" @change="onToggleTab(t.key)" /> {{ t.label }}
+        <h2 style="margin:0 0 4px">{{ t('menuShownTitle') }}</h2>
+        <p class="muted" style="margin:0 0 8px">{{ t('menuShownDesc') }}</p>
+        <label class="tab-opt" v-for="tb in tabList" :key="tb.key">
+          <input type="checkbox" v-model="visibleTabs[tb.key]" @change="onToggleTab(tb.key)" /> {{ t('tab_' + tb.key) }}
         </label>
       </div>
       <div class="resizer" :class="{ drag: resizing }" title="Geser untuk mengubah lebar (klik dua kali untuk reset)"
@@ -127,7 +152,7 @@
 
     <main>
       <div class="tabs">
-        <button v-for="t in shownTabs" :key="t.key" :class="{ active: tab === t.key }" @click="tab = t.key">{{ t.label }}</button>
+        <button v-for="tb in shownTabs" :key="tb.key" :class="{ active: tab === tb.key }" @click="tab = tb.key">{{ t('tab_' + tb.key) }}</button>
       </div>
 
       <!-- SCA + Docker -->
@@ -2650,10 +2675,54 @@
       } catch (e) { return DEFAULT_PROJECT; }
     }
 
+    // ============================================================
+    //  i18n: Bahasa Indonesia (default) + English (dipakai di path /en/).
+    //  t(key) mengembalikan teks bahasa aktif; jika belum diterjemahkan,
+    //  jatuh ke Indonesia (aplikasi tetap jalan saat terjemahan belum lengkap).
+    // ============================================================
+    const THEME_KEY = 'scaTheme', LANG_KEY = 'scaLang';
+    // Bahasa dari: query ?lang= > path /en/ > localStorage > default 'id'.
+    function detectLang() {
+      try {
+        const q = new URLSearchParams(location.search).get('lang');
+        if (q === 'en' || q === 'id') return q;
+      } catch (e) { /* abaikan */ }
+      if (/(^|\/)en(\/|$)/.test(location.pathname)) return 'en';
+      try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'id') return s; } catch (e) { /* abaikan */ }
+      return 'id';
+    }
+    function detectTheme() {
+      try { const s = localStorage.getItem(THEME_KEY); if (s === 'light' || s === 'dark') return s; } catch (e) { /* abaikan */ }
+      return 'dark';
+    }
+    const I18N = {
+      id: {
+        tagline: 'Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.',
+        themeTip: 'Ganti tema terang/gelap', langTip: 'Switch to English (/en/)',
+        tab_sca: 'SCA & Dockerfile', tab_dast: 'DAST pasif (URL)', tab_sast: 'SAST (Kode)',
+        tab_jwt: 'JWT Decode', tab_dbg: 'Hook Debug', tab_rate: 'Rate Limiter (dari curl)', tab_rto: 'RTO (kirim lambat)',
+        sideApiTitle: 'API publik yang dipakai',
+        sideApiDesc: 'Semua panggilan langsung dari browser Anda ke layanan di bawah. Isi file/kode tidak diunggah ke server milik aplikasi ini; hanya data di baris "Dikirim" yang keluar.',
+        menuShownTitle: 'Menu yang tampil',
+        menuShownDesc: 'Centang menu yang ingin tampil di bilah atas. Setelan tersimpan di browser ini.'
+      },
+      en: {
+        tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
+        themeTip: 'Toggle light/dark theme', langTip: 'Ganti ke Bahasa Indonesia',
+        tab_sca: 'SCA & Dockerfile', tab_dast: 'Passive DAST (URL)', tab_sast: 'SAST (Code)',
+        tab_jwt: 'JWT Decode', tab_dbg: 'Hook Debug', tab_rate: 'Rate Limiter (from curl)', tab_rto: 'RTO (slow send)',
+        sideApiTitle: 'Public APIs used',
+        sideApiDesc: 'Every call goes straight from your browser to the services below. Your files/code are not uploaded to this app\'s server; only the data shown in the "Sent" line leaves.',
+        menuShownTitle: 'Visible menus',
+        menuShownDesc: 'Check the menus to show in the top bar. Saved in this browser.'
+      }
+    };
+
     createApp({
       data() {
         return {
           tab: 'sca', over: false, items: [], nextId: 1, typeLabels: TYPE_LABELS,
+          lang: detectLang(), theme: detectTheme(),
           tabList: TAB_LIST, visibleTabs: {},
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
     //      sona: { email: '', token: '', proxy: 'http://127.0.0.1:8787' }, sonaUse: false, sonaOpen: false, sonaBusy: false, sonaMsg: '', sonaOk: false,
@@ -2706,6 +2775,8 @@
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
       },
       created() {
+        this.applyTheme();
+        try { document.documentElement.lang = this.lang; } catch (e) { /* abaikan */ }
         try { const w = parseInt(localStorage.getItem(SIDE_KEY), 10); if (w) this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, w)); } catch (e) { /* abaikan */ }
         // Setelan tab yang tampil; localStorage kosong/rusak -> semua tab tampil.
         let savedTabs = null;
@@ -2731,6 +2802,29 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
+        // Terjemahan teks UI; fallback ke Indonesia bila key belum ada di bahasa aktif.
+        t(key) { return (I18N[this.lang] && I18N[this.lang][key]) || I18N.id[key] || key; },
+        applyTheme() {
+          document.documentElement.setAttribute('data-theme', this.theme === 'light' ? 'light' : 'dark');
+        },
+        toggleTheme() {
+          this.theme = this.theme === 'light' ? 'dark' : 'light';
+          try { localStorage.setItem(THEME_KEY, this.theme); } catch (e) { /* abaikan */ }
+          this.applyTheme();
+        },
+        // Pindah bahasa: di GitHub Pages arahkan ke URL /en/ (atau akar) agar bisa
+        // dibagikan; di file lokal cukup pakai ?lang= + muat ulang.
+        toggleLang() {
+          const next = this.lang === 'en' ? 'id' : 'en';
+          try { localStorage.setItem(LANG_KEY, next); } catch (e) { /* abaikan */ }
+          const path = location.pathname;
+          if (location.protocol === 'http:' || location.protocol === 'https:') {
+            if (next === 'en') location.href = /(^|\/)en(\/|$)/.test(path) ? location.href : path.replace(/\/?$/, '/') + 'en/';
+            else location.href = path.replace(/\/en\/?$/, '/');
+          } else {
+            const u = new URL(location.href); u.searchParams.set('lang', next); location.href = u.href;
+          }
+        },
         // Simpan setelan tab yang tampil; jaga minimal satu tetap tampil dan
         // pindahkan tab aktif bila yang sedang dibuka disembunyikan.
         onToggleTab(key) {

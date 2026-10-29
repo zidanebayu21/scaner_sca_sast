@@ -5,6 +5,10 @@ Aplikasi HTML-only (Vue 3 via CDN) untuk memeriksa keamanan proyek langsung di b
 - **SCA (Software Composition Analysis)**: tempel `package.json`, dependency dicek ke database kerentanan [OSV.dev](https://osv.dev).
 - **SAST (Static Application Security Testing)**: tempel kode JS/TS, dicek terhadap pola berbahaya (eval, new Function, innerHTML, document.write, v-html, dll).
 
+## Tema & Bahasa
+
+Di kanan atas ada dua toggle: **tema terang/gelap** (☀️/🌙, tersimpan di browser) dan **bahasa** (ID/EN). Default Bahasa Indonesia; versi Inggris dibuka di path `/en/` — mis. `https://zidanebayu21.github.io/scaner_sca_sast/en/`. File `en/index.html` adalah **salinan persis** `index.html`; bahasa dideteksi dari path URL (`/en/`), jadi setiap perubahan `index.html` perlu disalin ulang ke `en/index.html`.
+
 ## Cara Pakai
 
 Buka `index.html` di browser (tidak perlu build / server).
