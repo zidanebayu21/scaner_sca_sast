@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
+  <script src="i18n/i18n.js"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -158,58 +159,53 @@
       <!-- SCA + Docker -->
       <section v-if="tab === 'sca'">
         <div class="row" style="margin-bottom:10px">
-          <input type="text" v-model="project" list="project-names" placeholder="Nama project (mis. aplikasi-hrd). Kosong = diambil dari field name di file (package.json, pom.xml, dll.) atau nama repo untuk link" />
+          <input type="text" v-model="project" list="project-names" :placeholder="t('sca_project_ph')" />
           <datalist id="project-names"><option v-for="p in projectNames" :key="p" :value="p"></option></datalist>
         </div>
-        <div class="muted" style="margin:-4px 0 10px">
-          File tersimpan di browser ini (localStorage). Mengunggah file yang sama untuk nama project yang sama akan menggantikan yang lama.
-        </div>
+        <div class="muted" style="margin:-4px 0 10px">{{ t('sca_stored_note') }}</div>
         <div class="drop":class="{ over: over }"
              @dragover.prevent="over = true" @dragleave.prevent="over = false"
              @drop.prevent="onDrop" @click="$refs.file.click()">
-          <div><b>Seret &amp; lepas file atau folder di sini</b> atau klik untuk memilih</div>
-          <div class="muted" style="margin-top:6px">Seret seluruh folder proyek pun boleh — hanya file dependency yang diambil, sisanya (termasuk <code>node_modules</code>, <code>.git</code>, hasil build) dilewati otomatis.</div>
+          <div v-html="t('sca_drop_title')"></div>
+          <div class="muted" style="margin-top:6px" v-html="t('sca_drop_folder')"></div>
           <div class="muted" style="margin-top:4px">npm (package-lock, yarn.lock, pnpm-lock) · Composer · NuGet (*.csproj, packages.config, packages.lock.json, obj/project.assets.json) · Java (pom.xml, build.gradle, gradle.lockfile) · Rust (Cargo.lock) · Go (go.mod) · Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock) · Ruby (Gemfile.lock) · Dart (pubspec.lock) · Elixir (mix.lock) · Dockerfile</div>
           <input ref="file" type="file" multiple hidden @change="onPick" />
         </div>
         <div class="muted" v-if="dropMsg" style="margin-top:6px;color:#4ade80">{{ dropMsg }}</div>
 
         <div class="row">
-          <input type="text" v-model="urlText" placeholder="Link repo GitHub / GitLab, atau link file Dockerfile / package.json / lockfile (boleh banyak, pisah spasi)" @keyup.enter="fetchUrls" />
-          <input type="password" v-model="token" autocomplete="off" placeholder="Token (opsional, repo private)" style="max-width:220px" />
-          <button class="btn blue" :disabled="urlBusy || !urlText.trim()" @click="fetchUrls">{{ urlBusy ? 'Mengambil...' : 'Ambil dari link' }}</button>
+          <input type="text" v-model="urlText" :placeholder="t('sca_url_ph')" @keyup.enter="fetchUrls" />
+          <input type="password" v-model="token" autocomplete="off" :placeholder="t('sca_token_ph')" style="max-width:220px" />
+          <button class="btn blue" :disabled="urlBusy || !urlText.trim()" @click="fetchUrls">{{ urlBusy ? t('sca_fetching') : t('sca_fetch_btn') }}</button>
         </div>
-        <div class="muted" style="margin-top:6px">
-          Contoh: <code>https://github.com/lodash/lodash</code> · <code>https://gitlab.com/grup/proyek/-/tree/main/sub</code> · <code>https://github.com/o/r/blob/main/Dockerfile</code>.
-          Repo private: login browser Anda tidak bisa dipakai halaman ini (diblokir kebijakan keamanan browser), jadi tempel token read-only (GitHub: fine-grained "Contents: read", GitLab: <code>read_repository</code>). Token hanya di memori halaman, dikirim ke GitHub/GitLab saja, dan tidak disimpan.
-        </div>
+        <div class="muted" style="margin-top:6px" v-html="t('sca_url_help')"></div>
         <div class="log" v-if="urlLogs.length"><div v-for="(l, i) in urlLogs" :key="i">{{ l }}</div></div>
 
         <div class="row">
-          <input type="text" v-model="pasteName" placeholder="Nama file untuk teks tempelan (opsional, mis. package-lock.json)" />
+          <input type="text" v-model="pasteName" :placeholder="t('sca_paste_name_ph')" />
         </div>
-        <textarea v-model="pasteText" style="margin-top:8px" placeholder="...atau tempel isi file di sini, lalu klik Tambah"></textarea>
+        <textarea v-model="pasteText" style="margin-top:8px" :placeholder="t('sca_paste_ph')"></textarea>
         <div class="actions" style="margin-top:6px">
-          <button class="btn gray" :disabled="!pasteText.trim()" @click="addPaste">Tambah dari teks</button>
+          <button class="btn gray" :disabled="!pasteText.trim()" @click="addPaste">{{ t('sca_add_paste') }}</button>
         </div>
 
         <table v-if="items.length">
-          <thead><tr><th title="Ikut di-scan">Scan</th><th>Project</th><th>File</th><th>Jenis</th><th>Ukuran</th><th></th></tr></thead>
+          <thead><tr><th :title="t('th_scan_tip')">{{ t('th_scan') }}</th><th>{{ t('th_project') }}</th><th>{{ t('th_file') }}</th><th>{{ t('th_type') }}</th><th>{{ t('th_size') }}</th><th></th></tr></thead>
           <tbody>
             <tr v-for="(it, i) in items" :key="it.id" :style="it.enabled ? '' : 'opacity:.5'">
-              <td><input type="checkbox" v-model="it.enabled" :title="it.enabled ? 'Nonaktifkan (tidak di-scan, tidak dihapus)' : 'Aktifkan'" /></td>
+              <td><input type="checkbox" v-model="it.enabled" :title="it.enabled ? t('it_disable') : t('it_enable')" /></td>
               <td>{{ it.project }}</td>
               <td>{{ it.name }}</td>
               <td>
-                <select v-model="it.type" :disabled="it.compact" :title="it.compact ? 'Sudah dipadatkan menjadi daftar package' : ''">
+                <select v-model="it.type" :disabled="it.compact" :title="it.compact ? t('it_compact_tip') : ''">
                   <option v-for="(label, key) in typeLabels" :key="key" :value="key">{{ label }}</option>
                 </select>
               </td>
               <td>
-                {{ (it.text.length / 1024).toFixed(1) }} KB<span v-if="it.compact" class="muted"> (dipadatkan)</span>
-                <div v-if="unsavedIds.includes(it.id)" style="color:#f59e0b">tidak tersimpan: penyimpanan penuh</div>
+                {{ (it.text.length / 1024).toFixed(1) }} KB<span v-if="it.compact" class="muted"> {{ t('it_compacted') }}</span>
+                <div v-if="unsavedIds.includes(it.id)" style="color:#f59e0b">{{ t('it_unsaved') }}</div>
               </td>
-              <td><button class="btn gray" @click="items.splice(i, 1)">Hapus</button></td>
+              <td><button class="btn gray" @click="items.splice(i, 1)">{{ t('btn_delete') }}</button></td>
             </tr>
           </tbody>
         </table>
@@ -251,49 +247,49 @@
 
         <div class="opts">
           <!-- <label :title="sonaReady ? '' : 'Isi email dan token Sonatype dulu'"><input type="checkbox" v-model="sonaUse" :disabled="!sonaReady" /> Tambahkan data Sonatype Guide</label> -->
-          <label><input type="checkbox" v-model="omitDev" /> Abaikan devDependencies</label>
-          <label><input type="checkbox" v-model="enrich" /> Tambahkan EPSS &amp; CISA KEV</label>
+          <label><input type="checkbox" v-model="omitDev" /> {{ t('opt_omitdev') }}</label>
+          <label><input type="checkbox" v-model="enrich" /> {{ t('opt_enrich') }}</label>
         </div>
 
         <div class="actions">
-          <button class="btn" :disabled="scanning || !activeItems.length" @click="runScan">{{ scanning ? 'Memindai...' : 'Scan & buka laporan' + (activeItems.length < items.length ? ' (' + activeItems.length + ' aktif)' : '') }}</button>
-          <a v-if="reportUrl" class="btn blue" :href="reportUrl" target="_blank">Buka laporan lagi</a>
-          <a v-if="reportUrl" class="btn gray" :href="reportUrl" :download="reportName">Unduh HTML</a>
+          <button class="btn" :disabled="scanning || !activeItems.length" @click="runScan">{{ scanning ? t('scanning') : t('scan_btn') + (activeItems.length < items.length ? ' (' + activeItems.length + ' ' + t('active') + ')' : '') }}</button>
+          <a v-if="reportUrl" class="btn blue" :href="reportUrl" target="_blank">{{ t('btn_reopen_report') }}</a>
+          <a v-if="reportUrl" class="btn gray" :href="reportUrl" :download="reportName">{{ t('btn_download_html') }}</a>
           <span class="bad" v-if="error">{{ error }}</span>
         </div>
         <div class="log" v-if="logs.length"><div v-for="(l, i) in logs" :key="i">{{ l }}</div></div>
-        <p class="muted">Sumber data: OSV.dev, FIRST EPSS, CISA KEV, endoflife.date. Pemindaian image Docker penuh (paket OS di dalam image, seperti Trivy/Harbor) butuh Docker dan tidak bisa dijalankan di browser. Untuk itu gunakan <code>scan_sca_docker.ps1</code>.</p>
+        <p class="muted" v-html="t('sca_sources')"></p>
       </section>
 
       <!-- DAST pasif -->
       <section v-else-if="tab === 'dast'">
-        <p class="muted">Masukkan URL situs publik (boleh beberapa, pisah spasi, maks 10). Hasil dibuka sebagai laporan HTML di tab baru: nilai MDN Observatory + analisis header respons (HSTS, CSP, cookie, dll.), plus info domain &amp; port pasif (DNS + Shodan InternetDB).</p>
+        <p class="muted" v-html="t('dast_intro')"></p>
         <div class="row">
           <input type="text" v-model="dastText" placeholder="https://unpkg.com  https://situs-anda.go.id" @keyup.enter="runDast" />
-          <button class="btn" :disabled="dastBusy || !dastText.trim()" @click="runDast">{{ dastBusy ? 'Memeriksa...' : 'Cek & buka laporan' }}</button>
+          <button class="btn" :disabled="dastBusy || !dastText.trim()" @click="runDast">{{ dastBusy ? t('dast_checking') : t('dast_check_btn') }}</button>
         </div>
         <div class="opts">
-          <label><input type="checkbox" v-model="dastNet" /> Tambahkan info domain &amp; port (DNS + Shodan InternetDB — port terbuka &amp; CVE diketahui, pasif tanpa nmap langsung)</label>
+          <label><input type="checkbox" v-model="dastNet" /> <span v-html="t('dast_net_opt')"></span></label>
         </div>
         <div class="actions">
-          <a v-if="dastUrl" class="btn blue" :href="dastUrl" target="_blank">Buka laporan lagi</a>
-          <a v-if="dastUrl" class="btn gray" :href="dastUrl" :download="dastName">Unduh HTML</a>
+          <a v-if="dastUrl" class="btn blue" :href="dastUrl" target="_blank">{{ t('btn_reopen_report') }}</a>
+          <a v-if="dastUrl" class="btn gray" :href="dastUrl" :download="dastName">{{ t('btn_download_html') }}</a>
           <span class="bad" v-if="dastError">{{ dastError }}</span>
         </div>
         <div class="log" v-if="dastLogs.length"><div v-for="(l, i) in dastLogs" :key="i">{{ l }}</div></div>
-        <p class="muted">Pemeriksaan ini pasif (hanya membaca respons publik + basis data yang sudah ada), bukan DAST/nmap aktif — tidak ada paket yang dikirim ke target. Port &amp; CVE berasal dari Shodan InternetDB (hasil pindai Shodan sebelumnya) untuk IP hasil resolusi DNS; bisa tidak mutakhir. Host lokal/internal/VPN tidak terjangkau. HackerTarget gratis dibatasi ±50 request/hari. Periksa hanya situs yang Anda miliki atau berwenang untuk diuji.</p>
+        <p class="muted" v-html="t('dast_note')"></p>
       </section>
 
       <!-- SAST -->
       <section v-else-if="tab === 'sast'">
-        <p class="muted">Tempel kode JavaScript/TypeScript. Pemeriksaan berbasis pola sederhana (OWASP).</p>
+        <p class="muted">{{ t('sast_intro') }}</p>
         <textarea v-model="codeText" placeholder="const x = eval(userInput);"></textarea>
         <div class="actions">
-          <button class="btn" @click="scanSast">Scan SAST</button>
-          <span class="ok" v-if="sastDone && !sastResults.length">Tidak ada temuan.</span>
+          <button class="btn" @click="scanSast">{{ t('sast_btn') }}</button>
+          <span class="ok" v-if="sastDone && !sastResults.length">{{ t('sast_nofind') }}</span>
         </div>
         <table v-if="sastResults.length">
-          <thead><tr><th>Baris</th><th>Aturan</th><th>Severity</th><th>Kode</th><th>Saran</th></tr></thead>
+          <thead><tr><th>{{ t('th_line') }}</th><th>{{ t('th_rule') }}</th><th>{{ t('th_sev') }}</th><th>{{ t('th_code') }}</th><th>{{ t('th_fix') }}</th></tr></thead>
           <tbody>
             <tr v-for="(f, i) in sastResults" :key="i">
               <td>{{ f.line }}</td>
@@ -308,14 +304,14 @@
 
       <!-- JWT -->
       <section v-else-if="tab === 'jwt'">
-        <p class="muted">Tempel token JWT untuk melihat header dan payload. Didekode di browser ini saja (tidak dikirim ke mana pun) dan <b>signature tidak diverifikasi</b>, jadi isi token jangan dipercaya hanya dari hasil ini.</p>
+        <p class="muted" v-html="t('jwt_intro')"></p>
         <textarea v-model="jwtText" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"></textarea>
-        <div class="actions"><button class="btn gray" :disabled="!jwtText" @click="jwtText = ''">Bersihkan</button></div>
+        <div class="actions"><button class="btn gray" :disabled="!jwtText" @click="jwtText = ''">{{ t('jwt_clear') }}</button></div>
         <div class="bad" v-if="jwt && jwt.error">{{ jwt.error }}</div>
         <template v-if="jwt && !jwt.error">
           <div v-for="w in jwt.warnings" :key="w" class="sev-MEDIUM" style="margin:6px 0">⚠ {{ w }}</div>
           <table v-if="jwt.claims.length">
-            <thead><tr><th>Klaim</th><th>Nilai</th><th>Waktu</th><th>Status</th></tr></thead>
+            <thead><tr><th>{{ t('jwt_th_claim') }}</th><th>{{ t('jwt_th_value') }}</th><th>{{ t('jwt_th_time') }}</th><th>{{ t('jwt_th_status') }}</th></tr></thead>
             <tbody>
               <tr v-for="c in jwt.claims" :key="c.key">
                 <td><code>{{ c.key }}</code> {{ c.label }}</td><td>{{ c.value }}</td><td>{{ c.date }}</td>
@@ -328,112 +324,108 @@
           <h3>Payload</h3>
           <pre class="json">{{ jwt.payloadText }}</pre>
           <h3>Signature</h3>
-          <pre class="json">{{ jwt.signature || '(kosong)' }}</pre>
+          <pre class="json">{{ jwt.signature || t('jwt_empty') }}</pre>
         </template>
       </section>
 
       <!-- Hook Debug -->
       <section v-else-if="tab === 'dbg'">
-        <h2 style="margin-top:0">Hook tab lain (live, mudah dibaca)</h2>
-        <p class="muted">Seperti Postman, mencatat tiap request fetch/XHR saat Anda memakai aplikasi target seperti biasa — <b>bekerja untuk endpoint biasa maupun yang terenkripsi</b>. Tiap entri menampilkan <b>method, URL, header request, body, status, dan header response</b>; untuk endpoint ber-enkripsi sekali pakai per-request (ECDH ephemeral) juga ditampilkan <b>payload sebelum dienkripsi</b> (sadapan <code>crypto.subtle.encrypt</code>) dan hasil dekripsi response (sadapan <code>crypto.subtle.decrypt</code>) — berguna karena curl lama tak bisa dipakai ulang (kunci hanya hidup sesaat di memori tab). Karena merekam semua panggilan, panel ini sekaligus seperti <b>crawler</b>: request berulang ke <b>method + URL yang sama digabung</b> jadi satu entri dengan penghitung <code>×N</code> (tidak dobel), dan tombol <b>export json</b> mengunduh seluruh daftar unik (link, method, header, body, status, jumlah hit) sebagai satu file JSON.</p>
+        <h2 style="margin-top:0">{{ t('dbg_title') }}</h2>
+        <p class="muted" v-html="t('dbg_intro')"></p>
         <ol class="muted" style="margin:0 0 10px 18px;padding:0">
-          <li>Buka tab aplikasi target, tekan F12 → tab <b>Console</b>, tempel skrip di bawah lalu Enter.</li>
-          <li>Atau seret tombol <b>🪝 Hoox</b> ke bilah bookmark sekali saja; setelah itu tinggal klik dari bilah bookmark saat berada di tab target, bisa dipakai berkali-kali tanpa buka Console.</li>
-          <li>Panel muncul di pojok kanan bawah tab target. Tiap request tercatat otomatis; klik ✕ di panel untuk berhenti.</li>
+          <li v-html="t('dbg_step1')"></li>
+          <li v-html="t('dbg_step2')"></li>
+          <li v-html="t('dbg_step3')"></li>
         </ol>
         <textarea readonly :value="hookScript" style="min-height:90px;font-size:11px"></textarea>
         <div class="actions">
-          <button class="btn gray" @click="copyHookScript">{{ hookCopied ? 'Tersalin' : 'Salin skrip' }}</button>
-          <a class="btn blue" :href="hookBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="hookMsg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">🪝 Hoox</a>
+          <button class="btn gray" @click="copyHookScript">{{ hookCopied ? t('copied') : t('copy_script') }}</button>
+          <a class="btn blue" :href="hookBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="hookMsg = t('bookmark_msg')">🪝 Hoox</a>
         </div>
         <div class="muted" v-if="hookMsg" style="color:#f59e0b">{{ hookMsg }}</div>
-        <div class="muted" style="margin-top:6px">
-          Isinya ditampilkan apa adanya, tidak dipotong. Semua murni di tab target; tidak ada yang dikirim ke tab scanner ini atau ke server mana pun.
-        </div>
+        <div class="muted" style="margin-top:6px">{{ t('dbg_note') }}</div>
       </section>
 
       <!-- Rate Limiter (dari curl) -->
       <section v-else-if="tab === 'rate'">
-        <h2 style="margin-top:0">Tes Rate Limiter (dari curl)</h2>
-        <p class="muted">Seperti Postman, khusus untuk cek rate limiter. Tempel curl satu endpoint (mis. login atau search), tentukan jumlah &amp; jeda, lalu pasang skrip di tab aplikasi target — sama prinsipnya dengan tab Hook, supaya request jalan <i>same-origin</i> (cookie sesi ikut otomatis, tidak kena CORS). Skrip mengulang request itu berkali-kali dan melaporkan status/waktu/header <code>Retry-After</code> tiap percobaan. <b>Pakai hanya pada sistem yang Anda berwenang menguji</b>; ini mengirim trafik sungguhan berulang.</p>
+        <h2 style="margin-top:0">{{ t('rate_title') }}</h2>
+        <p class="muted" v-html="t('rate_intro')"></p>
         <textarea v-model="rl.curl" @input="parseRlCurl" placeholder="curl --url 'https://host/api/login' -X POST -H 'Content-Type: application/json' --data-raw '{...}'"></textarea>
         <div class="row" style="margin-top:8px">
           <input type="text" v-model="rl.method" placeholder="GET" style="max-width:90px" />
           <input type="text" v-model="rl.url" placeholder="https://host:port/path" />
         </div>
         <div class="row" style="margin-top:8px">
-          <label>Jumlah request <input type="number" v-model.number="rl.count" min="1" max="300" style="max-width:90px" /></label>
-          <label>Jeda antar request (ms) <input type="number" v-model.number="rl.delay" min="0" max="5000" style="max-width:100px" /></label>
+          <label>{{ t('rl_count') }} <input type="number" v-model.number="rl.count" min="1" max="300" style="max-width:90px" /></label>
+          <label>{{ t('rl_delay') }} <input type="number" v-model.number="rl.delay" min="0" max="5000" style="max-width:100px" /></label>
         </div>
 
-        <h3 style="margin-top:20px">Opsi 1 — Hit langsung dari halaman ini</h3>
-        <p class="muted">Paling simpel, tidak perlu tempel skrip ke tab lain. Jalan selama server mengizinkan CORS dari origin halaman ini; kalau tidak, pakai Opsi 2 di bawah. Cookie sesi browser <b>tidak</b> ikut terkirim dari sini (beda tab/origin) — cocok untuk endpoint yang otentikasinya lewat header seperti API key/Bearer token yang sudah ada di curl.</p>
+        <h3 style="margin-top:20px">{{ t('opt1_head') }}</h3>
+        <p class="muted" v-html="t('rate_opt1_desc')"></p>
         <div class="actions">
-          <button class="btn" :disabled="rl.busy || !rl.url.trim()" @click="runRateDirect">{{ rl.busy ? 'Menjalankan...' : 'Jalankan di sini' }}</button>
-          <button class="btn gray" v-if="rl.busy" @click="rl.stop = true">Stop</button>
-          <button class="btn gray" v-if="rl.results.length" @click="copyRateCsv">{{ rl.csvCopied ? 'Tersalin' : 'Salin CSV' }}</button>
+          <button class="btn" :disabled="rl.busy || !rl.url.trim()" @click="runRateDirect">{{ rl.busy ? t('running') : t('run_here') }}</button>
+          <button class="btn gray" v-if="rl.busy" @click="rl.stop = true">{{ t('stop') }}</button>
+          <button class="btn gray" v-if="rl.results.length" @click="copyRateCsv">{{ rl.csvCopied ? t('copied') : t('copy_csv') }}</button>
         </div>
         <div class="muted" v-if="rl.results.length">{{ rl.results.length }} / {{ rl.count }} · {{ rateCounts }}</div>
         <div class="bad" v-if="rateErrorHint" style="margin-top:6px">{{ rateErrorHint }}</div>
         <div class="log" v-if="rl.results.length" style="max-height:220px;overflow:auto">
           <div v-for="r in [...rl.results].reverse()" :key="r.i" :class="r.status === 429 ? 'sev-MEDIUM' : (r.status === 'error' || r.status >= 400) ? 'sev-HIGH' : 'ok'">
-            #{{ r.i }} {{ r.status === 'error' ? 'GAGAL' : r.status }} · {{ r.ms }}ms<span v-if="r.status === 429"> · kena rate limit</span><span v-if="r.retryAfter"> · Retry-After: {{ r.retryAfter }}</span><span v-if="r.error"> · {{ r.error }}</span>
+            #{{ r.i }} {{ r.status === 'error' ? t('failed') : r.status }} · {{ r.ms }}ms<span v-if="r.status === 429"> · {{ t('rate_limited') }}</span><span v-if="r.retryAfter"> · Retry-After: {{ r.retryAfter }}</span><span v-if="r.error"> · {{ r.error }}</span>
           </div>
         </div>
 
-        <h3 style="margin-top:20px">Opsi 2 — Skrip di tab aplikasi target</h3>
-        <p class="muted">Kalau Opsi 1 diblokir CORS atau butuh cookie sesi, pasang skrip ini di tab aplikasi target (seperti tab Hook): jalan <i>same-origin</i>, cookie ikut otomatis.</p>
+        <h3 style="margin-top:20px">{{ t('opt2_head') }}</h3>
+        <p class="muted" v-html="t('opt2_desc')"></p>
         <template v-if="rateScript">
           <textarea readonly :value="rateScript" style="min-height:80px;font-size:11px"></textarea>
           <div class="actions">
-            <button class="btn gray" @click="copyRateScript">{{ rl.copied ? 'Tersalin' : 'Salin skrip' }}</button>
-            <a class="btn blue" :href="rateBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="rl.msg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">📌 Seret ke bookmark</a>
+            <button class="btn gray" @click="copyRateScript">{{ rl.copied ? t('copied') : t('copy_script') }}</button>
+            <a class="btn blue" :href="rateBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="rl.msg = t('bookmark_msg')">{{ t('drag_bookmark') }}</a>
           </div>
           <div class="muted" v-if="rl.msg" style="color:#f59e0b">{{ rl.msg }}</div>
         </template>
-        <div class="muted" style="margin-top:6px">
-          Panel di tab target muncul di pojok kiri-bawah (supaya tidak bertumpuk dengan panel Hook di kanan-bawah), dengan tombol stop dan salin CSV di sana juga.
-        </div>
+        <div class="muted" style="margin-top:6px">{{ t('rate_opt2_note') }}</div>
       </section>
 
       <!-- RTO (kirim lambat / slow request) -->
       <section v-else-if="tab === 'rto'">
-        <h2 style="margin-top:0">Tes RTO — kirim body lambat (slow request)</h2>
-        <p class="muted">Menguji apakah server menerapkan <b>request read timeout</b>: body request dikirim menetes pada laju yang Anda atur (mis. 8 kbps). Kalau server menunggu data terlalu lama, ia menutup koneksi — itulah RTO yang diukur. Ini <b>satu koneksi lambat untuk diagnostik timeout</b>, bukan membanjiri server. Server yang sehat <i>seharusnya</i> memutus klien lambat (lih. OWASP Slow HTTP / CWE-400 Uncontrolled Resource Consumption); kalau tidak terjadi, koneksi bisa ditahan lama — temuan hardening. <b>Pakai hanya pada sistem yang Anda berwenang menguji.</b></p>
+        <h2 style="margin-top:0">{{ t('rto_title') }}</h2>
+        <p class="muted" v-html="t('rto_intro')"></p>
         <textarea v-model="rto.curl" @input="parseRtoCurl" placeholder="curl --url 'https://host/api/upload' -X POST -H 'Content-Type: application/json' --data-raw '{...}'"></textarea>
         <div class="row" style="margin-top:8px">
           <input type="text" v-model="rto.method" placeholder="POST" style="max-width:90px" />
           <input type="text" v-model="rto.url" placeholder="https://host:port/path" />
         </div>
         <div class="row" style="margin-top:8px">
-          <label>Laju kirim (kbps) <input type="number" v-model.number="rto.kbps" min="2" max="100000" style="max-width:110px" /></label>
-          <label>Ukuran payload (KB) <input type="number" v-model.number="rto.sizeKb" min="1" max="10240" style="max-width:120px" /></label>
-          <label>Ulang <input type="number" v-model.number="rto.count" min="1" max="5" style="max-width:70px" /></label>
-          <label>Jeda antar ulang (ms) <input type="number" v-model.number="rto.delay" min="0" max="10000" style="max-width:100px" /></label>
+          <label>{{ t('rto_kbps') }} <input type="number" v-model.number="rto.kbps" min="2" max="100000" style="max-width:110px" /></label>
+          <label>{{ t('rto_size') }} <input type="number" v-model.number="rto.sizeKb" min="1" max="10240" style="max-width:120px" /></label>
+          <label>{{ t('rto_repeat') }} <input type="number" v-model.number="rto.count" min="1" max="5" style="max-width:70px" /></label>
+          <label>{{ t('rto_delay') }} <input type="number" v-model.number="rto.delay" min="0" max="10000" style="max-width:100px" /></label>
         </div>
-        <div class="muted" style="margin-top:6px">Perkiraan durasi kirim <b>{{ rtoEta }}</b> per request (payload {{ rto.sizeKb }} KB pada {{ rto.kbps }} kbps). Metode harus berbody (POST/PUT/PATCH/DELETE); selain itu otomatis dipakai POST.</div>
+        <div class="muted" style="margin-top:6px">{{ t('rto_eta_pre') }} <b>{{ rtoEta }}</b> {{ t('rto_eta_mid') }} {{ rto.sizeKb }} KB @ {{ rto.kbps }} kbps). {{ t('rto_eta_end') }}</div>
 
-        <h3 style="margin-top:20px">Opsi 1 — Hit langsung dari halaman ini</h3>
-        <p class="muted">Pakai streaming upload (<code>fetch</code> + <code>ReadableStream</code>, butuh HTTPS/HTTP-2 dan izin CORS dari origin ini). Cookie sesi <b>tidak</b> ikut (beda origin) — cocok untuk endpoint yang otentikasinya lewat header seperti API key/Bearer token yang sudah ada di curl.</p>
+        <h3 style="margin-top:20px">{{ t('opt1_head') }}</h3>
+        <p class="muted" v-html="t('rto_opt1_desc')"></p>
         <div class="actions">
-          <button class="btn" :disabled="rto.busy || !rto.url.trim()" @click="runRtoDirect">{{ rto.busy ? 'Menjalankan...' : 'Jalankan di sini' }}</button>
-          <button class="btn gray" v-if="rto.busy" @click="stopRto">Stop</button>
-          <button class="btn gray" v-if="rto.results.length" @click="copyRtoCsv">{{ rto.csvCopied ? 'Tersalin' : 'Salin CSV' }}</button>
+          <button class="btn" :disabled="rto.busy || !rto.url.trim()" @click="runRtoDirect">{{ rto.busy ? t('running') : t('run_here') }}</button>
+          <button class="btn gray" v-if="rto.busy" @click="stopRto">{{ t('stop') }}</button>
+          <button class="btn gray" v-if="rto.results.length" @click="copyRtoCsv">{{ rto.csvCopied ? t('copied') : t('copy_csv') }}</button>
         </div>
         <div class="bad" v-if="rtoErrorHint" style="margin-top:6px">{{ rtoErrorHint }}</div>
         <div class="log" v-if="rto.results.length" style="max-height:220px;overflow:auto">
           <div v-for="r in [...rto.results].reverse()" :key="r.i" :class="r.outcome === 'reset' ? 'sev-MEDIUM' : (r.outcome === 'error') ? 'sev-HIGH' : 'ok'">
-            #{{ r.i }} {{ r.label }} · {{ r.ms }}ms · terkirim {{ r.sent }}/{{ r.total }} B<span v-if="r.status"> · status {{ r.status }}</span>
+            #{{ r.i }} {{ r.label }} · {{ r.ms }}ms · {{ r.sent }}/{{ r.total }} B<span v-if="r.status"> · status {{ r.status }}</span>
           </div>
         </div>
 
-        <h3 style="margin-top:20px">Opsi 2 — Skrip di tab aplikasi target</h3>
-        <p class="muted">Kalau endpoint butuh cookie sesi atau diblokir CORS, pasang skrip ini di tab aplikasi target (seperti tab Hook): jalan <i>same-origin</i>, cookie ikut otomatis.</p>
+        <h3 style="margin-top:20px">{{ t('opt2_head') }}</h3>
+        <p class="muted" v-html="t('opt2_desc')"></p>
         <template v-if="rtoScript">
           <textarea readonly :value="rtoScript" style="min-height:80px;font-size:11px"></textarea>
           <div class="actions">
-            <button class="btn gray" @click="copyRtoScript">{{ rto.copied ? 'Tersalin' : 'Salin skrip' }}</button>
-            <a class="btn blue" :href="rtoBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="rto.msg = 'Seret tombol ini ke bilah bookmark browser (jangan diklik di sini). Lalu, saat berada di tab target, klik dari bilah bookmark.'">📌 Seret ke bookmark</a>
+            <button class="btn gray" @click="copyRtoScript">{{ rto.copied ? t('copied') : t('copy_script') }}</button>
+            <a class="btn blue" :href="rtoBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="rto.msg = t('bookmark_msg')">{{ t('drag_bookmark') }}</a>
           </div>
           <div class="muted" v-if="rto.msg" style="color:#f59e0b">{{ rto.msg }}</div>
         </template>
@@ -2766,28 +2758,7 @@
       try { const s = localStorage.getItem(THEME_KEY); if (s === 'light' || s === 'dark') return s; } catch (e) { /* abaikan */ }
       return 'dark';
     }
-    const I18N = {
-      id: {
-        tagline: 'Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.',
-        themeTip: 'Ganti tema terang/gelap', langTip: 'Switch to English (/en/)',
-        tab_sca: 'SCA & Dockerfile', tab_dast: 'DAST pasif (URL)', tab_sast: 'SAST (Kode)',
-        tab_jwt: 'JWT Decode', tab_dbg: 'Hook Debug', tab_rate: 'Rate Limiter (dari curl)', tab_rto: 'RTO (kirim lambat)',
-        sideApiTitle: 'API publik yang dipakai',
-        sideApiDesc: 'Semua panggilan langsung dari browser Anda ke layanan di bawah. Isi file/kode tidak diunggah ke server milik aplikasi ini; hanya data di baris "Dikirim" yang keluar.',
-        menuShownTitle: 'Menu yang tampil',
-        menuShownDesc: 'Centang menu yang ingin tampil di bilah atas. Setelan tersimpan di browser ini.'
-      },
-      en: {
-        tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
-        themeTip: 'Toggle light/dark theme', langTip: 'Ganti ke Bahasa Indonesia',
-        tab_sca: 'SCA & Dockerfile', tab_dast: 'Passive DAST (URL)', tab_sast: 'SAST (Code)',
-        tab_jwt: 'JWT Decode', tab_dbg: 'Hook Debug', tab_rate: 'Rate Limiter (from curl)', tab_rto: 'RTO (slow send)',
-        sideApiTitle: 'Public APIs used',
-        sideApiDesc: 'Every call goes straight from your browser to the services below. Your files/code are not uploaded to this app\'s server; only the data shown in the "Sent" line leaves.',
-        menuShownTitle: 'Visible menus',
-        menuShownDesc: 'Check the menus to show in the top bar. Saved in this browser.'
-      }
-    };
+    const I18N = window.APP_I18N || { id: {}, en: {} };
 
     createApp({
       data() {

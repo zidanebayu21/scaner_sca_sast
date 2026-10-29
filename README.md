@@ -9,6 +9,8 @@ Aplikasi HTML-only (Vue 3 via CDN) untuk memeriksa keamanan proyek langsung di b
 
 Di kanan atas ada dua toggle: **tema terang/gelap** (☀️/🌙, tersimpan di browser) dan **bahasa** (ID/EN). Default Bahasa Indonesia; versi Inggris dibuka di `/en/` — mis. `https://zidanebayu21.github.io/scaner_sca_sast/en/`. Bahasa dideteksi dari query `?lang=` → path `/en/` → localStorage → default `id`. `en/index.html` **bukan** salinan, melainkan stub kecil yang mengarahkan ke `../?lang=en`, jadi `index.html` tetap satu-satunya sumber dan tak perlu disalin ulang saat berubah.
 
+Kamus terjemahan dipisah di **`i18n/i18n.js`** (bukan `.json`, karena `fetch` file lokal diblokir browser saat `index.html` dibuka langsung lewat `file://`; file `.js` yang dimuat `<script>` jalan di GitHub Pages maupun `file://`). Teks UI di tab memakai `t('key')` dengan fallback ke Indonesia bila sebuah key belum diterjemahkan.
+
 ## Cara Pakai
 
 Buka `index.html` di browser (tidak perlu build / server).
