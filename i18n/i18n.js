@@ -104,7 +104,17 @@ window.APP_I18N = {
         rep_base_image: 'Base image', rep_no_from: 'Tidak ada instruksi FROM.', rep_unknown_prod: 'Produk tidak dikenali / tag tidak memuat versi', rep_docker_findings: 'Temuan konfigurasi Dockerfile', rep_no_findings: 'Tidak ada temuan.',
         rep_pinned_pre: 'Paket yang dipin di Dockerfile (', rep_pinned_post: ' paket diperiksa via OSV)', rep_pinned_pkg: 'paket Dockerfile', rep_no_pinned: 'Tidak ada paket berversi persis yang bisa diperiksa. Paket tanpa versi tidak dapat dicocokkan ke advisory.',
         rep_docker_limit: 'Batasan: pemindaian ini bersifat statis atas isi Dockerfile. Paket OS dan library yang ikut terpasang di dalam image (yang muncul di tab Vulnerabilities Harbor) hanya bisa diketahui setelah image dibangun. Untuk itu jalankan <span class="mono">scan_sca_docker.ps1 --path=&lt;Dockerfile&gt;</span>.',
-        rep_hint: 'Arahkan kursor ke judul kolom, kartu, atau label tingkat untuk melihat artinya.'
+        rep_hint: 'Arahkan kursor ke judul kolom, kartu, atau label tingkat untuk melihat artinya.',
+        rep_th_header: 'Header', rep_th_finding: 'Temuan',
+        ceol_nodata: 'Data endoflife.date tidak tersedia', ceol_nocycle_a: 'Siklus ', ceol_nocycle_b: ' tidak ditemukan', ceol_supported: 'Masih didukung', ceol_eol_since: 'EOL sejak ', ceol_eol_in: 'EOL {eol} ({d} hari lagi)',
+        drep_h1: 'Laporan DAST Pasif (cek header situs)', drep_title: 'Laporan DAST Pasif',
+        drep_passive_note: 'Ini pemeriksaan <b>pasif</b>: hanya membaca header respons publik dan nilai dari Observatory. Bukan DAST aktif (tanpa spider, ajax, atau payload serangan). Untuk itu gunakan <span class="mono">scan_dast.ps1</span>.',
+        drep_skipped: 'Dilewati: ', drep_obs_grade_label: 'nilai Observatory', drep_obs_passed: 'tes Observatory lulus',
+        drep_obs_scanned: 'Observatory memindai host ', drep_obs_notpath: ' (bukan path). ', drep_obs_details: 'Lihat rincian tes di MDN Observatory', drep_obs_httpstatus: ' · status HTTP ', drep_obs_fail: 'Observatory gagal: ',
+        drep_header_findings: 'Temuan header', drep_no_findings_rules: 'Tidak ada temuan dari aturan yang diperiksa.', drep_raw_headers_a: 'Header respons mentah (', drep_raw_headers_b: ' baris)', drep_header_fail: 'Pengambilan header gagal: ',
+        drep_net_title: 'Domain &amp; port (pasif)', drep_dns_fail: 'Resolusi DNS gagal: ', drep_idb_fail: 'Shodan InternetDB gagal: ',
+        drep_idb_empty: ' tidak ada di Shodan InternetDB — tidak ada port/CVE yang diketahui publik (indikasi baik).', drep_idb_from: 'Dari Shodan InternetDB untuk {ip} — data <b>pasif</b> (sudah pernah dipindai Shodan, bukan nmap langsung):',
+        drep_open_ports: 'port terbuka', drep_known_cve: 'CVE diketahui', drep_ports: 'Port:', drep_cpe: 'Teknologi (CPE):', drep_tag: 'Tag:', drep_cve: 'CVE:'
       },
       en: {
         tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
@@ -229,6 +239,16 @@ window.APP_I18N = {
         rep_base_image: 'Base image', rep_no_from: 'No FROM instruction.', rep_unknown_prod: 'Unrecognized product / tag has no version', rep_docker_findings: 'Dockerfile configuration findings', rep_no_findings: 'No findings.',
         rep_pinned_pre: 'Packages pinned in the Dockerfile (', rep_pinned_post: ' packages checked via OSV)', rep_pinned_pkg: 'Dockerfile packages', rep_no_pinned: 'No exactly-versioned packages to check. Packages without a version cannot be matched to an advisory.',
         rep_docker_limit: 'Limitation: this scan is static over the Dockerfile contents. OS packages and libraries installed inside the image (those shown in the Harbor Vulnerabilities tab) can only be known after the image is built. Run <span class="mono">scan_sca_docker.ps1 --path=&lt;Dockerfile&gt;</span> for that.',
-        rep_hint: 'Hover over a column header, card, or severity label to see what it means.'
+        rep_hint: 'Hover over a column header, card, or severity label to see what it means.',
+        rep_th_header: 'Header', rep_th_finding: 'Finding',
+        ceol_nodata: 'endoflife.date data unavailable', ceol_nocycle_a: 'Cycle ', ceol_nocycle_b: ' not found', ceol_supported: 'Still supported', ceol_eol_since: 'EOL since ', ceol_eol_in: 'EOL {eol} ({d} days left)',
+        drep_h1: 'Passive DAST Report (site header check)', drep_title: 'Passive DAST Report',
+        drep_passive_note: 'This is a <b>passive</b> check: it only reads public response headers and the Observatory grade. Not active DAST (no spider, ajax, or attack payloads). Use <span class="mono">scan_dast.ps1</span> for that.',
+        drep_skipped: 'Skipped: ', drep_obs_grade_label: 'Observatory grade', drep_obs_passed: 'Observatory tests passed',
+        drep_obs_scanned: 'Observatory scanned host ', drep_obs_notpath: ' (not the path). ', drep_obs_details: 'See test details on MDN Observatory', drep_obs_httpstatus: ' · HTTP status ', drep_obs_fail: 'Observatory failed: ',
+        drep_header_findings: 'Header findings', drep_no_findings_rules: 'No findings from the rules checked.', drep_raw_headers_a: 'Raw response headers (', drep_raw_headers_b: ' lines)', drep_header_fail: 'Header fetch failed: ',
+        drep_net_title: 'Domain &amp; port (passive)', drep_dns_fail: 'DNS resolution failed: ', drep_idb_fail: 'Shodan InternetDB failed: ',
+        drep_idb_empty: ' is not in Shodan InternetDB — no publicly known ports/CVEs (a good sign).', drep_idb_from: 'From Shodan InternetDB for {ip} — <b>passive</b> data (previously scanned by Shodan, not a direct nmap):',
+        drep_open_ports: 'open ports', drep_known_cve: 'known CVEs', drep_ports: 'Ports:', drep_cpe: 'Technology (CPE):', drep_tag: 'Tags:', drep_cve: 'CVEs:'
       }
 };

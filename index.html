@@ -1289,7 +1289,7 @@
         eolCache[target.slug] = apiFetch('eol', 'https://endoflife.date/api/' + target.slug + '.json').then(r => r.ok ? r.json() : []).catch(() => []);
       }
       const cycles = await eolCache[target.slug];
-      if (!cycles.length) return { status: 'unknown', note: 'Data endoflife.date tidak tersedia' };
+      if (!cycles.length) return { status: 'unknown', note: tr('ceol_nodata') };
       const parts = target.ver.split('.');
       let hit = null;
       for (const n of [3, 2, 1]) {
@@ -1298,13 +1298,13 @@
         if (hit) break;
       }
       if (!hit) hit = cycles.find(c => String(c.cycle).startsWith(parts[0] + '.'));
-      if (!hit) return { status: 'unknown', note: 'Siklus ' + target.ver + ' tidak ditemukan' };
+      if (!hit) return { status: 'unknown', note: tr('ceol_nocycle_a') + target.ver + tr('ceol_nocycle_b') };
       const eol = hit.eol;
-      if (eol === false) return { status: 'ok', cycle: hit.cycle, latest: hit.latest, note: 'Masih didukung' };
+      if (eol === false) return { status: 'ok', cycle: hit.cycle, latest: hit.latest, note: tr('ceol_supported') };
       const d = new Date(eol), now = new Date();
-      if (d <= now) return { status: 'eol', cycle: hit.cycle, latest: hit.latest, note: 'EOL sejak ' + eol };
+      if (d <= now) return { status: 'eol', cycle: hit.cycle, latest: hit.latest, note: tr('ceol_eol_since') + eol };
       const days = Math.round((d - now) / 86400000);
-      return { status: days < 180 ? 'soon' : 'ok', cycle: hit.cycle, latest: hit.latest, note: 'EOL ' + eol + ' (' + days + ' hari lagi)' };
+      return { status: days < 180 ? 'soon' : 'ok', cycle: hit.cycle, latest: hit.latest, note: tr('ceol_eol_in').replace('{eol}', eol).replace('{d}', days) };
     }
 
     // ============================================================
@@ -2246,7 +2246,7 @@
     function dastNetHtml(r) {
       const n = r.net;
       if (!n) return '';
-      let h = '<h3>Domain &amp; port (pasif)</h3>';
+      let h = '<h3>' + tr('drep_net_title') + '</h3>';
       const rows = [];
       if (n.ips.length) rows.push(['A (IPv4)', esc(n.ips.join(', '))]);
       if (n.aaaa.length) rows.push(['AAAA (IPv6)', esc(n.aaaa.join(', '))]);
@@ -2254,59 +2254,59 @@
       if (n.mx.length) rows.push(['MX', esc(n.mx.join(', '))]);
       if (n.txt.length) rows.push(['TXT', n.txt.map(esc).join('<br>')]);
       if (rows.length) h += '<table><tbody>' + rows.map(d => '<tr><td class="mono" style="width:110px">' + d[0] + '</td><td class="mono">' + d[1] + '</td></tr>').join('') + '</tbody></table>';
-      if (n.dnsErr) h += '<div class="note">Resolusi DNS gagal: ' + esc(n.dnsErr) + '</div>';
+      if (n.dnsErr) h += '<div class="note">' + tr('drep_dns_fail') + esc(n.dnsErr) + '</div>';
       const idb = n.idb;
-      if (n.idbErr) h += '<div class="note">Shodan InternetDB gagal: ' + esc(n.idbErr) + '</div>';
-      else if (idb && idb.empty) h += '<p class="cap">IP <span class="mono">' + esc(n.ips[0]) + '</span> tidak ada di Shodan InternetDB — tidak ada port/CVE yang diketahui publik (indikasi baik).</p>';
+      if (n.idbErr) h += '<div class="note">' + tr('drep_idb_fail') + esc(n.idbErr) + '</div>';
+      else if (idb && idb.empty) h += '<p class="cap">IP <span class="mono">' + esc(n.ips[0]) + '</span>' + tr('drep_idb_empty') + '</p>';
       else if (idb) {
-        h += '<p class="cap">Dari Shodan InternetDB untuk <span class="mono">' + esc(n.ips[0]) + '</span> — data <b>pasif</b> (sudah pernah dipindai Shodan, bukan nmap langsung):</p>';
-        h += '<div class="cards"><div class="card"><b>' + idb.ports.length + '</b><span>port terbuka</span></div>' +
-          '<div class="card ' + (idb.vulns.length ? 'h' : '') + '"><b>' + idb.vulns.length + '</b><span>CVE diketahui</span></div></div>';
-        if (idb.ports.length) h += '<p><b>Port:</b> <span class="mono">' + idb.ports.slice().sort((a, b) => a - b).join(', ') + '</span></p>';
-        if (idb.cpes.length) h += '<p><b>Teknologi (CPE):</b> <span class="mono">' + idb.cpes.map(esc).join(', ') + '</span></p>';
-        if (idb.tags.length) h += '<p><b>Tag:</b> <span class="mono">' + idb.tags.map(esc).join(', ') + '</span></p>';
-        if (idb.vulns.length) h += '<p><b>CVE:</b> ' + idb.vulns.map(v => '<a href="https://nvd.nist.gov/vuln/detail/' + esc(v) + '" target="_blank" rel="noopener noreferrer" class="mono">' + esc(v) + '</a>').join(', ') + '</p>';
+        h += '<p class="cap">' + tr('drep_idb_from').replace('{ip}', '<span class="mono">' + esc(n.ips[0]) + '</span>') + '</p>';
+        h += '<div class="cards"><div class="card"><b>' + idb.ports.length + '</b><span>' + tr('drep_open_ports') + '</span></div>' +
+          '<div class="card ' + (idb.vulns.length ? 'h' : '') + '"><b>' + idb.vulns.length + '</b><span>' + tr('drep_known_cve') + '</span></div></div>';
+        if (idb.ports.length) h += '<p><b>' + tr('drep_ports') + '</b> <span class="mono">' + idb.ports.slice().sort((a, b) => a - b).join(', ') + '</span></p>';
+        if (idb.cpes.length) h += '<p><b>' + tr('drep_cpe') + '</b> <span class="mono">' + idb.cpes.map(esc).join(', ') + '</span></p>';
+        if (idb.tags.length) h += '<p><b>' + tr('drep_tag') + '</b> <span class="mono">' + idb.tags.map(esc).join(', ') + '</span></p>';
+        if (idb.vulns.length) h += '<p><b>' + tr('drep_cve') + '</b> ' + idb.vulns.map(v => '<a href="https://nvd.nist.gov/vuln/detail/' + esc(v) + '" target="_blank" rel="noopener noreferrer" class="mono">' + esc(v) + '</a>').join(', ') + '</p>';
       }
       return h;
     }
     function buildDastReport(results) {
-      const now = new Date().toLocaleString('id-ID');
+      const now = new Date().toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID');
       const srcNet = results.some(r => r.net) ? ', Google DoH, Shodan InternetDB' : '';
-      let body = '<h1>Laporan DAST Pasif (cek header situs)</h1><div class="sub">Dibuat ' + esc(now) + ' · ' + results.length + ' URL · sumber: MDN HTTP Observatory, HackerTarget httpheaders' + srcNet + '</div>';
-      body += '<div class="note">Ini pemeriksaan <b>pasif</b>: hanya membaca header respons publik dan nilai dari Observatory. Bukan DAST aktif (tanpa spider, ajax, atau payload serangan). Untuk itu gunakan <span class="mono">scan_dast.ps1</span>.</div>';
+      let body = '<h1>' + tr('drep_h1') + '</h1><div class="sub">' + tr('rep_created') + ' ' + esc(now) + ' · ' + results.length + ' URL · ' + tr('rep_source') + ': MDN HTTP Observatory, HackerTarget httpheaders' + srcNet + '</div>';
+      body += '<div class="note">' + tr('drep_passive_note') + '</div>';
       results.forEach(r => {
         body += '<h2>' + esc(r.url || r.input) + '</h2>';
-        if (r.error) { body += '<div class="note">Dilewati: ' + esc(r.error) + '</div>'; return; }
+        if (r.error) { body += '<div class="note">' + tr('drep_skipped') + esc(r.error) + '</div>'; return; }
         const c = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
         r.findings.forEach(x => { c[x.sev] = (c[x.sev] || 0) + 1; });
         body += '<div class="cards">';
         if (r.obs) {
           const g = String(r.obs.grade || '?'), col = GRADE_COLOR[g[0]] || '#64748b';
-          body += '<div class="card" style="border-color:' + col + '"><b style="color:' + col + '">' + esc(g) + '</b><span>nilai Observatory (' + esc(r.obs.score) + '/100)</span></div>' +
-            '<div class="card"><b>' + esc(r.obs.tests_passed) + '/' + esc(r.obs.tests_quantity) + '</b><span>tes Observatory lulus</span></div>';
+          body += '<div class="card" style="border-color:' + col + '"><b style="color:' + col + '">' + esc(g) + '</b><span>' + tr('drep_obs_grade_label') + ' (' + esc(r.obs.score) + '/100)</span></div>' +
+            '<div class="card"><b>' + esc(r.obs.tests_passed) + '/' + esc(r.obs.tests_quantity) + '</b><span>' + tr('drep_obs_passed') + '</span></div>';
         }
         if (r.headers) {
-          body += '<div class="card h"><b>' + c.HIGH + '</b><span>Tinggi</span></div><div class="card m"><b>' + c.MEDIUM + '</b><span>Sedang</span></div><div class="card l"><b>' + c.LOW + '</b><span>Rendah</span></div>';
+          body += '<div class="card h"><b>' + c.HIGH + '</b><span>' + sevL('HIGH') + '</span></div><div class="card m"><b>' + c.MEDIUM + '</b><span>' + sevL('MEDIUM') + '</span></div><div class="card l"><b>' + c.LOW + '</b><span>' + sevL('LOW') + '</span></div>';
         }
         body += '</div>';
-        if (r.obs) body += '<p class="cap">Observatory memindai host <span class="mono">' + esc(r.host) + '</span> (bukan path). <a href="' + esc(r.obs.details_url) + '" target="_blank" rel="noopener noreferrer">Lihat rincian tes di MDN Observatory</a> · status HTTP ' + esc(r.obs.status_code) + '.</p>';
-        else body += '<div class="note">Observatory gagal: ' + esc(r.obsErr) + '</div>';
+        if (r.obs) body += '<p class="cap">' + tr('drep_obs_scanned') + '<span class="mono">' + esc(r.host) + '</span>' + tr('drep_obs_notpath') + '<a href="' + esc(r.obs.details_url) + '" target="_blank" rel="noopener noreferrer">' + tr('drep_obs_details') + '</a>' + tr('drep_obs_httpstatus') + esc(r.obs.status_code) + '.</p>';
+        else body += '<div class="note">' + tr('drep_obs_fail') + esc(r.obsErr) + '</div>';
         if (r.headers) {
-          body += '<h3>Temuan header</h3>';
-          if (!r.findings.length) body += '<p class="cap">Tidak ada temuan dari aturan yang diperiksa.</p>';
+          body += '<h3>' + tr('drep_header_findings') + '</h3>';
+          if (!r.findings.length) body += '<p class="cap">' + tr('drep_no_findings_rules') + '</p>';
           else {
-            body += '<table><thead><tr><th>No</th><th>Tingkat</th><th>Header</th><th>Temuan</th><th>Detail</th><th>Saran</th></tr></thead><tbody>';
+            body += '<table><thead><tr>' + ['rep_th_no', 'rep_th_sev', 'rep_th_header', 'rep_th_finding', 'rep_th_detail', 'rep_th_suggestion'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
             r.findings.forEach((x, i) => { body += '<tr><td>' + (i + 1) + '</td><td>' + badge(x.sev) + '</td><td class="mono">' + esc(x.header) + '</td><td>' + esc(x.rule) + '</td><td class="mono">' + esc(x.detail) + '</td><td>' + esc(x.fix) + '</td></tr>'; });
             body += '</tbody></table>';
           }
-          body += '<details style="margin-top:10px"><summary>Header respons mentah (' + r.headers.raw.length + ' baris)</summary><pre>' + esc(r.headers.raw.join('\n')) + '</pre></details>';
-        } else body += '<div class="note">Pengambilan header gagal: ' + esc(r.hdrErr) + '</div>';
+          body += '<details style="margin-top:10px"><summary>' + tr('drep_raw_headers_a') + r.headers.raw.length + tr('drep_raw_headers_b') + '</summary><pre>' + esc(r.headers.raw.join('\n')) + '</pre></details>';
+        } else body += '<div class="note">' + tr('drep_header_fail') + esc(r.hdrErr) + '</div>';
         body += dastNetHtml(r);
       });
       const used = API_LIST.filter(a => a.group === 'dast' && apiStats[a.key].calls);
-      body += '<h2>API publik yang dipanggil</h2><table><thead><tr><th>API</th><th>Endpoint</th><th>Data yang dikirim</th><th>Panggilan</th></tr></thead><tbody>' +
-        used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(a.sends) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' gagal' : '') + ')</td></tr>').join('') + '</tbody></table>';
-      return '<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan DAST Pasif</title><style>' + REPORT_CSS + '</style></head><body>' + hint() + tipify(body) + '</body></html>';
+      body += '<h2>' + tr('rep_api_title') + '</h2><table><thead><tr>' + ['rep_th_api', 'rep_th_endpoint', 'rep_th_datasent', 'rep_th_calls'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>' +
+        used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(trData('api_' + a.key + '_sends', a.sends)) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' ' + tr('failed').toLowerCase() : '') + ')</td></tr>').join('') + '</tbody></table>';
+      return '<!DOCTYPE html><html lang="' + LANG + '"><head><meta charset="UTF-8"><title>' + tr('drep_title') + '</title><style>' + REPORT_CSS + '</style></head><body>' + hint() + tipify(body) + '</body></html>';
     }
 
     // ============================================================
