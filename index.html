@@ -330,7 +330,7 @@
         </table>
       </section>
 
-      <!-- JWT -->
+      <!-- JWT Decode dinonaktifkan: sudah tercakup di Smart Decode (recJwt memakai decodeJwt yang sama). Untuk mengaktifkan lagi: buka komentar ini, entri TAB_LIST 'jwt', serta kembalikan data jwtText dan computed jwt() { return decodeJwt(this.jwtText); }.
       <section v-else-if="tab === 'jwt'">
         <p class="muted" v-html="t('jwt_intro')"></p>
         <textarea v-model="jwtText" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature"></textarea>
@@ -355,6 +355,7 @@
           <pre class="json">{{ jwt.signature || t('jwt_empty') }}</pre>
         </template>
       </section>
+      -->
 
       <!-- Hook Debug -->
       <section v-else-if="tab === 'dbg'">
@@ -630,7 +631,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.11';
+    const APP_VERSION = '1.12';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -4783,7 +4784,7 @@
       { key: 'dast', label: 'DAST pasif (URL)' },
       { key: 'sast', label: 'SAST (Kode)' },
       { key: 'file', label: 'Analisis file' },
-      { key: 'jwt', label: 'JWT Decode' },
+      // { key: 'jwt', label: 'JWT Decode' }, -- dinonaktifkan, pakai Smart Decode
       { key: 'decode', label: 'Smart Decode' },
       { key: 'dbg', label: 'Hook Debug' },
       { key: 'rate', label: 'Rate Limiter (dari curl)' },
@@ -4854,7 +4855,7 @@
           hookCopied: false, hookMsg: '',
           rl: { err: '', curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
           rto: { err: '', curl: '', method: 'POST', url: '', headers: [], body: '', kbps: 8, sizeKb: 64, count: 1, delay: 500, copied: false, csvCopied: false, msg: '', busy: false, stop: false, ctl: null, results: [] },
-          sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
+          sideW: 330, resizing: false, persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false,
@@ -4870,7 +4871,6 @@
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
         shownTabs() { return this.tabList.filter(t => this.visibleTabs[t.key]); },
-        jwt() { return decodeJwt(this.jwtText); },
         hookScript() { return HOOK_SCRIPT; },
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
         rateScript() { return this.rl.url.trim() && !rateCfgError(this.rl) ? buildRateScript(this.rl) : ''; },
