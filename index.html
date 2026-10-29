@@ -205,7 +205,8 @@
         <input ref="reup" type="file" hidden @change="onReupload" />
 
         <table v-if="items.length">
-          <thead><tr><th :title="t('th_scan_tip')">{{ t('th_scan') }}</th><th :title="t('it_edit_tip')">{{ t('th_project') }}</th><th :title="t('it_edit_tip')">{{ t('th_file') }}</th><th>{{ t('th_type') }}</th><th>{{ t('th_size') }}</th><th v-if="tab === 'eol'">{{ t('it_detected') }}</th><th></th></tr></thead>
+          <thead><tr><th :title="t('th_scan_tip')" style="white-space:nowrap"><input type="checkbox" :checked="allEnabled" :indeterminate.prop="!allEnabled && activeItems.length > 0"
+                   :title="allEnabled ? t('it_deselect_all') : t('it_select_all')" @change="setAllEnabled($event.target.checked)" /> {{ t('th_scan') }}</th><th :title="t('it_edit_tip')">{{ t('th_project') }}</th><th :title="t('it_edit_tip')">{{ t('th_file') }}</th><th>{{ t('th_type') }}</th><th>{{ t('th_size') }}</th><th v-if="tab === 'eol'">{{ t('it_detected') }}</th><th></th></tr></thead>
           <tbody>
             <tr v-for="(it, i) in items" :key="it.id" :style="it.enabled ? '' : 'opacity:.5'">
               <td><input type="checkbox" v-model="it.enabled" :title="it.enabled ? t('it_disable') : t('it_enable')" /></td>
@@ -529,7 +530,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.3';
+    const APP_VERSION = '1.4';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -3151,6 +3152,7 @@
           return tr('rto_hint_some').replace('{e}', errs.length).replace('{n}', r.length) + (errs[0].label || '');
         },
         activeItems() { return this.items.filter(it => it.enabled); },
+        allEnabled() { return this.items.length > 0 && this.activeItems.length === this.items.length; },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
     //    sonaReady() { return !!(this.sona.email.trim() && this.sona.token.trim() && this.sona.proxy.trim()); }
       },
@@ -3435,6 +3437,8 @@
           this.dropMsg = tr('it_reup_done').replace('{x}', f.name);
         },
         // Edit sel Project/File: klik dua kali, Enter simpan, Esc batal (blur ikut menyimpan).
+        // Centang/lepas semua baris sekaligus (checkbox di header kolom Scan).
+        setAllEnabled(on) { this.items.forEach(it => { it.enabled = on; }); },
         startEdit(it, field) { this.edit = { id: it.id, field, value: it[field] }; },
         isEditing(it, field) { return this.edit.id === it.id && this.edit.field === field; },
         cancelEdit() { this.edit = { id: null, field: '', value: '' }; },
