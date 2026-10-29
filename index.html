@@ -82,7 +82,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.38</span></h1>
+      <h1>Scanner Security <span class="ver" title="Versi = jumlah commit">^0.39</span></h1>
       <p>Seret file lockfile atau Dockerfile, hasil scan dibuka sebagai laporan HTML di tab baru. Semua diproses di browser.</p>
     </header>
 
@@ -142,10 +142,12 @@
         <div class="drop":class="{ over: over }"
              @dragover.prevent="over = true" @dragleave.prevent="over = false"
              @drop.prevent="onDrop" @click="$refs.file.click()">
-          <div><b>Seret &amp; lepas file di sini</b> atau klik untuk memilih</div>
-          <div class="muted" style="margin-top:6px">npm (package-lock, yarn.lock, pnpm-lock) · Composer · NuGet (*.csproj, packages.config, packages.lock.json, obj/project.assets.json) · Java (pom.xml, build.gradle, gradle.lockfile) · Rust (Cargo.lock) · Go (go.mod) · Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock) · Ruby (Gemfile.lock) · Dart (pubspec.lock) · Elixir (mix.lock) · Dockerfile</div>
+          <div><b>Seret &amp; lepas file atau folder di sini</b> atau klik untuk memilih</div>
+          <div class="muted" style="margin-top:6px">Seret seluruh folder proyek pun boleh — hanya file dependency yang diambil, sisanya (termasuk <code>node_modules</code>, <code>.git</code>, hasil build) dilewati otomatis.</div>
+          <div class="muted" style="margin-top:4px">npm (package-lock, yarn.lock, pnpm-lock) · Composer · NuGet (*.csproj, packages.config, packages.lock.json, obj/project.assets.json) · Java (pom.xml, build.gradle, gradle.lockfile) · Rust (Cargo.lock) · Go (go.mod) · Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock) · Ruby (Gemfile.lock) · Dart (pubspec.lock) · Elixir (mix.lock) · Dockerfile</div>
           <input ref="file" type="file" multiple hidden @change="onPick" />
         </div>
+        <div class="muted" v-if="dropMsg" style="margin-top:6px;color:#4ade80">{{ dropMsg }}</div>
 
         <div class="row">
           <input type="text" v-model="urlText" placeholder="Link repo GitHub / GitLab, atau link file Dockerfile / package.json / lockfile (boleh banyak, pisah spasi)" @keyup.enter="fetchUrls" />
@@ -1434,6 +1436,32 @@
     }
 
     // ============================================================
+    //  Drag folder: ambil hanya file dependency yang dikenali, lewati folder berat
+    //  (node_modules, .git, dll.) supaya tidak perlu cari/pilih file manual.
+    // ============================================================
+    // Folder yang tidak perlu ditelusuri (hasil build / dependency terpasang / VCS).
+    const IGNORE_DIRS = new Set(['node_modules', 'bower_components', 'vendor', '.git', '.svn', '.hg',
+      '.idea', '.vscode', 'dist', 'build', 'out', 'coverage', '.next', '.nuxt', '__pycache__',
+      '.venv', 'venv', 'env', '.gradle', '.terraform', '.cache', 'tmp']);
+    // File penting = yang dikenali detectType dari NAMANYA saja (tanpa perlu baca isi).
+    function isImportantByName(name) { return detectType(String(name).split('/').pop(), '') !== 'unknown'; }
+    // Baca satu FileSystemFileEntry menjadi File (null bila gagal).
+    function entryToFile(entry) { return new Promise(res => entry.file(f => res(f), () => res(null))); }
+    // Telusuri entry drag (file/folder) secara rekursif; panggil onFile untuk tiap file.
+    async function walkEntry(entry, onFile, depth) {
+      if (!entry || depth > 12) return;
+      if (entry.isFile) { const f = await entryToFile(entry); if (f) onFile(f); return; }
+      if (!entry.isDirectory || IGNORE_DIRS.has(entry.name.toLowerCase())) return;
+      const reader = entry.createReader();
+      const readBatch = () => new Promise(res => reader.readEntries(res, () => res([])));
+      let batch;
+      // readEntries wajib dipanggil berulang sampai mengembalikan array kosong.
+      while ((batch = await readBatch()).length) {
+        for (const e of batch) await walkEntry(e, onFile, depth + 1);
+      }
+    }
+
+    // ============================================================
     //  Laporan HTML
     // ============================================================
     // Penjelasan yang muncul saat kursor diarahkan ke judul kolom / kartu / label tingkat di laporan
@@ -2584,7 +2612,7 @@
           rl: { curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
           rto: { curl: '', method: 'POST', url: '', headers: [], body: '', kbps: 8, sizeKb: 64, count: 1, delay: 500, copied: false, csvCopied: false, msg: '', busy: false, stop: false, ctl: null, results: [] },
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
-          scanning: false, logs: [], error: '', reportUrl: '', reportName: 'laporan_scan.html',
+          scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
           sastResults: [], sastDone: false
         };
@@ -2847,19 +2875,40 @@
           const saved = new Set(this.persistedIds);
           this.unsavedIds = this.items.filter(it => !saved.has(it.id)).map(it => it.id);
         },
-        async readFiles(list) {
+        // filterImportant=true -> hanya file dependency yang dikenali yang diambil
+        // (dipakai saat menyeret folder / banyak file sekaligus).
+        async readFiles(list, filterImportant) {
+          const toAdd = [];
+          let skipped = 0, big = 0;
           for (const f of Array.from(list)) {
-            if (f.size > 20 * 1024 * 1024) { this.error = f.name + ' terlalu besar (maks 20 MB).'; continue; }
-            this.addItem(f.name, await f.text());
+            if (filterImportant && !isImportantByName(f.name)) { skipped++; continue; }
+            if (f.size > 20 * 1024 * 1024) { big++; continue; }
+            toAdd.push(f);
           }
+          for (const f of toAdd) this.addItem(f.name, await f.text());
+          this.error = big ? big + ' file dilewati (lebih dari 20 MB).'
+            : (filterImportant && !toAdd.length ? 'Tidak ada file dependency dikenali pada yang Anda seret.' : '');
+          this.dropMsg = filterImportant
+            ? toAdd.length + ' file dependency ditambahkan' + (skipped ? ' · ' + skipped + ' file lain dilewati otomatis' : '')
+            : '';
         },
-        onDrop(e) {
-          this.over = false; this.error = '';
-          if (e.dataTransfer.files && e.dataTransfer.files.length) { this.readFiles(e.dataTransfer.files); return; }
-          const link = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || '').trim();
+        async onDrop(e) {
+          this.over = false; this.error = ''; this.dropMsg = '';
+          const dt = e.dataTransfer;
+          // Ambil entry (file/folder) secara sinkron selagi event masih hidup.
+          const entries = dt.items ? Array.from(dt.items).map(it => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean) : [];
+          // Folder, atau banyak file: telusuri & saring ke file dependency saja.
+          if (entries.length && (entries.some(en => en.isDirectory) || entries.length > 1)) {
+            const picked = [];
+            for (const en of entries) await walkEntry(en, f => picked.push(f), 0);
+            this.readFiles(picked, true);
+            return;
+          }
+          if (dt.files && dt.files.length) { this.readFiles(dt.files, dt.files.length > 1); return; }
+          const link = (dt.getData('text/uri-list') || dt.getData('text/plain') || '').trim();
           if (link.startsWith('http')) { this.urlText = link; this.fetchUrls(); }
         },
-        onPick(e) { this.error = ''; this.readFiles(e.target.files); e.target.value = ''; },
+        onPick(e) { this.error = ''; this.dropMsg = ''; const fl = e.target.files; this.readFiles(fl, fl.length > 1); e.target.value = ''; },
         addPaste() {
           const name = this.pasteName.trim();
           this.addItem(name || 'tempelan', this.pasteText);
