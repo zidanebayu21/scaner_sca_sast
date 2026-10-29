@@ -379,6 +379,7 @@
         <h2 style="margin-top:0">{{ t('rate_title') }}</h2>
         <p class="muted" v-html="t('rate_intro')"></p>
         <textarea v-model="rl.curl" @input="parseRlCurl" placeholder="curl --url 'https://host/api/login' -X POST -H 'Content-Type: application/json' --data-raw '{...}'"></textarea>
+        <div class="bad" v-if="rl.err" style="margin-top:4px">{{ rl.err }}</div>
         <div class="row" style="margin-top:8px">
           <input type="text" v-model="rl.method" placeholder="GET" style="max-width:90px" />
           <input type="text" v-model="rl.url" placeholder="https://host:port/path" />
@@ -421,6 +422,7 @@
         <h2 style="margin-top:0">{{ t('rto_title') }}</h2>
         <p class="muted" v-html="t('rto_intro')"></p>
         <textarea v-model="rto.curl" @input="parseRtoCurl" placeholder="curl --url 'https://host/api/upload' -X POST -H 'Content-Type: application/json' --data-raw '{...}'"></textarea>
+        <div class="bad" v-if="rto.err" style="margin-top:4px">{{ rto.err }}</div>
         <div class="row" style="margin-top:8px">
           <input type="text" v-model="rto.method" placeholder="POST" style="max-width:90px" />
           <input type="text" v-model="rto.url" placeholder="https://host:port/path" />
@@ -628,7 +630,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '2.0';
+    const APP_VERSION = '2.1';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -4241,7 +4243,11 @@
     }
     async function inspectFile(file) {
       const ext = (rx1(/\.([^./\\]+)$/g, file.name) || ['', ''])[1].toLowerCase();
-      if (!file.size) return { name: file.name, size: 0, ext, det: { label: '—', ext: [] }, hashes: {}, integ: [{ ok: false, msg: tr('fi_err_empty') }], finds: [], meta: [], verify: '' };
+      if (!file.size) {
+        const r = { name: file.name, size: 0, ext, det: { label: '—', ext: [] }, hashes: {}, integ: [{ ok: false, msg: tr('fi_err_empty') }], finds: [], meta: [], verify: '' };
+        r.hashes = await fiHashes({ b: new Uint8Array(0), warnI: k => r.integ.push({ ok: null, msg: tr(k) }) });
+        return r;
+      }
       if (file.size > FI_MAX_BYTES) return { name: file.name, size: file.size, ext, det: { label: '—', ext: [] }, hashes: {}, integ: [{ ok: false, msg: tr('fi_err_big') }], finds: [], meta: [], verify: '' };
       const b = new Uint8Array(await file.arrayBuffer()), ctx = fiContext(file, b), r = ctx.r;
       r.ext = ext;
@@ -4488,7 +4494,10 @@
       '    var p = origFetch.apply(this, arguments);',
       '    p.then(function (res) {',
       '      try { rec.status = res.status; var rh = {}; res.headers.forEach(function (v, k) { rh[k] = v; }); rec.resHeaders = rh; render(rec); } catch (e) {}',
-      '      try { res.clone().text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }); } catch (e) {}',
+      '      try { res.clone().text().then(function (t) { if (!rec.plain) { rec.resBody = t; render(rec); } }, function () {}); } catch (e) {}',
+      '    }, function (err) {',
+      // Cabang pengamat saja: error asli tetap diterima pemanggil lewat p (yang dikembalikan apa adanya).
+      '      try { rec.status = "error: " + (err && err.message || err); render(rec); } catch (e) {}',
       '    });',
       '    return p;',
       '  };',
@@ -4499,7 +4508,7 @@
       '    var self = this;',
       '    var rec = { url: this.__hookUrl, method: this.__hookMethod, reqBody: reqBody, reqHeaders: this.__hookHdrs || {}, reqPlain: pendingPlain.shift() || null, plain: null };',
       '    addEntry(rec); pending.push(rec); render(rec);',
-      '    this.addEventListener("loadend", function () { try { rec.status = self.status; rec.resHeaders = parseHeaders(self.getAllResponseHeaders()); if (!rec.plain) rec.resBody = self.responseText; render(rec); } catch (e) {} });',
+      '    this.addEventListener("loadend", function () { try { rec.status = self.status || "error"; rec.resHeaders = parseHeaders(self.getAllResponseHeaders()); if (!rec.plain) rec.resBody = self.responseText; render(rec); } catch (e) {} });',
       '    return OrigSend.apply(this, arguments);',
       '  };',
       '  var protoSubtle = SubtleCrypto.prototype, origDecrypt = protoSubtle.decrypt, origEncrypt = protoSubtle.encrypt;',
@@ -4659,6 +4668,12 @@
     // ============================================================
     const RTO_TICK_MS = 100; // tiap potongan body dikirim sekali per interval ini
     // Clamp angka ke rentang [lo, hi]; dipakai agar input di luar batas tetap aman.
+    // Konfigurasi Rate Limiter tidak valid -> pesan (bukan diam): jumlah 1-300, jeda 0-5000 ms, URL http(s).
+    function rateCfgError(rl) {
+      if (!Number.isInteger(rl.count) || rl.count < 1 || rl.count > 300) return tr('rl_err_count');
+      if (typeof rl.delay !== 'number' || !Number.isFinite(rl.delay) || rl.delay < 0 || rl.delay > 5000) return tr('rl_err_delay');
+      return /^https?:\/\/[^/\s]+/i.test(rl.url.trim()) ? '' : tr('err_url_invalid');
+    }
     function clampNum(v, lo, hi) { return Math.min(hi, Math.max(lo, Number(v) || lo)); }
     // Metode berbody yang valid untuk slow request; selain itu dipaksa POST.
     function rtoMethod(m) { return /^(POST|PUT|PATCH|DELETE)$/i.test(m) ? m.toUpperCase() : 'POST'; }
@@ -4837,8 +4852,8 @@
           tabList: TAB_LIST, visibleTabs: {},
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
           hookCopied: false, hookMsg: '',
-          rl: { curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
-          rto: { curl: '', method: 'POST', url: '', headers: [], body: '', kbps: 8, sizeKb: 64, count: 1, delay: 500, copied: false, csvCopied: false, msg: '', busy: false, stop: false, ctl: null, results: [] },
+          rl: { err: '', curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
+          rto: { err: '', curl: '', method: 'POST', url: '', headers: [], body: '', kbps: 8, sizeKb: 64, count: 1, delay: 500, copied: false, csvCopied: false, msg: '', busy: false, stop: false, ctl: null, results: [] },
           sideW: 330, resizing: false, jwtText: '', persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -4858,7 +4873,7 @@
         jwt() { return decodeJwt(this.jwtText); },
         hookScript() { return HOOK_SCRIPT; },
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
-        rateScript() { return this.rl.url.trim() ? buildRateScript(this.rl) : ''; },
+        rateScript() { return this.rl.url.trim() && !rateCfgError(this.rl) ? buildRateScript(this.rl) : ''; },
         rateBookmarklet() { return this.rateScript ? 'javascript:' + encodeURIComponent(this.rateScript) : ''; },
         rateCounts() {
           const c = {};
@@ -5079,11 +5094,17 @@
             .then(() => { this.hookCopied = true; setTimeout(() => { this.hookCopied = false; }, 2000); })
             .catch(() => { this.hookMsg = tr('clip_fail'); });
         },
-        parseRlCurl() {
-          if (!/^\s*curl\b/.test(this.rl.curl)) return;
-          const r = parseCurl(this.rl.curl);
-          this.rl.method = r.method; this.rl.url = r.url; this.rl.headers = r.headers; this.rl.body = r.body;
+        // Isi target dari kotak curl. Kosong/bukan curl/tanpa URL = target dikosongkan, agar request
+        // tidak pernah terkirim ke target lama.
+        fillFromCurl(cfg, defMethod) {
+          const txt = cfg.curl.trim(), r = /^curl\b/.test(txt) ? parseCurl(txt) : null;
+          if (!txt) cfg.err = '';
+          else if (!r) cfg.err = tr('curl_invalid');
+          else cfg.err = r.url ? '' : tr('curl_nourl');
+          cfg.method = (r && r.method) || defMethod; cfg.url = r ? r.url : ''; cfg.headers = r ? r.headers : []; cfg.body = r ? r.body : '';
+          return r;
         },
+        parseRlCurl() { this.fillFromCurl(this.rl, 'GET'); },
         copyRateScript() {
           navigator.clipboard.writeText(this.rateScript)
             .then(() => { this.rl.copied = true; setTimeout(() => { this.rl.copied = false; }, 2000); })
@@ -5091,6 +5112,8 @@
         },
         async runRateDirect() {
           const rl = this.rl, headers = {};
+          rl.err = rateCfgError(rl);
+          if (rl.err) return;
           rl.headers.forEach(([k, v]) => { if (!RATE_FORBIDDEN_HDR.test(k)) headers[k] = v; });
           const noBody = rl.method === 'GET' || rl.method === 'HEAD' || !rl.body;
           rl.busy = true; rl.stop = false; rl.results = [];
@@ -5113,10 +5136,9 @@
             .catch(() => { this.rl.msg = tr('clip_fail_short'); });
         },
         parseRtoCurl() {
-          if (!/^\s*curl\b/.test(this.rto.curl)) return;
-          const r = parseCurl(this.rto.curl);
-          this.rto.method = rtoMethod(r.method); this.rto.url = r.url; this.rto.headers = r.headers; this.rto.body = r.body;
-          if (r.body) this.rto.sizeKb = clampNum(Math.ceil(new TextEncoder().encode(r.body).length / 1024), 1, 10240);
+          const r = this.fillFromCurl(this.rto, 'POST');
+          this.rto.method = rtoMethod(this.rto.method);
+          if (r && r.body) this.rto.sizeKb = clampNum(Math.ceil(new TextEncoder().encode(r.body).length / 1024), 1, 10240);
         },
         stopRto() { this.rto.stop = true; if (this.rto.ctl) this.rto.ctl.abort(); },
         async runRtoDirect() {
