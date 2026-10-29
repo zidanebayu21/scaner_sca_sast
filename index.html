@@ -231,8 +231,9 @@
                 </select>
               </td>
               <td>
-                {{ (it.text.length / 1024).toFixed(1) }} KB<span v-if="it.compact" class="muted"> {{ t('it_compacted') }}</span>
+                {{ it.text.length < 1024 ? it.text.length + ' B' : (it.text.length / 1024).toFixed(1) + ' KB' }}<span v-if="it.compact" class="muted"> {{ t('it_compacted') }}</span>
                 <div v-if="unsavedIds.includes(it.id)" style="color:#f59e0b">{{ t('it_unsaved') }}</div>
+                <div v-if="it.parseError" class="bad" :title="it.parseError">{{ t('it_parse_err') }}</div>
               </td>
               <td v-if="tab === 'eol'" class="muted" style="font-size:12px">{{ detectedText(it) }}</td>
               <td style="white-space:nowrap">
@@ -627,7 +628,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.9';
+    const APP_VERSION = '2.0';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -1206,17 +1207,17 @@
       return out;
     }
     function parseRequirements(text) {
-      const out = [];
-      let loose = 0;
+      const out = [], loose = [];
       eachLine(text, line => {
         let t = line.split(' #')[0].trim();
         if (!t || t[0] === '#' || t[0] === '-') return;
         t = t.split(';')[0].trim();
         const m = rx1(/^([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*===?\s*([A-Za-z0-9_.\-+!]+)/g, t);
         if (m && startsWithDigit(m[2])) out.push({ name: pyName(m[1]), version: m[2], eco: 'PyPI', dev: false, direct: true });
-        else if (rx1(/^[A-Za-z0-9_.\-]+/g, t)) loose++;
+        else if (rx1(/^[A-Za-z0-9_.\-]+/g, t)) loose.push(t.slice(0, 80));
       });
-      out.unpinned = loose;
+      out.unpinned = loose.length;
+      out.skipped = loose;
       return out;
     }
     function parsePipfileLock(text) {
@@ -2397,13 +2398,22 @@
       if (net.ips.length) { try { net.idb = await internetDb(net.ips[0]); } catch (e) { net.idbErr = friendlyFetchError(e); } }
       return net;
     }
+    // Target DAST: URL http(s) dengan nama host bertitik (kata biasa seperti "url" bukan host), bukan host internal.
+    function dastTarget(raw) {
+      let u;
+      try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { return { error: tr('err_url_invalid') }; }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return { error: tr('err_only_http') };
+      const h = u.hostname;
+      if (h !== 'localhost' && !h.startsWith('[') && h.indexOf('.') < 0) return { error: tr('err_url_invalid') };
+      if (isPrivateHost(h)) return { error: tr('err_private_host') };
+      return { url: u };
+    }
     async function dastCheck(raw, log, opts) {
       const res = { input: raw, error: '', findings: [], obs: null, obsErr: '', headers: null, hdrErr: '', net: null };
-      let u;
-      try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { res.error = tr('err_url_invalid'); return res; }
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') { res.error = tr('err_only_http'); return res; }
+      const target = dastTarget(raw);
+      if (target.error) { res.error = target.error; return res; }
+      const u = target.url;
       res.url = u.href; res.host = u.hostname;
-      if (isPrivateHost(u.hostname)) { res.error = tr('err_private_host'); return res; }
       log(tr('log_checking').replace('{x}', u.href));
       const [o, h] = await Promise.allSettled([observatoryScan(u.hostname), fetchHeaders(u.href)]);
       if (o.status === 'fulfilled') res.obs = o.value; else res.obsErr = o.reason.message;
@@ -2488,17 +2498,63 @@
     //  Aplikasi Vue
     // ============================================================
     const { createApp } = Vue;
+    // SAST berbasis pola (OWASP ASVS V5.2/V5.3 injeksi & XSS, V2.10/V6.4 secret ter-hardcode, CWE-95/79/78/798).
+    // view: 'code' = komentar & isi string dikosongkan (eval di komentar/teks tidak dilapor),
+    //       'text' = hanya komentar dikosongkan (URL/template di string), 'raw' = apa adanya (secret di komentar tetap bocor).
     const SAST_RULES = [
-      { token: 'eval(', rule: 'Penggunaan eval()', severity: 'HIGH', fix: 'Hindari eval(); parse data dengan JSON.parse atau gunakan pemetaan fungsi (lookup table).' },
-      { token: 'new Function(', rule: 'Penggunaan new Function()', severity: 'HIGH', fix: 'Hindari new Function(); ganti dengan fungsi biasa atau pemetaan fungsi.' },
-      { token: '.innerHTML', rule: 'Penulisan innerHTML (XSS)', severity: 'HIGH', fix: 'Pakai textContent, atau bangun elemen dengan createElement; jika harus HTML, sanitasi dengan DOMPurify.' },
-      { token: '.outerHTML', rule: 'Penulisan outerHTML (XSS)', severity: 'HIGH', fix: 'Pakai createElement/replaceWith; jika harus HTML, sanitasi dengan DOMPurify.' },
-      { token: 'document.write(', rule: 'document.write()', severity: 'MEDIUM', fix: 'Ganti dengan manipulasi DOM (createElement, append) atau data binding framework.' },
-      { token: 'v-html', rule: 'Directive v-html (XSS)', severity: 'MEDIUM', fix: 'Tampilkan sebagai teks dengan {{ }}; jika HTML wajib, sanitasi dulu (DOMPurify).' },
-      { token: 'dangerouslySetInnerHTML', rule: 'dangerouslySetInnerHTML (XSS)', severity: 'MEDIUM', fix: 'Render sebagai teks/komponen React; jika HTML wajib, sanitasi dulu (DOMPurify).' },
-      { token: 'localStorage.setItem(', rule: 'Simpan data di localStorage', severity: 'LOW', fix: 'Jangan simpan token/data sensitif di localStorage (terbaca skrip XSS); pakai cookie HttpOnly + Secure + SameSite.' },
-      { token: 'http://', rule: 'URL tanpa HTTPS', severity: 'LOW', fix: 'Gunakan https:// agar lalu lintas terenkripsi.' }
+      { re: /\beval\s*\(/, view: 'code', rule: 'Penggunaan eval()', severity: 'HIGH', fix: 'Hindari eval(); parse data dengan JSON.parse atau gunakan pemetaan fungsi (lookup table).' },
+      { re: /\bnew\s+Function\s*\(/, view: 'code', rule: 'Penggunaan new Function()', severity: 'HIGH', fix: 'Hindari new Function(); ganti dengan fungsi biasa atau pemetaan fungsi.' },
+      { re: /\bset(?:Timeout|Interval)\s*\(\s*['"`]/, view: 'code', rule: 'setTimeout/setInterval dengan string (eval terselubung)', severity: 'HIGH', fix: 'Kirim fungsi, bukan string: setTimeout(() => doIt(), ms).' },
+      { re: /\b(?:child_process['"`]?\)?|cp)\.(?:exec|execSync|execFile|spawn|spawnSync)\s*\(|\bexecSync\s*\(/, view: 'text', rule: 'Eksekusi perintah OS (child_process)', severity: 'HIGH', fix: 'Pakai execFile/spawn dengan array argumen (tanpa shell) dan validasi input dengan allowlist.' },
+      { re: /\.innerHTML\s*\+?=(?!=)/, view: 'code', rule: 'Penulisan innerHTML (XSS)', severity: 'HIGH', fix: 'Pakai textContent, atau bangun elemen dengan createElement; jika harus HTML, sanitasi dengan DOMPurify.' },
+      { re: /\.outerHTML\s*\+?=(?!=)|\.insertAdjacentHTML\s*\(/, view: 'code', rule: 'Penulisan outerHTML (XSS)', severity: 'HIGH', fix: 'Pakai createElement/replaceWith; jika harus HTML, sanitasi dengan DOMPurify.' },
+      { re: /\bdocument\.write(?:ln)?\s*\(/, view: 'code', rule: 'document.write()', severity: 'MEDIUM', fix: 'Ganti dengan manipulasi DOM (createElement, append) atau data binding framework.' },
+      { re: /\bv-html\s*=/, view: 'text', rule: 'Directive v-html (XSS)', severity: 'MEDIUM', fix: 'Tampilkan sebagai teks dengan {{ }}; jika HTML wajib, sanitasi dulu (DOMPurify).' },
+      { re: /\bdangerouslySetInnerHTML\b/, view: 'code', rule: 'dangerouslySetInnerHTML (XSS)', severity: 'MEDIUM', fix: 'Render sebagai teks/komponen React; jika HTML wajib, sanitasi dulu (DOMPurify).' },
+      { re: /\blocalStorage\.setItem\s*\(/, view: 'code', rule: 'Simpan data di localStorage', severity: 'LOW', fix: 'Jangan simpan token/data sensitif di localStorage (terbaca skrip XSS); pakai cookie HttpOnly + Secure + SameSite.' },
+      { re: /(?<!\b(?:child_process['"`]?\)?|cp))\.exec\s*\(/, view: 'text', rule: 'RegExp.exec() (konvensi proyek)', severity: 'LOW', fix: 'Sesuai konvensi kode proyek, ambil kecocokan dengan matchAll()/rx1() alih-alih RegExp.exec (hindari bug lastIndex pada regex /g).' },
+      { re: /http:\/\/(?!localhost\b|127\.0\.0\.1\b|www\.w3\.org\/)/, view: 'text', rule: 'URL tanpa HTTPS', severity: 'LOW', fix: 'Gunakan https:// agar lalu lintas terenkripsi.' },
+      { re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/, view: 'raw', rule: 'AWS access key ter-hardcode', severity: 'HIGH', fix: 'Cabut (rotate) key ini di AWS IAM, lalu ambil kredensial dari environment/secret manager.' },
+      { re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/, view: 'raw', rule: 'Private key ter-hardcode', severity: 'HIGH', fix: 'Keluarkan private key dari kode, ganti (rotate) kuncinya, simpan di secret manager.' },
+      { re: /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{30,}|xox[abposr]-[A-Za-z0-9-]{10,}|sk_live_[0-9A-Za-z]{16,}|AIza[0-9A-Za-z_-]{35})/, view: 'raw', rule: 'Token/API key ter-hardcode', severity: 'HIGH', fix: 'Cabut token ini di penyedia layanan, lalu baca dari environment/secret manager.' },
+      { re: /\b(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret)\b["']?\s*[:=]\s*["'`](?![$<{*]|process\.env)[^"'`\s]{4,}["'`]|\b(?:password|passwd|pwd)=(?![$<{*%])[^&;'"`\s]{3,}/i, view: 'raw', rule: 'Password/secret ter-hardcode', severity: 'HIGH', fix: 'Jangan simpan password/secret di kode; baca dari environment variable atau secret manager.' }
     ];
+    // Lexer ringan JS/TS: kosongkan komentar (dan isi string bila maskStrings) tanpa menggeser baris/kolom.
+    // Regex literal dikenali dari token sebelumnya agar tanda kutip di dalamnya tidak dianggap string.
+    function maskJs(src, maskStrings) {
+      const out = src.split('');
+      const blank = (a, b) => { for (let k = a; k < b; k++) if (out[k] !== '\n') out[k] = ' '; };
+      let i = 0, prev = '';
+      while (i < src.length) {
+        const c = src[i], d = src[i + 1];
+        if (c === '/' && d === '/') { const e = src.indexOf('\n', i); const end = e < 0 ? src.length : e; blank(i, end); i = end; continue; }
+        if (c === '/' && d === '*') { const e = src.indexOf('*/', i + 2); const end = e < 0 ? src.length : e + 2; blank(i, end); i = end; continue; }
+        if (c === '"' || c === "'" || c === '`') {
+          let j = i + 1;
+          while (j < src.length && src[j] !== c && !(c !== '`' && src[j] === '\n')) j += src[j] === '\\' ? 2 : 1;
+          if (maskStrings) blank(i + 1, j);
+          i = j + 1; prev = c; continue;
+        }
+        if (c === '/' && (!prev || /[(,=:[!&|?{};+\-*%<>~^]/.test(prev))) {
+          let j = i + 1, cls = false;
+          while (j < src.length && src[j] !== '\n' && (cls || src[j] !== '/')) { if (src[j] === '\\') j++; else if (src[j] === '[') cls = true; else if (src[j] === ']') cls = false; j++; }
+          i = j + 1; prev = '/'; continue;
+        }
+        if (!/\s/.test(c)) prev = c;
+        i++;
+      }
+      return out.join('');
+    }
+    function sastScan(src) {
+      const views = { raw: src.split('\n'), text: maskJs(src, false).split('\n'), code: maskJs(src, true).split('\n') };
+      const findings = [];
+      views.raw.forEach((line, idx) => {
+        SAST_RULES.forEach(r => {
+          if (r.re.test(views[r.view][idx] || '')) findings.push({ line: idx + 1, rule: L(r.rule), severity: r.severity, snippet: line.trim().slice(0, 300), fix: L(r.fix) });
+        });
+      });
+      return findings;
+    }
 
     // Dekode JWT (tanpa verifikasi signature). Isi token tidak tepercaya: hanya ditampilkan sebagai teks.
     const JWT_TIME_CLAIMS = [
@@ -2563,7 +2619,9 @@
         dec_err_toobig: 'Hasil dekompresi melebihi 20 MB; dihentikan (cegah decompression bomb).',
         dec_err_nodecomp: 'Browser tidak mendukung DecompressionStream.', dec_err_nosubtle: 'WebCrypto (crypto.subtle) tidak tersedia; buka lewat https:// atau file lokal.',
         dec_err_op: 'Gagal: key/IV salah, padding tidak valid, atau tag autentikasi tidak cocok.',
-        dec_err_keylen: 'Panjang key {n} byte tidak valid (AES butuh 16/24/32 byte).', dec_err_enc: 'Nilai bukan {enc} yang valid.',
+        dec_err_keylen: 'Key dibaca sebagai {enc} = {n} byte, padahal {mode} butuh {want} byte. Ubah pilihan format key (hex/base64/utf8) atau periksa panjangnya.',
+        dec_fmt_quotes: 'Tanda kutip dibuang', dec_fmt_prefix: 'Awalan "{x}" dibuang', dec_fmt_cookie: 'Nilai cookie/parameter (nama= dan atribut dibuang)',
+        dec_jwt_broken: 'JWT rusak', dec_uuid_note: 'UUID hanya penanda unik, bukan data terenkripsi; v1/v6/v7 menyimpan waktu pembuatan.', dec_d_uuid_ver: 'Versi', dec_d_uuid_time: 'Waktu dibuat', dec_err_enc: 'Nilai bukan {enc} yang valid.',
         dec_err_iv: 'IV dibutuhkan: isi IV atau centang "IV di depan ciphertext".', dec_err_block: 'Panjang ciphertext bukan kelipatan 16 byte.',
         dec_err_mac: 'MAC tidak cocok: APP_KEY salah atau payload diubah.', dec_err_fernet_mac: 'HMAC Fernet tidak cocok: key salah atau token diubah.',
         dec_err_pem: 'Isi PEM bukan base64 yang valid.', dec_mac_bad_but_ok: 'Peringatan: MAC tidak cocok walau dekripsi berhasil (payload mungkin diubah).',
@@ -2622,7 +2680,9 @@
         dec_err_toobig: 'Decompressed output exceeds 20 MB; stopped (decompression bomb guard).',
         dec_err_nodecomp: 'This browser does not support DecompressionStream.', dec_err_nosubtle: 'WebCrypto (crypto.subtle) is unavailable; open via https:// or a local file.',
         dec_err_op: 'Failed: wrong key/IV, invalid padding, or authentication tag mismatch.',
-        dec_err_keylen: 'Key length {n} bytes is invalid (AES needs 16/24/32 bytes).', dec_err_enc: 'Value is not valid {enc}.',
+        dec_err_keylen: 'Key read as {enc} = {n} bytes, but {mode} needs {want} bytes. Change the key format (hex/base64/utf8) or check its length.',
+        dec_fmt_quotes: 'Quotes removed', dec_fmt_prefix: 'Prefix "{x}" removed', dec_fmt_cookie: 'Cookie/parameter value (name= and attributes removed)',
+        dec_jwt_broken: 'Broken JWT', dec_uuid_note: 'A UUID is only a unique identifier, not encrypted data; v1/v6/v7 embed their creation time.', dec_d_uuid_ver: 'Version', dec_d_uuid_time: 'Created', dec_err_enc: 'Value is not valid {enc}.',
         dec_err_iv: 'IV required: fill in the IV or tick "IV prepended to ciphertext".', dec_err_block: 'Ciphertext length is not a multiple of 16 bytes.',
         dec_err_mac: 'MAC mismatch: wrong APP_KEY or tampered payload.', dec_err_fernet_mac: 'Fernet HMAC mismatch: wrong key or tampered token.',
         dec_err_pem: 'PEM body is not valid base64.', dec_mac_bad_but_ok: 'Warning: MAC mismatch although decryption succeeded (payload may be tampered).',
@@ -2890,9 +2950,11 @@
       return true;
     }
     function recJwt(step, s) {
-      if (!/^eyJ[\w-]*\.[\w-]+\.[\w-]*$/.test(s)) return false;
-      const j = decodeJwt(s);
-      if (!j || j.error) return false;
+      // Diawali eyJ ({"…) dan bertitik = bentuk JWT (JWE yang valid sudah ditangani recJwe lebih dulu).
+      if (!/^eyJ[\w-]*\./.test(s)) return false;
+      const j = /^eyJ[\w-]*\.[\w-]+\.[\w-]*$/.test(s) ? decodeJwt(s) : { error: L('Format JWT tidak valid: harus berupa header.payload[.signature].') };
+      if (!j) return false;
+      if (j.error) { setFound(step, tr('dec_jwt_broken'), 'med'); step.warnings.push(j.error); return true; }
       setFound(step, 'JWT (JWS)', 'high');
       step.details.push(['alg', String(j.header.alg || '-')]);
       j.claims.forEach(c => step.details.push([c.key + ' (' + c.label + ')', c.value + ' → ' + c.date + ' · ' + c.status]));
@@ -2945,7 +3007,39 @@
       step.notes.push(tr('dec_hexhash_note'));
       return true;
     }
-    const DEC_TEXT_RULES = [recPem, recJwt, recJwe, recAspNet, recPhpSer, recPwHash, recHexHash];
+    // UUID (RFC 9562): versi & variant; v1/v6 = 100 ns sejak 1582-10-15, v7 = milidetik Unix di 48 bit awal.
+    function recUuid(step, s) {
+      const m = rx1(/^\{?([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})\}?$/gi, s);
+      if (!m) return false;
+      const ver = parseInt(m[3][0], 16), variant = parseInt(m[4][0], 16);
+      setFound(step, 'UUID' + (ver >= 1 && ver <= 8 ? ' v' + ver : ''), 'high');
+      step.details.push([tr('dec_d_uuid_ver'), String(ver)], ['Variant', variant >= 8 && variant <= 11 ? 'RFC 9562' : variant < 8 ? 'NCS' : 'Microsoft']);
+      let ms = null;
+      if (ver === 1 || ver === 6) {
+        const hex = ver === 1 ? m[3].slice(1) + m[2] + m[1] : m[1] + m[2] + m[3].slice(1);
+        ms = Number((BigInt('0x' + hex) - 122192928000000000n) / 10000n);
+      } else if (ver === 7) ms = parseInt(m[1] + m[2], 16);
+      if (ms !== null && ms > 0) step.details.push([tr('dec_d_uuid_time'), new Date(ms).toISOString()]);
+      step.notes.push(tr('dec_uuid_note'));
+      return true;
+    }
+    const DEC_TEXT_RULES = [recPem, recJwe, recJwt, recUuid, recAspNet, recPhpSer, recPwHash, recHexHash];
+    // Pembungkus yang sering ikut tersalin dari header/cookie/JSON: kutip, "Authorization:", "Bearer ", "nama=…; Path=/".
+    const WRAP_SCHEME_RE = /^(Bearer|Token|JWT|Basic|Digest|Negotiate)\s+(\S+)$/gi;
+    const WRAP_HEADER_RE = /^(Authorization|Proxy-Authorization|Cookie|Set-Cookie|X-[\w-]+|Api-?Key|Token)\s*:\s*(\S[\s\S]*)$/gi;
+    const WRAP_COOKIE_RE = /^[\w.!#$%&'*+^|~-]{1,64}=([^;\s]{8,})(?:\s*;[\s\S]*)?$/g;
+    const wrapStep = (format, text) => ({ format, conf: 'high', val: decVal(DEC_TE.encode(text)) });
+    function layerWrapper(s) {
+      const q = s[0];
+      if (s.length > 2 && (q === '"' || q === "'" || q === '`') && s.endsWith(q)) return wrapStep(tr('dec_fmt_quotes'), s.slice(1, -1).trim());
+      let m = rx1(WRAP_SCHEME_RE, s);
+      if (m) return wrapStep(dtr('dec_fmt_prefix', { x: m[1] }), m[2]);
+      m = rx1(WRAP_HEADER_RE, s);
+      if (m) return wrapStep(dtr('dec_fmt_prefix', { x: m[1] + ':' }), m[2].trim());
+      // Bukan bila seluruhnya sudah berbentuk base64 (padding "=" di akhir bukan pemisah nama=nilai).
+      m = !/^[A-Za-z0-9+/_-]+={0,2}$/.test(s) && rx1(WRAP_COOKIE_RE, s);
+      return m ? wrapStep(tr('dec_fmt_cookie'), m[1]) : null;
+    }
     // JSON -> tampil rapi; objek {iv, value, mac[, tag]} = payload Laravel encrypt().
     function applyJson(step, s) {
       if (!/^[[{]/.test(s)) return false;
@@ -3045,6 +3139,8 @@
       try { b = b64ToBytes(c); } catch (e) { return null; }
       const txt = bytesToText(b), known = isKnownBinary(b);
       if (!txt && !known && c.length < 16) return null;
+      // Hanya huruf (kata/nama biasa, mis. "Supercalifragilistic") hampir pasti bukan base64 data acak.
+      if (!txt && !known && /^[A-Za-z]+$/.test(body) && (body.length < 32 || /^[A-Z]?[a-z]+$|^[A-Z]+$/.test(body))) return null;
       const padOk = c.length % 4 === 0;
       let conf = 'low';
       if ((txt || known) && padOk) conf = 'high';
@@ -3138,6 +3234,8 @@
       if (fm) { setFound(step, fm.name, 'high'); step.file = fm; step.notes.push(tr('dec_file_note')); return null; }
       if (v.text === null) return analyzeBinary(step, v.bytes);
       const s = v.text.trim();
+      const wrapped = layerWrapper(s);
+      if (wrapped) return wrapped;
       if (DEC_TEXT_RULES.some(r => r(step, s)) || applyJson(step, s)) return null;
       for (const layer of DEC_TEXT_LAYERS) { const r = layer(s); if (r) return r; }
       step.notes.push(tr('dec_no_more'));
@@ -3264,6 +3362,10 @@
       } catch (e) { return { label: v.label, ok: false, bytes: null, msg: cryptoErr(e), note: '' }; }
     }
     const AES_KEY_LENS = [16, 24, 32];
+    // Sebut format yang terbaca (auto ditandai) dan panjang yang diharapkan.
+    function keyLenErr(k, enc, mode, want) {
+      return dtr('dec_err_keylen', { enc: k ? k.enc + (enc === 'auto' ? ' (auto)' : '') : '-', n: k ? k.bytes.length : 0, mode, want });
+    }
     function cryptojsVariants(t, f, all) {
       const pass = DEC_TE.encode(f.passphrase || '');
       const kdfs = [['EVP_BytesToKey MD5 (CryptoJS)', () => evpKdf(pass, t.salt, 'md5')]];
@@ -3273,7 +3375,7 @@
     function laravelVariants(t, f) {
       return [{ label: 'Laravel ' + (t.payload.tag ? 'AES-GCM' : 'AES-CBC + HMAC-SHA256'), fn: async () => {
         const key = parseBin(f.key, f.keyEnc, [32, 16]).bytes, p = t.payload;
-        if (key.length !== 32 && key.length !== 16) throw new Error(dtr('dec_err_keylen', { n: key.length }));
+        if (key.length !== 32 && key.length !== 16) throw new Error(keyLenErr(parseBin(f.key, f.keyEnc, [32, 16]), f.keyEnc, 'Laravel AES', '16/32'));
         const iv = b64ToBytes(p.iv), ct = b64ToBytes(p.value);
         if (p.tag) return aesDecrypt('GCM', key, iv, concatBytes([ct, b64ToBytes(p.tag)]));
         const macOk = !p.mac || toHex(await hmacSha256(key, DEC_TE.encode(p.iv + p.value))) === p.mac.toLowerCase();
@@ -3285,7 +3387,7 @@
     function fernetVariants(t, f) {
       return [{ label: 'Fernet (HMAC-SHA256 + AES-128-CBC)', fn: async () => {
         const key = parseBin(f.key, f.keyEnc === 'auto' ? 'base64' : f.keyEnc, [32]).bytes, tok = t.token, end = tok.length - 32;
-        if (key.length !== 32) throw new Error(dtr('dec_err_keylen', { n: key.length }));
+        if (key.length !== 32) throw new Error(keyLenErr({ enc: 'base64', bytes: key }, f.keyEnc, 'Fernet', '32'));
         if (!sameBytes(await hmacSha256(key.slice(0, 16), tok.slice(0, end)), tok.slice(end))) throw new Error(tr('dec_err_fernet_mac'));
         return aesDecrypt('CBC', key.slice(16), tok.slice(9, 25), tok.slice(25, end));
       } }];
@@ -3296,7 +3398,7 @@
       const k = f.key ? parseBin(f.key, f.keyEnc, AES_KEY_LENS) : null;
       if (k && AES_KEY_LENS.includes(k.bytes.length)) keys.push({ label: 'key ' + k.enc, get: () => Promise.resolve(k.bytes) });
       if (all && f.key) keys.push({ label: 'SHA-256(key)', get: () => sha256(DEC_TE.encode(f.key.trim())) });
-      if (!keys.length) throw new Error(dtr('dec_err_keylen', { n: k ? k.bytes.length : 0 }));
+      if (!keys.length) throw new Error(keyLenErr(k, f.keyEnc, 'AES', '16/24/32'));
       const ivSep = f.iv ? parseBin(f.iv, f.ivEnc, [16, 12]).bytes : null;
       const tag = f.tag ? parseBin(f.tag, f.tagEnc, [16]).bytes : null;
       const aad = f.aad ? DEC_TE.encode(f.aad) : null;
@@ -4092,10 +4194,10 @@
     }
     // Pola sengaja panjang/berkonteks: data terkompresi/terenkripsi (FLAC, MP4, PDF terenkripsi) berisi byte acak,
     // sehingga token pendek seperti "<%" atau "<script>" bisa muncul kebetulan (false positive).
-    const POLYGLOT_RE = /<\?php[\s/]|<script[\s>][^\0]{0,2000}?<\/script>|<%@\s*(page|language|import)\b|<%=?\s*(eval|execute|response\.write|request[.([])|\b(eval|assert)\s*\(\s*(base64_decode|gzinflate|str_rot13|atob)\s*\(|\b(system|shell_exec|passthru)\s*\(\s*\$_(GET|POST|REQUEST)/i;
+    const POLYGLOT_RE = /<\?php[\s/]|<script[\s>][^\0]{0,2000}?<\/script>|<%@\s*(page|language|import)\b|<%=?\s*(eval|execute|response\.write|request[.([])|\b(eval|assert)\s*\(\s*(base64_decode|gzinflate|str_rot13|atob)\s*\(|\b(system|shell_exec|passthru)\s*\(\s*\$_(GET|POST|REQUEST)/gi;
     function fiPolyglot(ctx) {
       if (ctx.r.det.text || ['zip', 'gz', 'bz2', 'xz', '7z', 'rar', 'pe', 'elf', 'macho', 'wasm', 'class', 'sqlite', 'ole', 'unknown'].includes(ctx.r.det.id)) return;
-      const m = POLYGLOT_RE.exec(ctx.text);
+      const m = rx1(POLYGLOT_RE, ctx.text);
       if (m) ctx.find('HIGH', 'fi_s_polyglot', { x: m[0].trim(), y: '0x' + m.index.toString(16) });
     }
     // ---- Dekode oleh browser (Chrome): bukti gambar/media bisa dibaca = tidak rusak.
@@ -4694,13 +4796,13 @@
     // File non-package (mis. Dockerfile) atau yang gagal diparse disimpan apa adanya.
     function toStoredForm(type, text) {
       const parse = PARSERS[type];
-      if (!parse) return { text, compact: false };
+      if (!parse) return { text, compact: false, parseError: '' };
       try {
         const pkgs = parse(text);
-        if (!pkgs.length) return { text, compact: false };
+        if (!pkgs.length) return { text, compact: false, parseError: '' };
         const rows = pkgs.map(p => [p.name, p.version, p.eco, p.dev ? 1 : 0, p.direct == null ? null : +!!p.direct, p.license || null]);
-        return { text: JSON.stringify({ unpinned: pkgs.unpinned || 0, pkgs: rows }), compact: true };
-      } catch (e) { return { text, compact: false }; }
+        return { text: JSON.stringify({ unpinned: pkgs.unpinned || 0, skipped: pkgs.skipped || [], pkgs: rows }), compact: true, parseError: '' };
+      } catch (e) { return { text, compact: false, parseError: e.message || String(e) }; }
     }
     const MAX_FILE_BYTES = 20 * 1024 * 1024;
     // Isi item dari file: jenis, bentuk simpan, dan runtime (ditangkap sebelum dipadatkan, untuk cek EOL).
@@ -4716,6 +4818,7 @@
       const d = JSON.parse(text);
       const out = d.pkgs.map(r => ({ name: r[0], version: r[1], eco: r[2], dev: !!r[3], direct: r[4] == null ? null : !!r[4], license: r[5] || '' }));
       out.unpinned = d.unpinned;
+      out.skipped = d.skipped || [];
       return out;
     }
     // Nama project dari link repo: segmen terakhir sebelum /-/, /blob/, atau /tree/.
@@ -5101,6 +5204,9 @@
         async runDast() {
           const links = this.dastText.split(/[\s,]+/).filter(Boolean).slice(0, 10);
           if (!links.length) return;
+          // Validasi dulu: input salah tidak membuka tab laporan kosong.
+          const bad = links.map(l => [l, dastTarget(l).error]).filter(x => x[1]);
+          if (bad.length) { this.dastError = tr('dast_invalid_inputs') + bad.map(([l, e]) => '"' + l + '" (' + e + ')').join(', '); return; }
           const w = window.open('', '_blank');
           this.dastBusy = true; this.dastLogs = []; this.dastError = '';
           const log = m => this.dastLogs.push(m);
@@ -5148,6 +5254,7 @@
           const old = this.items.find(x => sameItemKey(x, { project: proj, name }));
           const fresh = { id: old ? old.id : this.nextId++, project: proj, ...c, enabled: old ? old.enabled : true };
           if (old) Object.assign(old, fresh); else this.items.push(fresh);
+          if (fresh.parseError) this.error = tr('it_parse_err_msg').replace('{x}', name).replace('{e}', fresh.parseError);
         },
         // Unggah ulang satu baris: isi diganti, project & status centang tetap; baris lain
         // dengan project + nama sama (bila nama file berubah) dibuang agar tidak duplikat.
@@ -5209,8 +5316,8 @@
             toAdd.push(f);
           }
           for (const f of toAdd) this.addItem(f.name, await f.text());
-          this.error = big ? tr('msg_files_big').replace('{n}', big)
-            : (filterImportant && !toAdd.length ? tr('msg_no_dep') : '');
+          if (big) this.error = tr('msg_files_big').replace('{n}', big);
+          else if (filterImportant && !toAdd.length) this.error = tr('msg_no_dep');
           this.dropMsg = filterImportant
             ? tr('msg_added').replace('{n}', toAdd.length) + (skipped ? tr('msg_skipped_auto').replace('{n}', skipped) : '')
             : '';
@@ -5246,13 +5353,14 @@
             if (!parse) throw new Error(tr('err_unknown_type'));
             let pkgs = it.compact ? expandCompact(it.text) : parse(it.text);
             res.note = TYPE_NOTES[it.type] || '';
-            if (pkgs.unpinned) res.note += ' ' + Lf('{n} baris tidak dipin dan dilewati.', { n: pkgs.unpinned });
+            const skipNote = pkgs.unpinned ? Lf('{n} baris tidak dipin dan dilewati.', { n: pkgs.unpinned }) + ((pkgs.skipped || []).length ? ' (' + pkgs.skipped.slice(0, 8).join(', ') + (pkgs.skipped.length > 8 ? ', …' : '') + ')' : '') : '';
+            if (skipNote) res.note += ' ' + skipNote;
             if (opts.omitDev) { const n = pkgs.length; pkgs = pkgs.filter(p => !p.dev); res.skipped = n - pkgs.length; }
-            log(Lf('{x}: {n} package terbaca', { x: it.name, n: pkgs.length }));
+            log(Lf('{x}: {n} package terbaca', { x: it.name, n: pkgs.length }) + (skipNote ? ' — ' + skipNote : ''));
             if (!pkgs.length) throw new Error(tr('err_no_packages') + (TYPE_NOTES[it.type] ? ' ' + TYPE_NOTES[it.type] : ''));
             if (opts.license) await enrichLicenses(pkgs, log);
             res.entries = await scanPackages(pkgs, log, opts);
-          } catch (e) { res.error = e.message; }
+          } catch (e) { res.error = e.message; log('  ' + tr('failed') + ': ' + e.message); }
           return res;
         },
         async runScan() {
@@ -5300,13 +5408,7 @@
           } catch (e) { this.error = e.message; } finally { this.sbomBusy = false; }
         },
         scanSast() {
-          const findings = [];
-          this.codeText.split('\n').forEach((line, idx) => {
-            SAST_RULES.forEach(r => {
-              if (line.includes(r.token)) findings.push({ line: idx + 1, rule: L(r.rule), severity: r.severity, snippet: line.trim(), fix: L(r.fix) });
-            });
-          });
-          this.sastResults = findings;
+          this.sastResults = sastScan(this.codeText);
           this.sastDone = true;
         }
       }

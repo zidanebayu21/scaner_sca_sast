@@ -3,7 +3,7 @@
 Aplikasi HTML-only (Vue 3 via CDN) untuk memeriksa keamanan proyek langsung di browser:
 
 - **SCA (Software Composition Analysis)**: tempel `package.json`, dependency dicek ke database kerentanan [OSV.dev](https://osv.dev).
-- **SAST (Static Application Security Testing)**: tempel kode JS/TS, dicek terhadap pola berbahaya (eval, new Function, innerHTML, document.write, v-html, dll).
+- **SAST (Static Application Security Testing)**: tempel kode JS/TS, dicek terhadap pola berbahaya (eval, new Function, setTimeout berisi string, innerHTML/outerHTML, document.write, v-html, child_process, RegExp.exec) dan secret ter-hardcode (AWS key, private key, token GitHub/Slack/Stripe/Google, password/secret). Komentar dan isi string diabaikan untuk pola eksekusi kode, tetapi tetap diperiksa untuk secret.
 
 ## Tema & Bahasa
 
@@ -38,7 +38,7 @@ Tab **Rate Limiter (dari curl)**: seperti Postman, khusus cek rate limiter. Temp
 
 Tab **RTO (kirim lambat)**: menguji apakah server menerapkan *request read timeout*. Tempel curl satu endpoint berbody (POST/PUT/PATCH), atur laju kirim (2–100000 kbps) dan ukuran payload; body dikirim menetes lewat streaming upload (`fetch` + `ReadableStream`). Kalau server menunggu data terlalu lama ia akan menutup koneksi — itulah RTO yang diukur, dilaporkan sebagai "diputus server (kemungkinan read timeout)" lengkap dengan waktu dan byte terkirim. Ini satu koneksi lambat untuk diagnostik timeout (OWASP Slow HTTP / CWE-400), bukan membanjiri server; server yang sehat *seharusnya* memutus klien lambat. Sama seperti Rate Limiter ada dua opsi: **Opsi 1** hit langsung dari halaman (butuh HTTPS/HTTP-2 + CORS, tanpa cookie), **Opsi 2** skrip same-origin di tab target (cookie sesi ikut). Hanya untuk sistem yang Anda berwenang menguji.
 
-Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel.
+Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel; `eval(x)` di komentar atau di dalam string tidak lagi dilaporkan.
 
 **Bahasa/ekosistem SCA yang didukung** (semua lewat OSV.dev): JavaScript (package-lock, yarn.lock, pnpm-lock.yaml, package.json), PHP (composer.lock), .NET (packages.lock.json, *.csproj, packages.config), Java (pom.xml, build.gradle(.kts), gradle.lockfile), Rust (Cargo.lock, Cargo.toml), Go (go.mod), Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock), Ruby (Gemfile.lock), Dart (pubspec.lock), Elixir (mix.lock), dan paket yang dipin di Dockerfile. File berbentuk lockfile memuat dependency transitif; pom.xml, build.gradle, Cargo.toml, dan requirements.txt hanya dependency langsung/yang dipin.
 
