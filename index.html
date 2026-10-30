@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.23"></script>
+  <script src="i18n/i18n.js?v=1.24"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -800,7 +800,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.23';
+    const APP_VERSION = '1.24';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -4459,6 +4459,27 @@
     //  apa adanya, sesaat setelah aplikasi target memanggilnya sendiri dengan key ephemeral-nya.
     //  Jalan di console: CSP halaman target tidak berlaku untuk kode yang dieksekusi dari sana.
     // ============================================================
+    // Penjaga reload untuk semua skrip yang dipasang di tab target (Hook, Rate, RTO, Middleware, Pup).
+    // Selama panelnya masih tampil, reload/pindah halaman yang TIDAK dipicu user (mis. auto-reload aplikasi saat
+    // koneksi gagal, redirect dari skrip) memunculkan dialog konfirmasi bawaan browser: Muat ulang (hook berhenti)
+    // atau Batal (tetap di halaman, hook jalan terus). Klik/tombol user <= 1,5 dtk sebelumnya dianggap sengaja.
+    // Teks dialog ditentukan browser (tidak bisa diubah) dan hanya muncul bila user sudah pernah berinteraksi dengan halaman.
+    function hookGuardInstall() {
+      var g = window.__hookGuard;
+      if (g) return;
+      g = window.__hookGuard = { act: 0, allow: false, els: [] };
+      g.add = function (p) { if (p && g.els.indexOf(p) < 0) g.els.push(p); };
+      g.mark = function () { g.act = Date.now(); };
+      ['mousedown', 'keydown', 'touchstart'].forEach(function (t) { document.addEventListener(t, function () { g.act = Date.now(); }, true); });
+      window.addEventListener('beforeunload', function (e) {
+        var live = g.els.some(function (p) { return p.isConnected && p.style.display !== 'none'; });
+        if (!live || g.allow || Date.now() - g.act < 1500) return undefined;
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      });
+    }
+    const GUARD_LINES = ['  (' + hookGuardInstall.toString() + ')();', '  window.__hookGuard.add(panel);'];
     // Baris mkBtn dipakai bersama oleh HOOK_SCRIPT dan RATE_SCRIPT (hindari duplikasi).
     const MKBTN_LINES = [
       '  function mkBtn(label, fn) {',
@@ -4517,6 +4538,7 @@
       '  head.append(title, minBtn, exportBtn, expandBtn, clearBtn, closeBtn);',
       '  panel.append(head, body);',
       '  document.body.appendChild(panel);',
+      ...GUARD_LINES,
       '  head.style.cursor = "move";',
       '  var dragging = false, dragDx = 0, dragDy = 0;',
       '  head.addEventListener("mousedown", function (e) {',
@@ -4803,6 +4825,7 @@
         '  head.append(title, stopBtn, csvBtn, closeBtn);',
         '  panel.append(head, summary, body);',
         '  document.body.appendChild(panel);',
+        ...GUARD_LINES,
         '  function addRow(i, status, ms, retryAfter, err) {',
         '    rows.push({ i: i, status: status, ms: ms, retryAfter: retryAfter });',
         '    var key = err ? "error" : (status === 429 ? "429" : status >= 500 ? "5xx" : status >= 400 ? "4xx" : "2xx/3xx");',
@@ -4917,6 +4940,7 @@
         '  head.append(title, stopBtn, csvBtn, closeBtn);',
         '  panel.append(head, summary, body);',
         '  document.body.appendChild(panel);',
+        ...GUARD_LINES,
         '  function addRow(r) {',
         '    rows.push(r);',
         '    var row = document.createElement("div");',
@@ -5068,6 +5092,7 @@
         '  head.append(title, stopBtn, jsonBtn, closeBtn);',
         '  panel.append(head, summary, body);',
         '  document.body.appendChild(panel);',
+        ...GUARD_LINES,
         '  function addRow(r) {',
         '    rows.push(r); counts[r.verdict] = (counts[r.verdict] || 0) + 1;',
         '    var row = document.createElement("div");',
@@ -5122,7 +5147,7 @@
         pup_step1: 'Seret tombol Pup ke bookmark bar (jangan diklik di sini). Satu bookmark untuk rekam dan putar.',
         pup_step2: 'Di tab target, klik bookmark Pup > Rekam, pakai aplikasi seperti biasa (jeda, hover menu, klik, ketik ikut tercatat), lalu Stop & simpan. Tab scanner terbuka sendiri dan rekaman masuk ke tabel di bawah.',
         pup_step3: 'Untuk memutar: klik Putar di tabel. Situs target terbuka di tab baru, klik bookmark Pup di tab itu dan pemutaran langsung jalan (kecepatan waktu asli / 2x / jeda tetap, dengan kursor visual).',
-        pup_note: 'Isi field password tidak direkam (diganti {{password}}, diminta saat diputar). Kalau popup diblokir atau situs memasang header COOP, pakai Salin/Unduh JSON di panel lalu Import di sini. Aplikasi non-SPA (tiap pindah halaman reload penuh): klik bookmark Pup lagi di setiap halaman baru; rekaman tersambung dan pemutaran lanjut otomatis dari langkah berikutnya. Halaman di domain lain (mis. login SSO) tidak ikut tergabung. Satu-satunya batas: idle. Rekaman berhenti dan tersimpan otomatis bila tidak ada aktivitas melebihi "Batas idle" di panel (default 2 menit, 0 = tanpa batas; bila popup diblokir, JSON diunduh). Jeda dan lama mengetik tidak dibatasi; tiap 5000 langkah rekaman otomatis disimpan sebagai satu bagian lalu lanjut merekam bagian berikutnya. Tombol Lanjutkan di panel merekam bagian berikutnya setelah Stop / berhenti karena idle. Iframe satu domain ikut direkam (klik, ketik, hover, aktivitas); iframe beda domain (mis. widget pembayaran pihak ketiga) tidak bisa diakses browser. Alternatif tanpa klik ulang: rekam dengan DevTools (F12) > Recorder, ekspor JSON, lalu Import di sini untuk dikelola / diekspor ke Puppeteer .js.',
+        pup_note: 'Isi field password tidak direkam (diganti {{password}}, diminta saat diputar). Kalau popup diblokir atau situs memasang header COOP, pakai Salin/Unduh JSON di panel lalu Import di sini. Aplikasi non-SPA (tiap pindah halaman reload penuh): klik bookmark Pup lagi di setiap halaman baru; rekaman tersambung dan pemutaran lanjut otomatis dari langkah berikutnya. Halaman di domain lain (mis. login SSO) tidak ikut tergabung. Satu-satunya batas: idle. Rekaman berhenti dan tersimpan otomatis bila tidak ada aktivitas melebihi "Batas idle" di panel (default 2 menit, 0 = tanpa batas; bila popup diblokir, JSON diunduh). Jeda dan lama mengetik tidak dibatasi; tiap 5000 langkah rekaman otomatis disimpan sebagai satu bagian lalu lanjut merekam bagian berikutnya. Tombol Lanjutkan di panel merekam bagian berikutnya setelah Stop / berhenti karena idle. Iframe satu domain ikut direkam (klik, ketik, hover, aktivitas); iframe beda domain (mis. widget pembayaran pihak ketiga) tidak bisa diakses browser. Reload/redirect otomatis dari aplikasi (mis. saat koneksi gagal) selama panel aktif memunculkan konfirmasi browser: Muat ulang (rekam/putar berhenti) atau Batal (tetap jalan); berlaku juga untuk Hook, Rate Limiter, RTO, dan Cek Middleware. Alternatif tanpa klik ulang: rekam dengan DevTools (F12) > Recorder, ekspor JSON, lalu Import di sini untuk dikelola / diekspor ke Puppeteer .js.',
         pup_list: 'Rekaman tersimpan', pup_select_all: 'Pilih semua', pup_delete: 'Hapus', pup_export: 'Ekspor JSON', pup_import: 'Import JSON',
         pup_reload: 'Muat ulang', pup_th_name: 'Nama', pup_th_url: 'URL awal', pup_th_steps: 'Langkah', pup_th_date: 'Dibuat', pup_th_act: 'Aksi',
         pup_play: 'Putar', pup_view: 'Lihat', pup_hide: 'Tutup', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'Belum ada rekaman.',
@@ -5141,7 +5166,7 @@
         pup_step1: 'Drag the Pup button to your bookmarks bar (do not click it here). One bookmark for recording and replay.',
         pup_step2: 'On the target tab, click the Pup bookmark > Record, use the app as usual (pauses, menu hovers, clicks and typing are captured), then Stop & save. The scanner tab opens by itself and the recording appears in the table below.',
         pup_step3: 'To replay: click Play in the table. The target site opens in a new tab; click the Pup bookmark there and replay starts right away (real timing / 2x / fixed delay, with a visual cursor).',
-        pup_note: 'Password fields are not recorded (replaced by {{password}} and asked at replay). If popups are blocked or the site sends a COOP header, use Copy/Download JSON in the panel and Import here. Non-SPA apps (full reload on every page change): click the Pup bookmark again on each new page; the recording is stitched together and replay auto-continues from the next step. Pages on another domain (e.g. SSO login) are not merged. The only limit is idle: recording stops and saves automatically when there is no activity for longer than the "Idle limit" in the panel (default 2 minutes, 0 = no limit; if the popup is blocked, the JSON is downloaded). Delays and typing time are unlimited; every 5000 steps the recording is saved as one part and recording continues with the next part automatically. The Continue button in the panel records the next part after Stop / an idle stop. Same-origin iframes are recorded (clicks, typing, hover, activity); cross-origin iframes (e.g. third-party payment widgets) are not accessible to the browser. No-reclick alternative: record with DevTools (F12) > Recorder, export JSON, then Import here to manage / export to Puppeteer .js.',
+        pup_note: 'Password fields are not recorded (replaced by {{password}} and asked at replay). If popups are blocked or the site sends a COOP header, use Copy/Download JSON in the panel and Import here. Non-SPA apps (full reload on every page change): click the Pup bookmark again on each new page; the recording is stitched together and replay auto-continues from the next step. Pages on another domain (e.g. SSO login) are not merged. The only limit is idle: recording stops and saves automatically when there is no activity for longer than the "Idle limit" in the panel (default 2 minutes, 0 = no limit; if the popup is blocked, the JSON is downloaded). Delays and typing time are unlimited; every 5000 steps the recording is saved as one part and recording continues with the next part automatically. The Continue button in the panel records the next part after Stop / an idle stop. Same-origin iframes are recorded (clicks, typing, hover, activity); cross-origin iframes (e.g. third-party payment widgets) are not accessible to the browser. An automatic reload/redirect by the app (e.g. on connection failure) while a panel is active shows the browser's confirmation: Reload (recording/replay stops) or Cancel (keeps running); this also applies to Hook, Rate Limiter, RTO and Middleware Check. No-reclick alternative: record with DevTools (F12) > Recorder, export JSON, then Import here to manage / export to Puppeteer .js.',
         pup_list: 'Saved recordings', pup_select_all: 'Select all', pup_delete: 'Delete', pup_export: 'Export JSON', pup_import: 'Import JSON',
         pup_reload: 'Reload', pup_th_name: 'Name', pup_th_url: 'Start URL', pup_th_steps: 'Steps', pup_th_date: 'Created', pup_th_act: 'Actions',
         pup_play: 'Play', pup_view: 'View', pup_hide: 'Close', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'No recordings yet.',
@@ -5234,6 +5259,7 @@
       idleRow.appendChild(idleIn);
       ui.appendChild(head); ui.appendChild(nameIn); ui.appendChild(row); ui.appendChild(idleRow); ui.appendChild(hint); ui.appendChild(frameHint); ui.appendChild(warn); ui.appendChild(partNote); ui.appendChild(info);
       document.body.appendChild(ui);
+      if (window.__hookGuard) window.__hookGuard.add(ui);
       function inUi(x) { return x && ui.contains(x); }
       function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, function (c) { return '\\' + c; }); }
       function attrSel(tag, a, v) { return tag + '[' + a + '="' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]'; }
@@ -5555,6 +5581,7 @@
       var clock = el('div', { color: '#cbd5e1', fontSize: '11px', display: 'none' }, '');
       [head, ta, pw, delayRow, bar, clock, row, info].forEach(function (x) { ui.appendChild(x); });
       document.body.appendChild(ui);
+      if (window.__hookGuard) window.__hookGuard.add(ui);
       var eff = [], total = 0, pos = 0, tickT = 0;
       function clamp(d) { return Math.max(80, d); }
       // Jeda asli sebelum langkah i: 'wait' (diedit di scanner) atau selisih waktu rekaman (min 80 ms, tanpa batas atas).
@@ -5720,7 +5747,8 @@
       }
 
       // at = langkah yang dijalankan setelah reload; auto = lanjut putar otomatis setelah Pup Play diklik lagi
-      function persist(at) { try { sessionStorage.setItem(KEY, JSON.stringify({ rec: rec, idx: at == null ? idx : at, delay: delay.value, speed: speed.value, auto: running })); } catch (e) { /* abaikan */ } }
+      // at != null: aksi pemutar yang bisa memindah halaman -> tandai sebagai aksi user agar penjaga reload tidak bertanya.
+      function persist(at) { if (at != null && window.__hookGuard) window.__hookGuard.mark(); try { sessionStorage.setItem(KEY, JSON.stringify({ rec: rec, idx: at == null ? idx : at, delay: delay.value, speed: speed.value, auto: running })); } catch (e) { /* abaikan */ } }
       function navUrl(s) { var n = (s.assertedEvents || []).filter(function (a) { return a.type === 'navigation' && a.url; })[0]; return n ? n.url.split('#')[0] : ''; }
       // Klik/Enter yang memicu pindah halaman: tunggu URL berubah (SPA) atau halaman diganti (non-SPA, skrip berhenti di sini).
       function waitNav(s) {
@@ -5849,7 +5877,7 @@
       const app = location.protocol === 'file:' ? '' : location.href.split('#')[0];
       return { app, origin: location.origin };
     }
-    function pupScript() { return localizeScript('(' + pupLauncher.toString() + ')(' + JSON.stringify(pupAppCfg()) + ',\n' + pupRecorderMain.toString() + ',\n' + pupPlayerMain.toString() + ');'); }
+    function pupScript() { return localizeScript('(' + hookGuardInstall.toString() + ')();\n(' + pupLauncher.toString() + ')(' + JSON.stringify(pupAppCfg()) + ',\n' + pupRecorderMain.toString() + ',\n' + pupPlayerMain.toString() + ');'); }
 
     // ---- IndexedDB milik halaman scanner.
     function pupOpen() {
