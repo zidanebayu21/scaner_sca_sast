@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.20"></script>
+  <script src="i18n/i18n.js?v=1.21"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -800,7 +800,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.20';
+    const APP_VERSION = '1.21';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -5170,7 +5170,7 @@
       'Elemen tidak ditemukan pada langkah ': 'Element not found at step ', 'Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click Pup Play again once the page has loaded to continue.',
       'Lanjut dari langkah ': 'Continuing from step ', '⇄ Putar': '⇄ Play', '⇄ Rekam': '⇄ Record', '⏺ Rekam': '⏺ Record', '▶ Putar': '▶ Play',
       'Stop dulu sebelum pindah ke Putar.': 'Stop first before switching to Play.', 'Waktu asli': 'Real timing', 'Jeda tetap (ms)': 'Fixed delay (ms)', 'Kecepatan': 'Speed',
-      'Mulai otomatis...': 'Starting automatically...', '↻ Ulangi': '↻ Replay', 'langkah': 'step', 'jeda': 'wait', 'dtk': 's', 'Mulai dari langkah ': 'Start from step ', 'Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.': 'Non-SPA: after every page change, click the Pup bookmark again to continue.',
+      'Mulai otomatis...': 'Starting automatically...', 'mengetik': 'typing', '↻ Ulangi': '↻ Replay', 'langkah': 'step', 'jeda': 'wait', 'dtk': 's', 'Mulai dari langkah ': 'Start from step ', 'Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.': 'Non-SPA: after every page change, click the Pup bookmark again to continue.',
       'Pindah halaman. Klik bookmark Pup lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click the Pup bookmark again once the page has loaded to continue.', 'Lanjut otomatis dari langkah ': 'Auto-continuing from step ', 'Isi password lalu klik Putar.': 'Enter the password then click Play.',
       'Non-SPA: tiap pindah halaman, klik Pup Rec lagi untuk melanjutkan.': 'Non-SPA: after every page change, click Pup Rec again to continue.', 'Peringatan: halaman ini bukan URL awal rekaman: ': 'Warning: this page is not the recording start URL: '
     });
@@ -5221,7 +5221,8 @@
       function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, function (c) { return '\\' + c; }); }
       function attrSel(tag, a, v) { return tag + '[' + a + '="' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]'; }
       function uniq(s) { try { return document.querySelectorAll(s).length === 1; } catch (e) { return false; } }
-      function goodId(id) { return id && !/\d{4,}/.test(id) && id.indexOf(':') < 0; }
+      // id buatan framework berubah tiap render/reload (React useId _r_9k_ / :r1:, MUI, Radix, Headless UI) -> jangan dipakai
+      function goodId(id) { return id && !/\d{4,}/.test(id) && id.indexOf(':') < 0 && !/^(_r_|r_|mui-|radix-|headlessui-|react-select-|downshift-|rc_|ember)/i.test(id) && !/^_[a-z0-9]+_$/i.test(id); }
       function pathSel(x) {
         var parts = [];
         while (x && x.nodeType === 1 && x !== document.documentElement) {
@@ -5267,6 +5268,20 @@
         push({ type: 'click', target: 'main', selectors: selectorsFor(t), offsetX: Math.round(e.clientX - r.left), offsetY: Math.round(e.clientY - r.top) });
       }
       function onChange(e) { var x = e.target; if (x.tagName === 'SELECT' || isText(x)) recordChange(x); }
+      // Ketikan per input: simpan riwayat nilai [ms sejak mulai ketik, nilai] supaya ketik-hapus-ketik ulang
+      // (pencarian otomatis per kata) ikut terputar. Password tidak dicatat per ketikan.
+      function onInput(e) {
+        var x = e.target;
+        if (!rec || inUi(x) || !isText(x) || x.type === 'password') return;
+        var sel = selectorsFor(x), l = last(), now = Date.now();
+        if (!(l && l.type === 'change' && JSON.stringify(l.selectors) === JSON.stringify(sel) && l.typing)) {
+          l = { type: 'change', target: 'main', selectors: sel, value: x.value, typing: [] };
+          push(l);
+        }
+        var off = now - rec.created - l.t, tp = l.typing, prev = tp[tp.length - 1];
+        if (prev && prev[0] === off) prev[1] = x.value; else if (tp.length < 3000) tp.push([off, x.value]);
+        l.value = x.value; save();
+      }
       function onKey(e) {
         if (!rec || inUi(e.target) || ['Enter', 'Tab', 'Escape'].indexOf(e.key) < 0) return;
         if (isText(e.target)) recordChange(e.target);
@@ -5319,6 +5334,7 @@
       }
       document.addEventListener('click', onClick, true);
       document.addEventListener('change', onChange, true);
+      document.addEventListener('input', onInput, true);
       document.addEventListener('keydown', onKey, true);
       document.addEventListener('mouseover', onOver, true);
       window.addEventListener('scroll', onScroll, true);
@@ -5444,11 +5460,13 @@
       var eff = [], total = 0, pos = 0, tickT = 0;
       function clamp(d) { return Math.min(15000, Math.max(80, d)); }
       // Jeda asli sebelum langkah i: 'wait' (diedit di scanner, maks 10 mnt) atau selisih waktu rekaman (80 ms - 15 dtk).
+      // Lama mengetik pada langkah change yang punya riwayat ketikan (dibatasi 2 mnt).
+      function typDur(s) { var tp = s && s.typing; return tp && tp.length ? Math.min(120000, tp[tp.length - 1][0]) : 0; }
       function rawGap(i) {
         var a = rec.steps[i - 1], b = rec.steps[i];
         if (!b || i === 0) return 0;
         if (typeof b.wait === 'number') return Math.min(600000, Math.max(0, b.wait));
-        return a && typeof a.t === 'number' && typeof b.t === 'number' ? clamp(b.t - a.t) : 600;
+        return a && typeof a.t === 'number' && typeof b.t === 'number' ? clamp(b.t - a.t - typDur(a)) : 600;
       }
       // eff[i] = posisi langkah i di timeline (ms): jumlah jeda asli yang sudah dibatasi.
       function buildTimeline() {
@@ -5456,6 +5474,7 @@
         rec.steps.forEach(function (s, i) {
           acc += rawGap(i);
           eff.push(acc);
+          acc += typDur(s);
         });
         total = acc || 1;
         [].slice.call(bar.querySelectorAll('[data-tick]')).forEach(function (x) { x.remove(); });
@@ -5567,6 +5586,26 @@
           })();
         });
       }
+      // Putar ulang riwayat ketikan (ketik, hapus, ketik ulang) dengan jeda aslinya; timeline ikut maju.
+      function replayTyping(x, s, finalV) {
+        var tp = s.typing, base = eff[idx] || 0, k = 0, t0 = Date.now(), f = speed.value === 'fixed' ? 0 : fast() ? 0.5 : 1;
+        if (x.focus) x.focus();
+        return new Promise(function (resolve) {
+          (function step() {
+            if (stopFlag || k >= tp.length) {
+              if (!stopFlag && x.value !== finalV) { setRaw(x, finalV); fire(x, 'input', Event); }
+              fire(x, 'change', Event); return resolve();
+            }
+            var due = f ? Math.min(tp[k][0], 120000) * f : k * 35;
+            var wait = due - (Date.now() - t0);
+            if (wait > 0) { setTimeout(step, Math.min(wait, 200)); pos = base + Math.min(Date.now() - t0, due) / (f || 1); drawBar("mengetik"); return; }
+            setRaw(x, tp[k][1]); fire(x, 'input', Event); k++;
+            pos = base + Math.min(tp[k - 1][0], 120000); drawBar("mengetik");
+            setTimeout(step, 0);
+          })();
+        });
+      }
+
       // at = langkah yang dijalankan setelah reload; auto = lanjut putar otomatis setelah Pup Play diklik lagi
       function persist(at) { try { sessionStorage.setItem(KEY, JSON.stringify({ rec: rec, idx: at == null ? idx : at, delay: delay.value, speed: speed.value, auto: running })); } catch (e) { /* abaikan */ } }
       function navUrl(s) { var n = (s.assertedEvents || []).filter(function (a) { return a.type === 'navigation' && a.url; })[0]; return n ? n.url.split('#')[0] : ''; }
@@ -5610,7 +5649,8 @@
               fire(x, 'pointerup', PointerEvent); fire(x, 'mouseup', MouseEvent); x.click();
               if (s.type === 'doubleClick') fire(x, 'dblclick', MouseEvent);
             } else if (s.type === 'change') {
-              act = typeInto(x, String(s.value).split('{{password}}').join(pw.value));
+              var fv = String(s.value).split('{{password}}').join(pw.value);
+              act = s.typing && s.typing.length > 1 && x.tagName !== 'SELECT' ? replayTyping(x, s, fv) : typeInto(x, fv);
             } else if (s.type === 'hover') {
               fire(x, 'pointerover', PointerEvent); fire(x, 'mouseover', MouseEvent); fire(x, 'mouseenter', MouseEvent, { bubbles: false }); fire(x, 'mousemove', MouseEvent);
             } else if (s.type === 'scroll' && x.scrollTo) { x.scrollTo(s.x || 0, s.y || 0); }
@@ -5738,14 +5778,15 @@
     }
     // Format Chrome Recorder murni (tanpa waktu 't' milik Pup); keepT untuk pemutaran di tab target.
     function pupRecorderJson(r, keepT) {
-      return { title: r.title, steps: r.steps.map(s => { const c = Object.assign({}, s); if (!keepT) { delete c.t; delete c.wait; } return c; }) };
+      return { title: r.title, steps: r.steps.map(s => { const c = Object.assign({}, s); if (!keepT) { delete c.t; delete c.wait; delete c.typing; } return c; }) };
     }
     // Jeda sebelum langkah i (ms): 'wait' hasil edit (maks 10 mnt) atau selisih waktu rekaman (maks 15 dtk).
     function pupStepGap(r, i) {
       const a = r.steps[i - 1], b = r.steps[i];
       if (!a || !b) return null;
       if (typeof b.wait === 'number') return { ms: Math.min(600000, Math.max(0, b.wait)), edited: true };
-      if (typeof a.t === 'number' && typeof b.t === 'number') return { ms: Math.min(15000, Math.max(0, b.t - a.t)), edited: false, raw: b.t - a.t };
+      const typ = a.typing && a.typing.length ? Math.min(120000, a.typing[a.typing.length - 1][0]) : 0;
+      if (typeof a.t === 'number' && typeof b.t === 'number') { const raw = b.t - a.t - typ; return { ms: Math.min(15000, Math.max(0, raw)), edited: false, raw }; }
       return null;
     }
     function pupSize(r) { try { return new Blob([JSON.stringify(r)]).size; } catch (e) { return 0; } }
@@ -5763,7 +5804,16 @@
       if (s.width) return s.width + 'x' + s.height;
       return '';
     }
-    function pupStepValue(s) { return s.value != null ? String(s.value) : s.key ? s.key : ''; }
+    function pupStepValue(s) {
+      if (Array.isArray(s.typing) && s.typing.length > 1) {
+        // ringkas riwayat: nilai yang berbeda berurutan, mis. "bess → be → paiton"
+        const seen = [];
+        s.typing.forEach(p => { const v = p[1]; if (!seen.length || seen[seen.length - 1] !== v) seen.push(v); });
+        const words = seen.filter((v, k) => k === seen.length - 1 || !(seen[k + 1].indexOf(v) === 0 && seen[k + 1].length > v.length));
+        return words.slice(-8).map(v => v === '' ? '∅' : v).join(' → ');
+      }
+      return s.value != null ? String(s.value) : s.key ? s.key : '';
+    }
     // Script Node + Puppeteer (npm i puppeteer). Password dari env PUP_PASSWORD.
     function pupToPuppeteer(r) {
       const J = v => JSON.stringify(v);
@@ -5774,6 +5824,18 @@
         '// Ekspor dari Puppeteer Record. Jalankan: npm i puppeteer && node ' + pupFileName(r.title, '.js'),
         '// Field password: set env PUP_PASSWORD sebelum menjalankan.',
         "const puppeteer = require('puppeteer');",
+        '// Riwayat ketikan: ketik / hapus / ketik ulang sesuai rekaman (pencarian per kata ikut terpicu).',
+        'async function typeSteps(el, snaps) {',
+        "  await el.click({ clickCount: 3 }); await el.press('Backspace');",
+        "  let cur = '', prev = 0;",
+        '  for (const [dt, v] of snaps) {',
+        '    await wait(Math.min(120000, Math.max(0, dt - prev))); prev = dt;',
+        '    let p = 0; while (p < cur.length && p < v.length && cur[p] === v[p]) p++;',
+        "    for (let k = cur.length; k > p; k--) await el.press('Backspace');",
+        '    if (v.length > p) await el.type(v.slice(p));',
+        '    cur = v;',
+        '  }',
+        '}',
         'async function find(page, sels) {',
         '  for (const s of sels) { try { return await page.waitForSelector(s, { visible: true, timeout: 3000 }); } catch (e) { /* coba selector berikutnya */ } }',
         "  throw new Error('Elemen tidak ditemukan: ' + JSON.stringify(sels));",
@@ -5796,7 +5858,9 @@
         if (s.type === 'setViewport') lines.push('    await page.setViewport({ width: ' + (+s.width || 1280) + ', height: ' + (+s.height || 800) + ' });');
         else if (s.type === 'navigate') lines.push('    await page.goto(' + J(s.url) + ", { waitUntil: 'networkidle2' });");
         else if (s.type === 'click' || s.type === 'doubleClick') lines.push('    await (await find(page, ' + sels(s) + ')).click(' + (s.type === 'doubleClick' ? '{ clickCount: 2 }' : '') + ');');
-        else if (s.type === 'change') {
+        else if (s.type === 'change' && Array.isArray(s.typing) && s.typing.length > 1) {
+          lines.push('    await typeSteps(await find(page, ' + sels(s) + '), ' + J(s.typing.slice(0, 3000)) + ');');
+        } else if (s.type === 'change') {
           lines.push('    { const el = await find(page, ' + sels(s) + ');');
           lines.push("      if (await el.evaluate(e => e.tagName === 'SELECT')) await el.select(" + val(s.value) + ');');
           lines.push("      else { await el.click({ clickCount: 3 }); await el.press('Backspace'); await el.type(" + val(s.value) + '); } }');
