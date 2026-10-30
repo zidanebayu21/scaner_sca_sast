@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.16"></script>
+  <script src="i18n/i18n.js?v=1.17"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -784,7 +784,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.16';
+    const APP_VERSION = '1.17';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -5106,7 +5106,7 @@
         pup_step1: 'Seret tombol Pup Rec dan Pup Play ke bookmark bar (jangan diklik di sini).',
         pup_step2: 'Di tab target, klik Pup Rec > Rekam, pakai aplikasi seperti biasa, lalu Stop & simpan. Tab scanner terbuka sendiri dan rekaman masuk ke tabel di bawah.',
         pup_step3: 'Untuk memutar: klik Putar di tabel. Situs target terbuka di tab baru, lalu klik Pup Play dari bookmark bar di tab itu.',
-        pup_note: 'Isi field password tidak direkam (diganti {{password}}, diminta saat diputar). Kalau popup diblokir atau situs memasang header COOP, pakai Salin/Unduh JSON di panel lalu Import di sini. Reload halaman penuh menghentikan bookmarklet: klik lagi untuk melanjutkan rekaman / pemutaran.',
+        pup_note: 'Isi field password tidak direkam (diganti {{password}}, diminta saat diputar). Kalau popup diblokir atau situs memasang header COOP, pakai Salin/Unduh JSON di panel lalu Import di sini. Aplikasi non-SPA (tiap pindah halaman reload penuh): klik Pup Rec / Pup Play lagi di setiap halaman baru; rekaman tersambung dan pemutaran lanjut otomatis dari langkah berikutnya. Halaman di domain lain (mis. login SSO) tidak ikut tergabung. Alternatif tanpa klik ulang: rekam dengan DevTools (F12) > Recorder, ekspor JSON, lalu Import di sini untuk dikelola / diekspor ke Puppeteer .js.',
         pup_list: 'Rekaman tersimpan', pup_select_all: 'Pilih semua', pup_delete: 'Hapus', pup_export: 'Ekspor JSON', pup_import: 'Import JSON',
         pup_reload: 'Muat ulang', pup_th_name: 'Nama', pup_th_url: 'URL awal', pup_th_steps: 'Langkah', pup_th_date: 'Dibuat', pup_th_act: 'Aksi',
         pup_play: 'Putar', pup_view: 'Lihat', pup_hide: 'Tutup', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'Belum ada rekaman.',
@@ -5122,7 +5122,7 @@
         pup_step1: 'Drag the Pup Rec and Pup Play buttons to your bookmarks bar (do not click them here).',
         pup_step2: 'On the target tab, click Pup Rec > Record, use the app as usual, then Stop & save. The scanner tab opens by itself and the recording appears in the table below.',
         pup_step3: 'To replay: click Play in the table. The target site opens in a new tab; click Pup Play from the bookmarks bar there.',
-        pup_note: 'Password fields are not recorded (replaced by {{password}} and asked at replay). If popups are blocked or the site sends a COOP header, use Copy/Download JSON in the panel and Import here. A full page reload stops the bookmarklet: click it again to continue recording / replaying.',
+        pup_note: 'Password fields are not recorded (replaced by {{password}} and asked at replay). If popups are blocked or the site sends a COOP header, use Copy/Download JSON in the panel and Import here. Non-SPA apps (full reload on every page change): click Pup Rec / Pup Play again on each new page; the recording is stitched together and replay auto-continues from the next step. Pages on another domain (e.g. SSO login) are not merged. No-reclick alternative: record with DevTools (F12) > Recorder, export JSON, then Import here to manage / export to Puppeteer .js.',
         pup_list: 'Saved recordings', pup_select_all: 'Select all', pup_delete: 'Delete', pup_export: 'Export JSON', pup_import: 'Import JSON',
         pup_reload: 'Reload', pup_th_name: 'Name', pup_th_url: 'Start URL', pup_th_steps: 'Steps', pup_th_date: 'Created', pup_th_act: 'Actions',
         pup_play: 'Play', pup_view: 'View', pup_hide: 'Close', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'No recordings yet.',
@@ -5146,7 +5146,8 @@
       'Tidak ada tab scanner. Tempel JSON rekaman lalu Muat JSON.': 'No scanner tab. Paste the recording JSON then Load JSON.',
       'JSON tidak valid.': 'Invalid JSON.', 'Siap diputar: ': 'Ready to play: ', ' langkah': ' steps', 'Selesai.': 'Done.', 'Dihentikan.': 'Stopped.',
       'Elemen tidak ditemukan pada langkah ': 'Element not found at step ', 'Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click Pup Play again once the page has loaded to continue.',
-      'Lanjut dari langkah ': 'Continuing from step ', 'Peringatan: halaman ini bukan URL awal rekaman: ': 'Warning: this page is not the recording start URL: '
+      'Lanjut dari langkah ': 'Continuing from step ', 'Lanjut otomatis dari langkah ': 'Auto-continuing from step ', 'Isi password lalu klik Putar.': 'Enter the password then click Play.',
+      'Non-SPA: tiap pindah halaman, klik Pup Rec lagi untuk melanjutkan.': 'Non-SPA: after every page change, click Pup Rec again to continue.', 'Peringatan: halaman ini bukan URL awal rekaman: ': 'Warning: this page is not the recording start URL: '
     });
 
     // ---- Dijalankan DI TAB TARGET (bookmarklet Pup Rec).
@@ -5169,7 +5170,8 @@
       head.appendChild(btn("Tutup", function () { if (rec) stop(); ui.style.display = 'none'; }));
       bRec.style.background = '#b91c1c';
       [bRec, bStop, bCopy, bDl].forEach(function (b) { row.appendChild(b); });
-      ui.appendChild(head); ui.appendChild(nameIn); ui.appendChild(row); ui.appendChild(info);
+      var hint = el('div', { color: '#f59e0b', fontSize: '11px' }, "Non-SPA: tiap pindah halaman, klik Pup Rec lagi untuk melanjutkan.");
+      ui.appendChild(head); ui.appendChild(nameIn); ui.appendChild(row); ui.appendChild(hint); ui.appendChild(info);
       document.body.appendChild(ui);
       function inUi(x) { return x && ui.contains(x); }
       function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, function (c) { return '\\' + c; }); }
@@ -5211,6 +5213,8 @@
         var st = { type: 'change', target: 'main', selectors: selectorsFor(x), value: valueOf(x) };
         var l = last();
         if (l && l.type === 'change' && sameSel(l, st)) { l.value = st.value; save(); return; }
+        // nilai sama dengan change terakhir di field ini (mis. dari pagehide) -> tidak dicatat dua kali
+        for (var i = rec.steps.length - 1; i >= 0; i--) { var p = rec.steps[i]; if (p.type === 'change' && sameSel(p, st)) { if (p.value === st.value) return; break; } }
         push(st);
       }
       function onClick(e) {
@@ -5247,6 +5251,8 @@
       document.addEventListener('change', onChange, true);
       document.addEventListener('keydown', onKey, true);
       window.addEventListener('scroll', onScroll, true);
+      // Halaman akan diganti (non-SPA): simpan ketikan di field aktif yang belum sempat memicu change.
+      window.addEventListener('pagehide', function () { var a = document.activeElement; if (rec && a && isText(a) && !inUi(a)) recordChange(a); }, true);
       setInterval(checkUrl, 400);
       function start() {
         if (rec) return;
@@ -5367,18 +5373,32 @@
         }
         fire(x, 'input', Event); fire(x, 'change', Event);
       }
-      function persist() { try { sessionStorage.setItem(KEY, JSON.stringify({ rec: rec, idx: idx })); } catch (e) { /* abaikan */ } }
+      // at = langkah yang dijalankan setelah reload; auto = lanjut putar otomatis setelah Pup Play diklik lagi
+      function persist(at) { try { sessionStorage.setItem(KEY, JSON.stringify({ rec: rec, idx: at == null ? idx : at, delay: delay.value, auto: running })); } catch (e) { /* abaikan */ } }
+      function navUrl(s) { var n = (s.assertedEvents || []).filter(function (a) { return a.type === 'navigation' && a.url; })[0]; return n ? n.url.split('#')[0] : ''; }
+      // Klik/Enter yang memicu pindah halaman: tunggu URL berubah (SPA) atau halaman diganti (non-SPA, skrip berhenti di sini).
+      function waitNav(s) {
+        var want = navUrl(s), end = Date.now() + 8000;
+        if (!want) return Promise.resolve(true);
+        return new Promise(function (resolve) {
+          (function tick() {
+            if (location.href.split('#')[0] === want || Date.now() > end || stopFlag) return resolve(true);
+            setTimeout(tick, 200);
+          })();
+        });
+      }
       function run(s) {
         if (s.type === 'setViewport' || s.type === 'emulateNetworkConditions') return Promise.resolve(true);
         if (s.type === 'navigate') {
           if (idx === 0 || s.url.split('#')[0] === location.href.split('#')[0]) return Promise.resolve(true);
-          idx++; persist(); info.textContent = "Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan."; location.href = s.url; return Promise.resolve(false);
+          persist(idx + 1); info.textContent = "Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan."; location.href = s.url; return Promise.resolve(false);
         }
         if (s.type === 'keyDown' || s.type === 'keyUp') {
           var a = document.activeElement || document.body;
+          persist(idx + 1);
           var ok = fire(a, s.type === 'keyDown' ? 'keydown' : 'keyup', KeyboardEvent, { key: s.key });
           if (s.type === 'keyDown' && s.key === 'Enter' && ok && a.form && a.tagName === 'INPUT') { if (a.form.requestSubmit) a.form.requestSubmit(); else a.form.submit(); }
-          return Promise.resolve(true);
+          return waitNav(s);
         }
         if (s.type === 'scroll' && !s.selectors) { window.scrollTo(s.x || 0, s.y || 0); return Promise.resolve(true); }
         if (!s.selectors) return Promise.resolve(true);
@@ -5386,6 +5406,7 @@
           if (!x) { info.textContent = "Elemen tidak ditemukan pada langkah " + (idx + 1) + ': ' + JSON.stringify(s.selectors[0] || ''); return null; }
           if (x.scrollIntoView) x.scrollIntoView({ block: 'center' });
           x.style.outline = '2px solid #f59e0b'; setTimeout(function () { x.style.outline = ''; }, 500);
+          persist(idx + 1); // aksi ini bisa me-reload halaman: setelah reload lanjut ke langkah berikutnya, bukan mengulang
           if (s.type === 'click' || s.type === 'doubleClick') {
             fire(x, 'pointerdown', PointerEvent); fire(x, 'mousedown', MouseEvent); if (x.focus) x.focus();
             fire(x, 'pointerup', PointerEvent); fire(x, 'mouseup', MouseEvent); x.click();
@@ -5394,7 +5415,7 @@
             setValue(x, String(s.value).split('{{password}}').join(pw.value));
           } else if (s.type === 'hover') { fire(x, 'mouseover', MouseEvent); fire(x, 'mouseenter', MouseEvent); }
           else if (s.type === 'scroll' && x.scrollTo) { x.scrollTo(s.x || 0, s.y || 0); }
-          return true;
+          return waitNav(s);
         });
       }
       function play() {
@@ -5402,20 +5423,31 @@
         if (running) return;
         running = true; stopFlag = false; ui.style.borderColor = '#16a34a';
         (function next() {
-          if (stopFlag) { running = false; ui.style.borderColor = '#334155'; info.textContent = "Dihentikan."; return; }
+          if (stopFlag) { running = false; persist(); ui.style.borderColor = '#334155'; info.textContent = "Dihentikan."; return; }
           if (idx >= rec.steps.length) { running = false; ui.style.borderColor = '#334155'; info.textContent = "Selesai."; try { sessionStorage.removeItem(KEY); } catch (e) { /* abaikan */ } return; }
           persist();
           info.textContent = (idx + 1) + '/' + rec.steps.length + ' ' + rec.steps[idx].type;
           run(rec.steps[idx]).then(function (r) {
             if (r === false) { running = false; return; }
-            if (r === null) { running = false; ui.style.borderColor = '#b45309'; return; }
+            if (r === null) { running = false; persist(); ui.style.borderColor = '#b45309'; return; }
             idx++; return sleep(Math.max(0, +delay.value || 0)).then(next);
           });
         })();
       }
       var resume = null;
       try { resume = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { resume = null; }
-      if (resume && resume.rec) { setRec(resume.rec, resume.idx); info.textContent = "Lanjut dari langkah " + (resume.idx + 1); return; }
+      if (resume && resume.rec) {
+        setRec(resume.rec, resume.idx);
+        if (resume.delay) delay.value = resume.delay;
+        var pwLeft = JSON.stringify(resume.rec.steps.slice(resume.idx)).indexOf('{{password}}') >= 0;
+        pw.style.display = pwLeft ? '' : 'none';
+        if (resume.auto && !pwLeft && resume.idx < resume.rec.steps.length) {
+          info.textContent = "Lanjut otomatis dari langkah " + (resume.idx + 1);
+          var go = function () { setTimeout(play, 800); };
+          if (document.readyState === 'complete') go(); else window.addEventListener('load', go);
+        } else info.textContent = "Lanjut dari langkah " + (resume.idx + 1) + (pwLeft ? '. ' + "Isi password lalu klik Putar." : '');
+        return;
+      }
       if (window.opener) {
         info.textContent = "Meminta rekaman dari tab scanner...";
         window.addEventListener('message', function (e) { if (e.data && e.data.type === 'pup-play' && e.source === window.opener && !rec) setRec(e.data.rec); });
