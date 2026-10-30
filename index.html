@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.22"></script>
+  <script src="i18n/i18n.js?v=1.23"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -800,7 +800,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.22';
+    const APP_VERSION = '1.23';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -5122,7 +5122,7 @@
         pup_step1: 'Seret tombol Pup ke bookmark bar (jangan diklik di sini). Satu bookmark untuk rekam dan putar.',
         pup_step2: 'Di tab target, klik bookmark Pup > Rekam, pakai aplikasi seperti biasa (jeda, hover menu, klik, ketik ikut tercatat), lalu Stop & simpan. Tab scanner terbuka sendiri dan rekaman masuk ke tabel di bawah.',
         pup_step3: 'Untuk memutar: klik Putar di tabel. Situs target terbuka di tab baru, klik bookmark Pup di tab itu dan pemutaran langsung jalan (kecepatan waktu asli / 2x / jeda tetap, dengan kursor visual).',
-        pup_note: 'Isi field password tidak direkam (diganti {{password}}, diminta saat diputar). Kalau popup diblokir atau situs memasang header COOP, pakai Salin/Unduh JSON di panel lalu Import di sini. Aplikasi non-SPA (tiap pindah halaman reload penuh): klik bookmark Pup lagi di setiap halaman baru; rekaman tersambung dan pemutaran lanjut otomatis dari langkah berikutnya. Halaman di domain lain (mis. login SSO) tidak ikut tergabung. Satu-satunya batas: idle. Rekaman berhenti dan tersimpan otomatis bila tidak ada aktivitas melebihi "Batas idle" di panel (default 2 menit, 0 = tanpa batas; bila popup diblokir, JSON diunduh). Jeda, lama mengetik, dan jumlah langkah tidak dibatasi. Iframe satu domain ikut direkam (klik, ketik, hover, aktivitas); iframe beda domain (mis. widget pembayaran pihak ketiga) tidak bisa diakses browser. Alternatif tanpa klik ulang: rekam dengan DevTools (F12) > Recorder, ekspor JSON, lalu Import di sini untuk dikelola / diekspor ke Puppeteer .js.',
+        pup_note: 'Isi field password tidak direkam (diganti {{password}}, diminta saat diputar). Kalau popup diblokir atau situs memasang header COOP, pakai Salin/Unduh JSON di panel lalu Import di sini. Aplikasi non-SPA (tiap pindah halaman reload penuh): klik bookmark Pup lagi di setiap halaman baru; rekaman tersambung dan pemutaran lanjut otomatis dari langkah berikutnya. Halaman di domain lain (mis. login SSO) tidak ikut tergabung. Satu-satunya batas: idle. Rekaman berhenti dan tersimpan otomatis bila tidak ada aktivitas melebihi "Batas idle" di panel (default 2 menit, 0 = tanpa batas; bila popup diblokir, JSON diunduh). Jeda dan lama mengetik tidak dibatasi; tiap 5000 langkah rekaman otomatis disimpan sebagai satu bagian lalu lanjut merekam bagian berikutnya. Tombol Lanjutkan di panel merekam bagian berikutnya setelah Stop / berhenti karena idle. Iframe satu domain ikut direkam (klik, ketik, hover, aktivitas); iframe beda domain (mis. widget pembayaran pihak ketiga) tidak bisa diakses browser. Alternatif tanpa klik ulang: rekam dengan DevTools (F12) > Recorder, ekspor JSON, lalu Import di sini untuk dikelola / diekspor ke Puppeteer .js.',
         pup_list: 'Rekaman tersimpan', pup_select_all: 'Pilih semua', pup_delete: 'Hapus', pup_export: 'Ekspor JSON', pup_import: 'Import JSON',
         pup_reload: 'Muat ulang', pup_th_name: 'Nama', pup_th_url: 'URL awal', pup_th_steps: 'Langkah', pup_th_date: 'Dibuat', pup_th_act: 'Aksi',
         pup_play: 'Putar', pup_view: 'Lihat', pup_hide: 'Tutup', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'Belum ada rekaman.',
@@ -5141,7 +5141,7 @@
         pup_step1: 'Drag the Pup button to your bookmarks bar (do not click it here). One bookmark for recording and replay.',
         pup_step2: 'On the target tab, click the Pup bookmark > Record, use the app as usual (pauses, menu hovers, clicks and typing are captured), then Stop & save. The scanner tab opens by itself and the recording appears in the table below.',
         pup_step3: 'To replay: click Play in the table. The target site opens in a new tab; click the Pup bookmark there and replay starts right away (real timing / 2x / fixed delay, with a visual cursor).',
-        pup_note: 'Password fields are not recorded (replaced by {{password}} and asked at replay). If popups are blocked or the site sends a COOP header, use Copy/Download JSON in the panel and Import here. Non-SPA apps (full reload on every page change): click the Pup bookmark again on each new page; the recording is stitched together and replay auto-continues from the next step. Pages on another domain (e.g. SSO login) are not merged. The only limit is idle: recording stops and saves automatically when there is no activity for longer than the "Idle limit" in the panel (default 2 minutes, 0 = no limit; if the popup is blocked, the JSON is downloaded). Delays, typing time and step count are unlimited. Same-origin iframes are recorded (clicks, typing, hover, activity); cross-origin iframes (e.g. third-party payment widgets) are not accessible to the browser. No-reclick alternative: record with DevTools (F12) > Recorder, export JSON, then Import here to manage / export to Puppeteer .js.',
+        pup_note: 'Password fields are not recorded (replaced by {{password}} and asked at replay). If popups are blocked or the site sends a COOP header, use Copy/Download JSON in the panel and Import here. Non-SPA apps (full reload on every page change): click the Pup bookmark again on each new page; the recording is stitched together and replay auto-continues from the next step. Pages on another domain (e.g. SSO login) are not merged. The only limit is idle: recording stops and saves automatically when there is no activity for longer than the "Idle limit" in the panel (default 2 minutes, 0 = no limit; if the popup is blocked, the JSON is downloaded). Delays and typing time are unlimited; every 5000 steps the recording is saved as one part and recording continues with the next part automatically. The Continue button in the panel records the next part after Stop / an idle stop. Same-origin iframes are recorded (clicks, typing, hover, activity); cross-origin iframes (e.g. third-party payment widgets) are not accessible to the browser. No-reclick alternative: record with DevTools (F12) > Recorder, export JSON, then Import here to manage / export to Puppeteer .js.',
         pup_list: 'Saved recordings', pup_select_all: 'Select all', pup_delete: 'Delete', pup_export: 'Export JSON', pup_import: 'Import JSON',
         pup_reload: 'Reload', pup_th_name: 'Name', pup_th_url: 'Start URL', pup_th_steps: 'Steps', pup_th_date: 'Created', pup_th_act: 'Actions',
         pup_play: 'Play', pup_view: 'View', pup_hide: 'Close', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'No recordings yet.',
@@ -5173,13 +5173,16 @@
       'Mulai otomatis...': 'Starting automatically...', 'mengetik': 'typing', '↻ Ulangi': '↻ Replay', 'langkah': 'step', 'jeda': 'wait', 'dtk': 's', 'Mulai dari langkah ': 'Start from step ', 'Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.': 'Non-SPA: after every page change, click the Pup bookmark again to continue.',
       'Pindah halaman. Klik bookmark Pup lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click the Pup bookmark again once the page has loaded to continue.', 'Lanjut otomatis dari langkah ': 'Auto-continuing from step ', 'Isi password lalu klik Putar.': 'Enter the password then click Play.',
       'Non-SPA: tiap pindah halaman, klik Pup Rec lagi untuk melanjutkan.': 'Non-SPA: after every page change, click Pup Rec again to continue.', 'Berhenti otomatis: tidak ada aktivitas lebih dari ': 'Stopped automatically: no activity for more than ', 'menit': 'minutes',
-'Batas idle (menit, 0 = tanpa batas)': 'Idle limit (minutes, 0 = no limit)', 'Iframe beda domain tidak bisa direkam: ': 'Cross-origin iframes cannot be recorded: ',
+'Batas idle (menit, 0 = tanpa batas)': 'Idle limit (minutes, 0 = no limit)', 'Lanjutkan': 'Continue', 'bagian': 'part',
+'Batas langkah tercapai (': 'Step limit reached (', 'Bagian sebelumnya disimpan, lanjut merekam': 'Previous part saved, now recording',
+'Penyimpanan sementara gagal (storage tab penuh/diblokir). Rekaman masih di memori: jangan reload, klik Stop & simpan sekarang.': 'Temporary save failed (tab storage full/blocked). The recording is only in memory: do not reload, click Stop & save now.', 'Iframe beda domain tidak bisa direkam: ': 'Cross-origin iframes cannot be recorded: ',
 'Peringatan: halaman ini bukan URL awal rekaman: ': 'Warning: this page is not the recording start URL: '
     });
 
     // ---- Dijalankan DI TAB TARGET (panel Rekam dari bookmarklet Pup).
     function pupRecorderMain(cfg) {
       var KEY = '__pupRec', IDLE_KEY = '__pupIdleMin'; // batas idle (menit) diatur di panel, diingat per situs
+      var PART_STEPS = 5000; // rekaman sepanjang ini disimpan sebagai satu bagian, lalu otomatis lanjut ke bagian berikutnya
       // Panel bisa digeser lewat judulnya (posisi diingat selama tab ini terbuka).
       function pupDrag(box, handle) {
         var on = false, dx = 0, dy = 0;
@@ -5211,13 +5214,17 @@
       nameIn.placeholder = "Nama rekaman";
       var info = el('div', { color: '#94a3b8' }, "Siap merekam.");
       var row = el('div', { display: 'flex', gap: '6px', flexWrap: 'wrap' });
-      var bRec = btn("Rekam", start), bStop = btn("Stop & simpan", stop), bCopy = btn("Salin JSON", copyJson), bDl = btn("Unduh JSON", downloadJson);
+      var bRec = btn("Rekam", function () { start(); }), bStop = btn("Stop & simpan", stop), bCopy = btn("Salin JSON", copyJson), bDl = btn("Unduh JSON", downloadJson);
+      // Lanjutkan: rekam bagian berikutnya dari halaman ini (setelah Stop / berhenti otomatis karena idle).
+      var bCont = btn("Lanjutkan", function () { cont(); }); bCont.style.display = 'none'; bCont.style.background = '#b45309';
       head.appendChild(btn("Tutup", function () { if (rec) stop(); ui.style.display = 'none'; }));
       pupDrag(ui, head);
       bRec.style.background = '#b91c1c';
-      [bRec, bStop, bCopy, bDl].forEach(function (b) { row.appendChild(b); });
+      [bRec, bCont, bStop, bCopy, bDl].forEach(function (b) { row.appendChild(b); });
       var hint = el('div', { color: '#f59e0b', fontSize: '11px' }, "Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.");
       var frameHint = el('div', { color: '#f59e0b', fontSize: '11px', display: 'none' }, '');
+      var warn = el('div', { color: '#fca5a5', fontSize: '11px', display: 'none' }, '');
+      var partNote = el('div', { color: '#fbbf24', fontSize: '11px', display: 'none' }, '');
       // Satu-satunya batas: idle. Tidak ada aktivitas selama N menit -> rekaman berhenti & disimpan. 0 = tanpa batas.
       var idleRow = el('label', { display: 'flex', gap: '6px', alignItems: 'center', fontSize: '11px' }, "Batas idle (menit, 0 = tanpa batas)");
       var idleIn = el('input', { width: '56px', background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155', borderRadius: '4px', padding: '2px 4px', font: 'inherit' });
@@ -5225,7 +5232,7 @@
       try { idleIn.value = localStorage.getItem(IDLE_KEY) || '2'; } catch (e) { idleIn.value = '2'; }
       idleIn.onchange = function () { try { localStorage.setItem(IDLE_KEY, idleIn.value); } catch (e) { /* abaikan */ } };
       idleRow.appendChild(idleIn);
-      ui.appendChild(head); ui.appendChild(nameIn); ui.appendChild(row); ui.appendChild(idleRow); ui.appendChild(hint); ui.appendChild(frameHint); ui.appendChild(info);
+      ui.appendChild(head); ui.appendChild(nameIn); ui.appendChild(row); ui.appendChild(idleRow); ui.appendChild(hint); ui.appendChild(frameHint); ui.appendChild(warn); ui.appendChild(partNote); ui.appendChild(info);
       document.body.appendChild(ui);
       function inUi(x) { return x && ui.contains(x); }
       function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, function (c) { return '\\' + c; }); }
@@ -5265,12 +5272,17 @@
         add(pathSel(x));
         return out.slice(0, 4).map(function (s) { return [s]; });
       }
+      // Simpan sementara ke sessionStorage; bila gagal (penuh/diblokir) tampilkan peringatan: rekaman hanya di memori.
+      function persistRec() {
+        try { sessionStorage.setItem(KEY, JSON.stringify(rec)); warn.style.display = 'none'; return true; }
+        catch (e) { warn.style.display = ''; warn.textContent = "Penyimpanan sementara gagal (storage tab penuh/diblokir). Rekaman masih di memori: jangan reload, klik Stop & simpan sekarang."; return false; }
+      }
       function save() {
         rec.lastAt = Date.now();
-        try { sessionStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* storage penuh: tetap di memori */ }
-        info.textContent = "Merekam... langkah: " + rec.steps.length;
+        persistRec();
+        info.textContent = "Merekam... langkah: " + rec.steps.length + (rec.part > 1 ? ' · ' + "bagian" + ' ' + rec.part : '');
       }
-      function push(step) { if (!rec) return; if (step.t == null) step.t = Date.now() - rec.created; rec.steps.push(step); save(); }
+      function push(step) { if (!rec) return; if (step.t == null) step.t = Date.now() - rec.created; rec.steps.push(step); save(); if (rec.steps.length >= PART_STEPS) nextPart("Batas langkah tercapai (" + PART_STEPS + "). "); }
       function last() { return rec && rec.steps[rec.steps.length - 1]; }
       function sameSel(a, b) { return a && b && JSON.stringify(a.selectors) === JSON.stringify(b.selectors); }
       function actionable(t) { return (t.closest && t.closest('button,a,input,select,textarea,label,summary,[role=button],[role=link],[role=menuitem],[role=tab],[role=option],[role=checkbox],[onclick]')) || t; }
@@ -5400,23 +5412,43 @@
         if (!rec) return;
         rec.lastAt = Date.now();
         if (touchT) return;
-        touchT = setTimeout(function () { touchT = 0; if (rec) { try { sessionStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* abaikan */ } } }, 5000);
+        touchT = setTimeout(function () { touchT = 0; if (rec) persistRec(); }, 5000);
       }
       hook(document); scanFrames();
       setInterval(scanFrames, 1000);
-      function start() {
+      function partTitle(base, n) { return base + ' (' + "bagian" + ' ' + n + ')'; }
+      function start(part, base) {
         if (rec) return;
-        rec = { active: true, title: nameIn.value.trim() || ('Rekaman ' + new Date().toLocaleString()), url: location.href, lastUrl: location.href, created: Date.now(),
+        var title = nameIn.value.trim() || ('Rekaman ' + new Date().toLocaleString());
+        if (part > 1) { title = partTitle(base, part); nameIn.value = title; }
+        bCont.style.display = 'none';
+        rec = { active: true, title: title, base: base || title, part: part || 1, url: location.href, lastUrl: location.href, created: Date.now(),
           steps: [{ t: 0, type: 'setViewport', width: window.innerWidth, height: window.innerHeight, deviceScaleFactor: 1, isMobile: false, hasTouch: false, isLandscape: window.innerWidth > window.innerHeight },
             { t: 0, type: 'navigate', url: location.href, assertedEvents: [{ type: 'navigation', url: location.href, title: document.title }] }] };
         ui.style.borderColor = '#ef4444'; save();
       }
       function stop() {
         if (!rec) { if (!lastRec) info.textContent = "Belum ada rekaman."; return; }
-        lastRec = { title: rec.title, url: rec.url, created: rec.created, origin: location.origin, steps: rec.steps };
+        lastRec = { title: rec.title, base: rec.base || rec.title, part: rec.part || 1, url: rec.url, created: rec.created, origin: location.origin, steps: rec.steps };
         rec = null; ui.style.borderColor = '#334155';
         try { sessionStorage.removeItem(KEY); } catch (e) { /* abaikan */ }
+        bCont.style.display = '';
         return send();
+      }
+      // Lanjutkan sebagai bagian berikutnya dari rekaman terakhir (mulai dari halaman ini).
+      function cont() {
+        if (rec || !lastRec) return;
+        if (lastRec.part === 1 && lastRec.title === lastRec.base) lastRec.title = partTitle(lastRec.base, 1);
+        start(lastRec.part + 1, lastRec.base);
+      }
+      // Bagian penuh: simpan bagian ini (scanner / unduh JSON bila popup diblokir) lalu langsung rekam bagian berikutnya.
+      function nextPart(why) {
+        var base = rec.base || rec.title, part = rec.part || 1;
+        if (part === 1 && rec.title === base) rec.title = partTitle(base, 1);
+        if (!stop()) downloadJson();
+        start(part + 1, base);
+        partNote.style.display = '';
+        partNote.textContent = why + "Bagian sebelumnya disimpan, lanjut merekam" + ' ' + "bagian" + ' ' + (part + 1) + '.';
       }
       function text() { return JSON.stringify(lastRec || rec, null, 2); }
       function copyJson() {
