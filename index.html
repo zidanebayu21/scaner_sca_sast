@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.15"></script>
+  <script src="i18n/i18n.js?v=1.16"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -674,6 +674,69 @@
         </template>
         <div class="muted" style="margin-top:6px">{{ t('mw_note') }}</div>
       </section>
+
+      <!-- Puppeteer Record -->
+      <section v-else-if="tab === 'pup'">
+        <h2 style="margin-top:0">{{ t('pup_title') }}</h2>
+        <p class="muted">{{ t('pup_intro') }}</p>
+        <ol class="muted" style="margin:0 0 10px 18px;padding:0">
+          <li>{{ t('pup_step1') }}</li>
+          <li>{{ t('pup_step2') }}</li>
+          <li>{{ t('pup_step3') }}</li>
+        </ol>
+        <div class="actions">
+          <a class="btn blue" :href="pupRecBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="pup.msg = t('bookmark_msg')">⏺ Pup Rec</a>
+          <a class="btn blue" :href="pupPlayBookmarklet" style="text-decoration:none;display:inline-block;text-align:center" @click.prevent="pup.msg = t('bookmark_msg')">▶ Pup Play</a>
+        </div>
+        <div class="muted" v-if="pup.msg" style="color:#f59e0b">{{ pup.msg }}</div>
+        <div class="bad" v-if="pup.err">{{ pup.err }}</div>
+        <div class="muted" style="margin-top:6px">{{ t('pup_note') }}</div>
+
+        <h3 style="margin-top:20px">{{ t('pup_list') }} ({{ pup.list.length }})</h3>
+        <div class="muted" v-if="pup.usage">{{ pup.usage }}</div>
+        <div class="actions">
+          <label><input type="checkbox" :checked="pupAllSel" :disabled="!pup.list.length" @change="pupToggleAll($event.target.checked)" /> {{ t('pup_select_all') }}</label>
+          <button class="btn gray" :disabled="!pupSelIds.length" @click="pupDelete">{{ t('pup_delete') }} ({{ pupSelIds.length }})</button>
+          <button class="btn gray" :disabled="!pupSelIds.length" @click="pupExportSel">{{ t('pup_export') }} ({{ pupSelIds.length }})</button>
+          <label class="btn gray" style="margin:0">{{ t('pup_import') }}<input type="file" accept=".json,application/json" multiple style="display:none" @change="pupImport" /></label>
+          <button class="btn gray" @click="pupLoad">{{ t('pup_reload') }}</button>
+        </div>
+        <div class="muted" v-if="pup.list.length">{{ t('pup_rename_hint') }}</div>
+        <div class="muted" v-else>{{ t('pup_empty') }}</div>
+        <table v-if="pup.list.length">
+          <thead><tr><th style="width:28px"></th><th>{{ t('pup_th_name') }}</th><th>{{ t('pup_th_url') }}</th><th>{{ t('pup_th_steps') }}</th><th>{{ t('pup_th_date') }}</th><th>{{ t('pup_th_act') }}</th></tr></thead>
+          <tbody>
+            <template v-for="r in pup.list" :key="r.id">
+              <tr>
+                <td><input type="checkbox" v-model="pup.sel[r.id]" /></td>
+                <td class="editable" @dblclick="pupStartRename(r)">
+                  <input v-if="pup.edit.id === r.id" v-focus type="text" class="cell-edit" v-model="pup.edit.value" @keyup.enter="pupSaveRename(r)" @keyup.esc="pup.edit.id = null" @blur="pupSaveRename(r)" />
+                  <span v-else>{{ r.title }}</span>
+                </td>
+                <td style="word-break:break-all">{{ r.url }}</td>
+                <td>{{ r.steps.length }}</td>
+                <td>{{ new Date(r.created).toLocaleString() }}</td>
+                <td>
+                  <div class="row" style="gap:6px;flex-wrap:wrap">
+                    <button class="btn" style="padding:5px 12px" @click="pupPlay(r)">{{ t('pup_play') }}</button>
+                    <button class="btn gray" @click="pup.view = pup.view === r.id ? null : r.id">{{ pup.view === r.id ? t('pup_hide') : t('pup_view') }}</button>
+                    <button class="btn gray" @click="pupExportJs(r)">{{ t('pup_js') }}</button>
+                    <button class="btn gray" @click="pupExportRecorder(r)">{{ t('pup_recjson') }}</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="pup.view === r.id">
+                <td colspan="6">
+                  <table style="margin-top:0;font-size:12px">
+                    <thead><tr><th>#</th><th>{{ t('pup_th_type') }}</th><th>{{ t('pup_th_target') }}</th><th>{{ t('pup_th_value') }}</th></tr></thead>
+                    <tbody><tr v-for="(s, i) in r.steps" :key="i"><td>{{ i + 1 }}</td><td>{{ s.type }}</td><td style="word-break:break-all">{{ pupStepTarget(s) }}</td><td style="word-break:break-all">{{ pupStepValue(s) }}</td></tr></tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
     </main>
     </div>
   </div>
@@ -721,7 +784,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.15';
+    const APP_VERSION = '1.16';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -5027,6 +5090,442 @@
       ]).join('\n'));
     }
 
+    // ============================================================
+    //  Puppeteer Record: bookmarklet "Pup Rec" merekam klik/ketik di tab target (format JSON
+    //  Chrome DevTools Recorder), lalu dikirim ke tab scanner lewat postMessage dan disimpan di
+    //  IndexedDB milik halaman ini. "Pup Play" memutar ulang rekaman di tab target.
+    //  Fungsi pupRecorderMain/pupPlayerMain dijadikan teks (toString) untuk bookmarklet, jadi
+    //  isinya harus mandiri (tanpa variabel dari luar) dan tidak memakai innerHTML/eval.
+    // ============================================================
+    const PUP_DB = 'scaPupRec', PUP_STORE = 'recs', PUP_MAX_STEPS = 5000;
+    const PUP_I18N = {
+      id: {
+        tab_pup: 'Puppeteer Record',
+        pup_title: 'Puppeteer Record (rekam & putar ulang di browser)',
+        pup_intro: 'Rekam klik dan ketikan di aplikasi target tanpa membuka DevTools. Hasilnya disimpan di browser ini (IndexedDB) dan bisa dikelola di sini: putar ulang, ekspor ke script Puppeteer / JSON Chrome Recorder, atau bagikan ke orang lain lewat Ekspor lalu Import.',
+        pup_step1: 'Seret tombol Pup Rec dan Pup Play ke bookmark bar (jangan diklik di sini).',
+        pup_step2: 'Di tab target, klik Pup Rec > Rekam, pakai aplikasi seperti biasa, lalu Stop & simpan. Tab scanner terbuka sendiri dan rekaman masuk ke tabel di bawah.',
+        pup_step3: 'Untuk memutar: klik Putar di tabel. Situs target terbuka di tab baru, lalu klik Pup Play dari bookmark bar di tab itu.',
+        pup_note: 'Isi field password tidak direkam (diganti {{password}}, diminta saat diputar). Kalau popup diblokir atau situs memasang header COOP, pakai Salin/Unduh JSON di panel lalu Import di sini. Reload halaman penuh menghentikan bookmarklet: klik lagi untuk melanjutkan rekaman / pemutaran.',
+        pup_list: 'Rekaman tersimpan', pup_select_all: 'Pilih semua', pup_delete: 'Hapus', pup_export: 'Ekspor JSON', pup_import: 'Import JSON',
+        pup_reload: 'Muat ulang', pup_th_name: 'Nama', pup_th_url: 'URL awal', pup_th_steps: 'Langkah', pup_th_date: 'Dibuat', pup_th_act: 'Aksi',
+        pup_play: 'Putar', pup_view: 'Lihat', pup_hide: 'Tutup', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'Belum ada rekaman.',
+        pup_th_type: 'Jenis', pup_th_target: 'Selector / URL', pup_th_value: 'Nilai', pup_rename_hint: 'Klik dua kali nama untuk mengganti',
+        pup_saved: 'Rekaman "{t}" tersimpan.', pup_deleted: '{n} rekaman dihapus.', pup_imported: '{n} rekaman di-import.', pup_import_bad: 'File tidak dikenali: {f}',
+        pup_confirm_del: 'Hapus {n} rekaman terpilih?', pup_play_msg: 'Tab target dibuka. Klik Pup Play dari bookmark bar di tab itu; rekaman "{t}" dikirim otomatis.',
+        pup_usage: 'Pemakaian storage browser: {u} dari kuota {q}', pup_no_idb: 'IndexedDB tidak tersedia di browser/mode ini.', pup_popup_blocked: 'Popup diblokir browser. Izinkan popup untuk halaman ini lalu coba lagi.'
+      },
+      en: {
+        tab_pup: 'Puppeteer Record',
+        pup_title: 'Puppeteer Record (record & replay in the browser)',
+        pup_intro: 'Record clicks and typing in the target app without opening DevTools. Recordings are stored in this browser (IndexedDB) and managed here: replay, export to a Puppeteer script / Chrome Recorder JSON, or share with others via Export then Import.',
+        pup_step1: 'Drag the Pup Rec and Pup Play buttons to your bookmarks bar (do not click them here).',
+        pup_step2: 'On the target tab, click Pup Rec > Record, use the app as usual, then Stop & save. The scanner tab opens by itself and the recording appears in the table below.',
+        pup_step3: 'To replay: click Play in the table. The target site opens in a new tab; click Pup Play from the bookmarks bar there.',
+        pup_note: 'Password fields are not recorded (replaced by {{password}} and asked at replay). If popups are blocked or the site sends a COOP header, use Copy/Download JSON in the panel and Import here. A full page reload stops the bookmarklet: click it again to continue recording / replaying.',
+        pup_list: 'Saved recordings', pup_select_all: 'Select all', pup_delete: 'Delete', pup_export: 'Export JSON', pup_import: 'Import JSON',
+        pup_reload: 'Reload', pup_th_name: 'Name', pup_th_url: 'Start URL', pup_th_steps: 'Steps', pup_th_date: 'Created', pup_th_act: 'Actions',
+        pup_play: 'Play', pup_view: 'View', pup_hide: 'Close', pup_js: 'Puppeteer .js', pup_recjson: 'Recorder JSON', pup_empty: 'No recordings yet.',
+        pup_th_type: 'Type', pup_th_target: 'Selector / URL', pup_th_value: 'Value', pup_rename_hint: 'Double-click a name to rename',
+        pup_saved: 'Recording "{t}" saved.', pup_deleted: '{n} recordings deleted.', pup_imported: '{n} recordings imported.', pup_import_bad: 'Unrecognized file: {f}',
+        pup_confirm_del: 'Delete {n} selected recordings?', pup_play_msg: 'Target tab opened. Click Pup Play from the bookmarks bar there; recording "{t}" is sent automatically.',
+        pup_usage: 'Browser storage used: {u} of {q} quota', pup_no_idb: 'IndexedDB is not available in this browser/mode.', pup_popup_blocked: 'The browser blocked the popup. Allow popups for this page and try again.'
+      }
+    };
+    Object.keys(PUP_I18N).forEach(l => { I18N[l] = Object.assign({}, PUP_I18N[l], I18N[l] || {}); });
+    // Teks panel bookmarklet (localizeScript menerjemahkan literal "..." lewat kamus ini).
+    Object.assign(TEXT_EN, {
+      'Rekam': 'Record', 'Stop & simpan': 'Stop & save', 'Salin JSON': 'Copy JSON', 'Unduh JSON': 'Download JSON', 'Tutup': 'Close',
+      'Nama rekaman': 'Recording name', 'Siap merekam.': 'Ready to record.', 'Merekam... langkah: ': 'Recording... steps: ',
+      'Lanjut merekam setelah reload. Langkah: ': 'Resumed after reload. Steps: ', 'Belum ada rekaman.': 'No recording yet.',
+      'Tersalin ke clipboard.': 'Copied to clipboard.', 'Mengirim ke tab scanner...': 'Sending to the scanner tab...',
+      'Tersimpan di tab scanner.': 'Saved in the scanner tab.', 'Popup diblokir. Pakai Salin/Unduh JSON lalu Import di scanner.': 'Popup blocked. Use Copy/Download JSON then Import in the scanner.',
+      'Tab scanner tidak merespons (popup/COOP). Pakai Salin/Unduh JSON lalu Import di scanner.': 'The scanner tab did not respond (popup/COOP). Use Copy/Download JSON then Import in the scanner.',
+      'Putar': 'Play', 'Lewati': 'Skip', 'Muat JSON': 'Load JSON', 'Tempel JSON rekaman di sini': 'Paste recording JSON here',
+      'Password untuk {{password}}': 'Password for {{password}}', 'Jeda (ms)': 'Delay (ms)', 'Meminta rekaman dari tab scanner...': 'Requesting the recording from the scanner tab...',
+      'Tidak ada tab scanner. Tempel JSON rekaman lalu Muat JSON.': 'No scanner tab. Paste the recording JSON then Load JSON.',
+      'JSON tidak valid.': 'Invalid JSON.', 'Siap diputar: ': 'Ready to play: ', ' langkah': ' steps', 'Selesai.': 'Done.', 'Dihentikan.': 'Stopped.',
+      'Elemen tidak ditemukan pada langkah ': 'Element not found at step ', 'Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click Pup Play again once the page has loaded to continue.',
+      'Lanjut dari langkah ': 'Continuing from step ', 'Peringatan: halaman ini bukan URL awal rekaman: ': 'Warning: this page is not the recording start URL: '
+    });
+
+    // ---- Dijalankan DI TAB TARGET (bookmarklet Pup Rec).
+    function pupRecorderMain(cfg) {
+      var KEY = '__pupRec';
+      if (window.__pupRecUi) { window.__pupRecUi.style.display = 'flex'; return; }
+      var rec = null, lastRec = null, lastUrl = location.href, scrollT = 0;
+      try { var saved = JSON.parse(sessionStorage.getItem(KEY) || 'null'); if (saved && saved.active) rec = saved; } catch (e) { rec = null; }
+      function el(tag, css, text) { var x = document.createElement(tag); if (css) Object.assign(x.style, css); if (text != null) x.textContent = text; return x; }
+      function btn(label, fn) { var b = el('button', { background: '#334155', color: '#e2e8f0', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '11px' }, label); b.onclick = fn; return b; }
+      var ui = el('div', { position: 'fixed', right: '12px', bottom: '12px', width: '300px', background: '#0f172a', color: '#e2e8f0', font: '12px/1.4 Consolas,monospace', border: '2px solid #334155', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,.4)', zIndex: 2147483647, display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px' });
+      window.__pupRecUi = ui;
+      var head = el('div', { display: 'flex', alignItems: 'center', gap: '6px' });
+      head.appendChild(el('b', { flex: '1' }, 'Pup Rec'));
+      var nameIn = el('input', { background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155', borderRadius: '4px', padding: '3px 6px', font: 'inherit' });
+      nameIn.placeholder = "Nama rekaman";
+      var info = el('div', { color: '#94a3b8' }, "Siap merekam.");
+      var row = el('div', { display: 'flex', gap: '6px', flexWrap: 'wrap' });
+      var bRec = btn("Rekam", start), bStop = btn("Stop & simpan", stop), bCopy = btn("Salin JSON", copyJson), bDl = btn("Unduh JSON", downloadJson);
+      head.appendChild(btn("Tutup", function () { if (rec) stop(); ui.style.display = 'none'; }));
+      bRec.style.background = '#b91c1c';
+      [bRec, bStop, bCopy, bDl].forEach(function (b) { row.appendChild(b); });
+      ui.appendChild(head); ui.appendChild(nameIn); ui.appendChild(row); ui.appendChild(info);
+      document.body.appendChild(ui);
+      function inUi(x) { return x && ui.contains(x); }
+      function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, function (c) { return '\\' + c; }); }
+      function attrSel(tag, a, v) { return tag + '[' + a + '="' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]'; }
+      function uniq(s) { try { return document.querySelectorAll(s).length === 1; } catch (e) { return false; } }
+      function goodId(id) { return id && !/\d{4,}/.test(id) && id.indexOf(':') < 0; }
+      function pathSel(x) {
+        var parts = [];
+        while (x && x.nodeType === 1 && x !== document.documentElement) {
+          if (goodId(x.id) && uniq('#' + cssEsc(x.id))) { parts.unshift('#' + cssEsc(x.id)); break; }
+          var tag = x.tagName.toLowerCase(), p = x.parentElement;
+          if (p) { var same = [].filter.call(p.children, function (c) { return c.tagName === x.tagName; }); if (same.length > 1) tag += ':nth-of-type(' + (same.indexOf(x) + 1) + ')'; }
+          parts.unshift(tag); x = p;
+        }
+        return parts.join(' > ');
+      }
+      function selectorsFor(x) {
+        var out = [], tag = x.tagName.toLowerCase();
+        function add(s) { if (s && out.indexOf(s) < 0 && uniq(s)) out.push(s); }
+        if (goodId(x.id)) add('#' + cssEsc(x.id));
+        ['data-testid', 'data-test', 'data-cy', 'name', 'aria-label', 'placeholder', 'title'].forEach(function (a) { var v = x.getAttribute(a); if (v) add(attrSel(tag, a, v)); });
+        var txt = (x.textContent || '').trim();
+        if (/^(button|a)$/.test(tag) && txt && txt.length <= 40 && x.children.length <= 2) out.push('text/' + txt);
+        add(pathSel(x));
+        return out.slice(0, 4).map(function (s) { return [s]; });
+      }
+      function save() {
+        try { sessionStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* storage penuh: tetap di memori */ }
+        info.textContent = "Merekam... langkah: " + rec.steps.length;
+      }
+      function push(step) { if (!rec) return; rec.steps.push(step); if (rec.steps.length > 5000) rec.steps.shift(); save(); }
+      function last() { return rec && rec.steps[rec.steps.length - 1]; }
+      function sameSel(a, b) { return a && b && JSON.stringify(a.selectors) === JSON.stringify(b.selectors); }
+      function actionable(t) { return (t.closest && t.closest('button,a,input,select,textarea,label,summary,[role=button],[role=link],[role=menuitem],[role=tab],[role=option],[role=checkbox],[onclick]')) || t; }
+      function isText(x) { return x && (x.tagName === 'TEXTAREA' || (x.tagName === 'INPUT' && !/^(checkbox|radio|file|button|submit|reset|image|range|color)$/i.test(x.type))); }
+      function valueOf(x) { return x.type === 'password' ? '{{password}}' : x.value; }
+      function recordChange(x) {
+        if (!rec || inUi(x)) return;
+        var st = { type: 'change', target: 'main', selectors: selectorsFor(x), value: valueOf(x) };
+        var l = last();
+        if (l && l.type === 'change' && sameSel(l, st)) { l.value = st.value; save(); return; }
+        push(st);
+      }
+      function onClick(e) {
+        if (!rec || inUi(e.target)) return;
+        var t = actionable(e.target), r = t.getBoundingClientRect();
+        push({ type: 'click', target: 'main', selectors: selectorsFor(t), offsetX: Math.round(e.clientX - r.left), offsetY: Math.round(e.clientY - r.top) });
+      }
+      function onChange(e) { var x = e.target; if (x.tagName === 'SELECT' || isText(x)) recordChange(x); }
+      function onKey(e) {
+        if (!rec || inUi(e.target) || ['Enter', 'Tab', 'Escape'].indexOf(e.key) < 0) return;
+        if (isText(e.target)) recordChange(e.target);
+        push({ type: 'keyDown', target: 'main', key: e.key });
+        push({ type: 'keyUp', target: 'main', key: e.key });
+      }
+      function onScroll() {
+        if (!rec) return;
+        clearTimeout(scrollT);
+        scrollT = setTimeout(function () {
+          var l = last(), st = { type: 'scroll', target: 'main', x: Math.round(window.scrollX), y: Math.round(window.scrollY) };
+          if (l && l.type === 'scroll' && !l.selectors) { l.x = st.x; l.y = st.y; save(); } else push(st);
+        }, 400);
+      }
+      function checkUrl() {
+        if (!rec || location.href === lastUrl) return;
+        lastUrl = location.href; rec.lastUrl = lastUrl;
+        // navigasi dicatat pada klik/Enter terakhir (maks 4 langkah ke belakang)
+        for (var i = rec.steps.length - 1; i >= Math.max(0, rec.steps.length - 4); i--) {
+          var l = rec.steps[i];
+          if (l.type === 'click' || l.type === 'keyDown') { l.assertedEvents = [{ type: 'navigation', url: lastUrl, title: document.title }]; break; }
+        }
+        save();
+      }
+      document.addEventListener('click', onClick, true);
+      document.addEventListener('change', onChange, true);
+      document.addEventListener('keydown', onKey, true);
+      window.addEventListener('scroll', onScroll, true);
+      setInterval(checkUrl, 400);
+      function start() {
+        if (rec) return;
+        rec = { active: true, title: nameIn.value.trim() || ('Rekaman ' + new Date().toLocaleString()), url: location.href, lastUrl: location.href, created: Date.now(),
+          steps: [{ type: 'setViewport', width: window.innerWidth, height: window.innerHeight, deviceScaleFactor: 1, isMobile: false, hasTouch: false, isLandscape: window.innerWidth > window.innerHeight },
+            { type: 'navigate', url: location.href, assertedEvents: [{ type: 'navigation', url: location.href, title: document.title }] }] };
+        ui.style.borderColor = '#ef4444'; save();
+      }
+      function stop() {
+        if (!rec) { if (!lastRec) info.textContent = "Belum ada rekaman."; return; }
+        lastRec = { title: rec.title, url: rec.url, created: rec.created, origin: location.origin, steps: rec.steps };
+        rec = null; ui.style.borderColor = '#334155';
+        try { sessionStorage.removeItem(KEY); } catch (e) { /* abaikan */ }
+        send();
+      }
+      function text() { return JSON.stringify(lastRec || rec, null, 2); }
+      function copyJson() {
+        if (!lastRec && !rec) { info.textContent = "Belum ada rekaman."; return; }
+        var s = text();
+        function fb() { var ta = el('textarea'); ta.value = s; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) { /* abaikan */ } ta.remove(); }
+        if (navigator.clipboard) navigator.clipboard.writeText(s).catch(fb); else fb();
+        info.textContent = "Tersalin ke clipboard.";
+      }
+      function downloadJson() {
+        if (!lastRec && !rec) { info.textContent = "Belum ada rekaman."; return; }
+        var a = el('a'), r = lastRec || rec;
+        a.href = URL.createObjectURL(new Blob([text()], { type: 'application/json' }));
+        a.download = (r.title || 'rekaman').replace(/[^\w.-]+/g, '_') + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      function send() {
+        if (!cfg.app) { info.textContent = "Tab scanner tidak merespons (popup/COOP). Pakai Salin/Unduh JSON lalu Import di scanner."; return; }
+        var w = null, done = false;
+        try { w = window.open(cfg.app + '#pup-import', '_blank'); } catch (e) { w = null; }
+        if (!w) { info.textContent = "Popup diblokir. Pakai Salin/Unduh JSON lalu Import di scanner."; return; }
+        info.textContent = "Mengirim ke tab scanner...";
+        var target = cfg.origin && cfg.origin !== 'null' ? cfg.origin : '*';
+        function onMsg(e) {
+          if (e.source !== w || !e.data) return;
+          if (e.data.type === 'pup-ready') w.postMessage({ type: 'pup-rec', rec: lastRec }, target);
+          if (e.data.type === 'pup-saved') { done = true; info.textContent = "Tersimpan di tab scanner."; window.removeEventListener('message', onMsg); }
+        }
+        window.addEventListener('message', onMsg);
+        setTimeout(function () { if (!done) info.textContent = "Tab scanner tidak merespons (popup/COOP). Pakai Salin/Unduh JSON lalu Import di scanner."; }, 10000);
+      }
+      if (rec) {
+        if (rec.lastUrl && rec.lastUrl !== location.href) { lastUrl = rec.lastUrl; checkUrl(); }
+        ui.style.borderColor = '#ef4444'; nameIn.value = rec.title;
+        info.textContent = "Lanjut merekam setelah reload. Langkah: " + rec.steps.length;
+      }
+    }
+
+    // ---- Dijalankan DI TAB TARGET (bookmarklet Pup Play).
+    function pupPlayerMain(cfg) {
+      var KEY = '__pupPlay';
+      if (window.__pupPlayUi) { window.__pupPlayUi.style.display = 'flex'; return; }
+      var rec = null, idx = 0, running = false, stopFlag = false;
+      function el(tag, css, text) { var x = document.createElement(tag); if (css) Object.assign(x.style, css); if (text != null) x.textContent = text; return x; }
+      function btn(label, fn) { var b = el('button', { background: '#334155', color: '#e2e8f0', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '11px' }, label); b.onclick = fn; return b; }
+      var inputCss = { background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155', borderRadius: '4px', padding: '3px 6px', font: 'inherit' };
+      var ui = el('div', { position: 'fixed', right: '12px', bottom: '12px', width: '320px', background: '#0f172a', color: '#e2e8f0', font: '12px/1.4 Consolas,monospace', border: '2px solid #334155', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,.4)', zIndex: 2147483647, display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px' });
+      window.__pupPlayUi = ui;
+      var head = el('div', { display: 'flex', alignItems: 'center', gap: '6px' });
+      head.appendChild(el('b', { flex: '1' }, 'Pup Play'));
+      head.appendChild(btn("Tutup", function () { stopFlag = true; ui.style.display = 'none'; }));
+      var ta = el('textarea', Object.assign({ height: '60px', resize: 'vertical' }, inputCss)); ta.placeholder = "Tempel JSON rekaman di sini";
+      var pw = el('input', inputCss); pw.type = 'password'; pw.placeholder = "Password untuk {{password}}"; pw.style.display = 'none';
+      var delayRow = el('label', { display: 'flex', gap: '6px', alignItems: 'center' }, "Jeda (ms)");
+      var delay = el('input', Object.assign({ width: '70px' }, inputCss)); delay.type = 'number'; delay.value = '600'; delayRow.appendChild(delay);
+      var row = el('div', { display: 'flex', gap: '6px', flexWrap: 'wrap' });
+      var bPlay = btn("Putar", play); bPlay.style.background = '#16a34a';
+      [btn("Muat JSON", function () { load(ta.value); }), bPlay, btn("Stop", function () { stopFlag = true; }), btn("Lewati", function () { idx++; info.textContent = "Lanjut dari langkah " + (idx + 1); })].forEach(function (b) { row.appendChild(b); });
+      var info = el('div', { color: '#94a3b8', maxHeight: '120px', overflow: 'auto', whiteSpace: 'pre-wrap' }, '');
+      [head, ta, pw, delayRow, row, info].forEach(function (x) { ui.appendChild(x); });
+      document.body.appendChild(ui);
+      function needsPw() { return rec && JSON.stringify(rec.steps).indexOf('{{password}}') >= 0; }
+      function setRec(r, from) {
+        if (!r || !Array.isArray(r.steps)) { info.textContent = "JSON tidak valid."; return false; }
+        rec = r; idx = from || 0; ta.style.display = 'none';
+        pw.style.display = needsPw() ? '' : 'none';
+        info.textContent = "Siap diputar: " + (r.title || '') + ' (' + r.steps.length + " langkah" + ')';
+        var nav = r.steps.filter(function (s) { return s.type === 'navigate'; })[0];
+        if (!from && nav && nav.url.split('#')[0] !== location.href.split('#')[0]) info.textContent += '\n' + "Peringatan: halaman ini bukan URL awal rekaman: " + nav.url;
+        return true;
+      }
+      function load(s) { try { setRec(JSON.parse(s)); } catch (e) { info.textContent = "JSON tidak valid."; } }
+      function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+      function query(sel) {
+        try {
+          if (sel.indexOf('text/') === 0) {
+            var want = sel.slice(5);
+            return [].filter.call(document.querySelectorAll('button,a,[role=button],[role=link],[role=menuitem],[role=tab],label,span,div'), function (x) { return (x.textContent || '').trim() === want && x.offsetParent !== null; })[0] || null;
+          }
+          if (sel.indexOf('aria/') === 0) { var n = sel.slice(5).replace(/"/g, '\\"'); return document.querySelector('[aria-label="' + n + '"]') || query('text/' + sel.slice(5)); }
+          if (sel.indexOf('xpath/') === 0) return document.evaluate(sel.slice(6), document, null, 9, null).singleNodeValue;
+          if (sel.indexOf('pierce/') === 0) return document.querySelector(sel.slice(7));
+          return document.querySelector(sel);
+        } catch (e) { return null; }
+      }
+      function find(groups, ms) {
+        var end = Date.now() + ms;
+        return new Promise(function (resolve) {
+          (function tick() {
+            for (var i = 0; i < groups.length; i++) { var g = groups[i], x = query(Array.isArray(g) ? g[g.length - 1] : g); if (x) return resolve(x); }
+            if (Date.now() > end || stopFlag) return resolve(null);
+            setTimeout(tick, 200);
+          })();
+        });
+      }
+      function fire(x, type, Ctor, extra) { var ev = new Ctor(type, Object.assign({ bubbles: true, cancelable: true, composed: true }, extra || {})); return x.dispatchEvent(ev); }
+      function setValue(x, v) {
+        x.focus();
+        if (x.tagName === 'SELECT') { x.value = v; }
+        else {
+          var proto = x.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          var d = Object.getOwnPropertyDescriptor(proto, 'value');
+          if (d && d.set) d.set.call(x, v); else x.value = v;
+        }
+        fire(x, 'input', Event); fire(x, 'change', Event);
+      }
+      function persist() { try { sessionStorage.setItem(KEY, JSON.stringify({ rec: rec, idx: idx })); } catch (e) { /* abaikan */ } }
+      function run(s) {
+        if (s.type === 'setViewport' || s.type === 'emulateNetworkConditions') return Promise.resolve(true);
+        if (s.type === 'navigate') {
+          if (idx === 0 || s.url.split('#')[0] === location.href.split('#')[0]) return Promise.resolve(true);
+          idx++; persist(); info.textContent = "Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan."; location.href = s.url; return Promise.resolve(false);
+        }
+        if (s.type === 'keyDown' || s.type === 'keyUp') {
+          var a = document.activeElement || document.body;
+          var ok = fire(a, s.type === 'keyDown' ? 'keydown' : 'keyup', KeyboardEvent, { key: s.key });
+          if (s.type === 'keyDown' && s.key === 'Enter' && ok && a.form && a.tagName === 'INPUT') { if (a.form.requestSubmit) a.form.requestSubmit(); else a.form.submit(); }
+          return Promise.resolve(true);
+        }
+        if (s.type === 'scroll' && !s.selectors) { window.scrollTo(s.x || 0, s.y || 0); return Promise.resolve(true); }
+        if (!s.selectors) return Promise.resolve(true);
+        return find(s.selectors, 10000).then(function (x) {
+          if (!x) { info.textContent = "Elemen tidak ditemukan pada langkah " + (idx + 1) + ': ' + JSON.stringify(s.selectors[0] || ''); return null; }
+          if (x.scrollIntoView) x.scrollIntoView({ block: 'center' });
+          x.style.outline = '2px solid #f59e0b'; setTimeout(function () { x.style.outline = ''; }, 500);
+          if (s.type === 'click' || s.type === 'doubleClick') {
+            fire(x, 'pointerdown', PointerEvent); fire(x, 'mousedown', MouseEvent); if (x.focus) x.focus();
+            fire(x, 'pointerup', PointerEvent); fire(x, 'mouseup', MouseEvent); x.click();
+            if (s.type === 'doubleClick') fire(x, 'dblclick', MouseEvent);
+          } else if (s.type === 'change') {
+            setValue(x, String(s.value).split('{{password}}').join(pw.value));
+          } else if (s.type === 'hover') { fire(x, 'mouseover', MouseEvent); fire(x, 'mouseenter', MouseEvent); }
+          else if (s.type === 'scroll' && x.scrollTo) { x.scrollTo(s.x || 0, s.y || 0); }
+          return true;
+        });
+      }
+      function play() {
+        if (!rec) { info.textContent = "Tidak ada tab scanner. Tempel JSON rekaman lalu Muat JSON."; return; }
+        if (running) return;
+        running = true; stopFlag = false; ui.style.borderColor = '#16a34a';
+        (function next() {
+          if (stopFlag) { running = false; ui.style.borderColor = '#334155'; info.textContent = "Dihentikan."; return; }
+          if (idx >= rec.steps.length) { running = false; ui.style.borderColor = '#334155'; info.textContent = "Selesai."; try { sessionStorage.removeItem(KEY); } catch (e) { /* abaikan */ } return; }
+          persist();
+          info.textContent = (idx + 1) + '/' + rec.steps.length + ' ' + rec.steps[idx].type;
+          run(rec.steps[idx]).then(function (r) {
+            if (r === false) { running = false; return; }
+            if (r === null) { running = false; ui.style.borderColor = '#b45309'; return; }
+            idx++; return sleep(Math.max(0, +delay.value || 0)).then(next);
+          });
+        })();
+      }
+      var resume = null;
+      try { resume = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { resume = null; }
+      if (resume && resume.rec) { setRec(resume.rec, resume.idx); info.textContent = "Lanjut dari langkah " + (resume.idx + 1); return; }
+      if (window.opener) {
+        info.textContent = "Meminta rekaman dari tab scanner...";
+        window.addEventListener('message', function (e) { if (e.data && e.data.type === 'pup-play' && e.source === window.opener && !rec) setRec(e.data.rec); });
+        try { window.opener.postMessage({ type: 'pup-need' }, cfg.origin && cfg.origin !== 'null' ? cfg.origin : '*'); } catch (e) { /* opener terputus */ }
+        setTimeout(function () { if (!rec) info.textContent = "Tidak ada tab scanner. Tempel JSON rekaman lalu Muat JSON."; }, 4000);
+      } else info.textContent = "Tidak ada tab scanner. Tempel JSON rekaman lalu Muat JSON.";
+    }
+    function pupAppCfg() {
+      const app = location.protocol === 'file:' ? '' : location.href.split('#')[0];
+      return { app, origin: location.origin };
+    }
+    function pupScript(fn) { return localizeScript('(' + fn.toString() + ')(' + JSON.stringify(pupAppCfg()) + ');'); }
+
+    // ---- IndexedDB milik halaman scanner.
+    function pupOpen() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error(tr('pup_no_idb'))); return; }
+        const r = indexedDB.open(PUP_DB, 1);
+        r.onupgradeneeded = () => { r.result.createObjectStore(PUP_STORE, { keyPath: 'id', autoIncrement: true }); };
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+      });
+    }
+    function pupTx(mode, work) {
+      return pupOpen().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(PUP_STORE, mode), st = tx.objectStore(PUP_STORE);
+        let out;
+        work(st, v => { out = v; });
+        tx.oncomplete = () => { db.close(); resolve(out); };
+        tx.onerror = () => { db.close(); reject(tx.error); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      }));
+    }
+    function pupAll() { return pupTx('readonly', (st, set) => { const r = st.getAll(); r.onsuccess = () => set(r.result || []); }); }
+    function pupPutMany(recs) { return pupTx('readwrite', st => { recs.forEach(r => st.put(r)); }); }
+    function pupDelMany(ids) { return pupTx('readwrite', st => { ids.forEach(id => st.delete(id)); }); }
+    // Rekaman dari bookmarklet/file -> bentuk simpan; null bila bukan rekaman.
+    function pupNormalize(o) {
+      if (!o || typeof o !== 'object' || !Array.isArray(o.steps) || !o.steps.length || o.steps.length > PUP_MAX_STEPS) return null;
+      if (!o.steps.every(s => s && typeof s === 'object' && typeof s.type === 'string')) return null;
+      const nav = o.steps.find(s => s.type === 'navigate' && typeof s.url === 'string');
+      const url = String(o.url || (nav && nav.url) || '');
+      return { title: String(o.title || 'Rekaman').slice(0, 200), url, origin: String(o.origin || (url ? (() => { try { return new URL(url).origin; } catch (e) { return ''; } })() : '')),
+        created: Number(o.created) || Date.now(), updated: Date.now(), steps: o.steps };
+    }
+    function pupFromFile(obj) {
+      if (obj && obj.type === 'pup-bundle' && Array.isArray(obj.recordings)) return obj.recordings.map(pupNormalize).filter(Boolean);
+      if (Array.isArray(obj)) return obj.map(pupNormalize).filter(Boolean);
+      const one = pupNormalize(obj);
+      return one ? [one] : [];
+    }
+    function pupRecorderJson(r) { return { title: r.title, steps: r.steps }; }
+    function pupFileName(s, ext) { return (String(s || 'rekaman').replace(/[^\w.-]+/g, '_').slice(0, 80) || 'rekaman') + ext; }
+    function pupDownload(name, text, type) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type }));
+      a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }
+    function pupStepTarget(s) {
+      if (s.url) return s.url;
+      if (s.selectors && s.selectors.length) { const g = s.selectors[0]; return Array.isArray(g) ? g.join(' >>> ') : String(g); }
+      if (s.type === 'scroll') return 'x=' + (s.x || 0) + ' y=' + (s.y || 0);
+      if (s.width) return s.width + 'x' + s.height;
+      return '';
+    }
+    function pupStepValue(s) { return s.value != null ? String(s.value) : s.key ? s.key : ''; }
+    // Script Node + Puppeteer (npm i puppeteer). Password dari env PUP_PASSWORD.
+    function pupToPuppeteer(r) {
+      const J = v => JSON.stringify(v);
+      const val = v => (String(v).indexOf('{{password}}') >= 0 ? J(String(v)) + ".split('{{password}}').join(process.env.PUP_PASSWORD || '')" : J(String(v)));
+      const sels = s => J((s.selectors || []).map(g => (Array.isArray(g) ? g[g.length - 1] : g)).map(x => (x.indexOf('text/') === 0 ? '::-p-text(' + x.slice(5) + ')' : x.indexOf('aria/') === 0 ? '::-p-aria(' + x.slice(5) + ')' : x.indexOf('xpath/') === 0 ? '::-p-xpath(' + x.slice(6) + ')' : x.indexOf('pierce/') === 0 ? 'pierce/' + x.slice(7) : x)));
+      const lines = [
+        '// ' + r.title,
+        '// Ekspor dari Puppeteer Record. Jalankan: npm i puppeteer && node ' + pupFileName(r.title, '.js'),
+        '// Field password: set env PUP_PASSWORD sebelum menjalankan.',
+        "const puppeteer = require('puppeteer');",
+        'async function find(page, sels) {',
+        '  for (const s of sels) { try { return await page.waitForSelector(s, { visible: true, timeout: 3000 }); } catch (e) { /* coba selector berikutnya */ } }',
+        "  throw new Error('Elemen tidak ditemukan: ' + JSON.stringify(sels));",
+        '}',
+        'async function settle(page) { await page.waitForNetworkIdle({ idleTime: 500, timeout: 10000 }).catch(() => {}); }',
+        '(async () => {',
+        '  const browser = await puppeteer.launch({ headless: false });',
+        '  const page = await browser.newPage();',
+        '  try {'
+      ];
+      r.steps.forEach((s, i) => {
+        const nav = Array.isArray(s.assertedEvents) && s.assertedEvents.some(a => a.type === 'navigation');
+        lines.push('    // ' + (i + 1) + '. ' + s.type);
+        if (s.type === 'setViewport') lines.push('    await page.setViewport({ width: ' + (+s.width || 1280) + ', height: ' + (+s.height || 800) + ' });');
+        else if (s.type === 'navigate') lines.push('    await page.goto(' + J(s.url) + ", { waitUntil: 'networkidle2' });");
+        else if (s.type === 'click' || s.type === 'doubleClick') lines.push('    await (await find(page, ' + sels(s) + ')).click(' + (s.type === 'doubleClick' ? '{ clickCount: 2 }' : '') + ');');
+        else if (s.type === 'change') {
+          lines.push('    { const el = await find(page, ' + sels(s) + ');');
+          lines.push("      if (await el.evaluate(e => e.tagName === 'SELECT')) await el.select(" + val(s.value) + ');');
+          lines.push("      else { await el.click({ clickCount: 3 }); await el.press('Backspace'); await el.type(" + val(s.value) + '); } }');
+        } else if (s.type === 'keyDown') lines.push('    await page.keyboard.down(' + J(s.key) + ');');
+        else if (s.type === 'keyUp') lines.push('    await page.keyboard.up(' + J(s.key) + ');');
+        else if (s.type === 'scroll') lines.push('    await page.evaluate((x, y) => window.scrollTo(x, y), ' + (+s.x || 0) + ', ' + (+s.y || 0) + ');');
+        else if (s.type === 'hover') lines.push('    await (await find(page, ' + sels(s) + ')).hover();');
+        else if (s.type === 'waitForElement') lines.push('    await find(page, ' + sels(s) + ');');
+        else lines.push('    // (langkah ' + J(s.type) + ' dilewati)');
+        if (nav) lines.push('    await settle(page);');
+      });
+      lines.push('  } finally {', '    // await browser.close();', '  }', '})();');
+      return lines.join('\n') + '\n';
+    }
+    function pupFmtBytes(n) { if (!n && n !== 0) return '?'; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return n.toFixed(i ? 1 : 0) + ' ' + u[i]; }
+
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
     // Daftar tab atas + kunci localStorage untuk setelan tab mana yang ditampilkan.
@@ -5042,7 +5541,8 @@
       { key: 'dbg', label: 'Hook Debug' },
       { key: 'rate', label: 'Rate Limiter (dari curl)' },
       { key: 'rto', label: 'RTO (kirim lambat)' },
-      { key: 'mw', label: 'Cek Basic Middleware' }
+      { key: 'mw', label: 'Cek Basic Middleware' },
+      { key: 'pup', label: 'Puppeteer Record' }
     ];
     const DEFAULT_PROJECT = 'Tanpa nama';
     // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
@@ -5112,6 +5612,7 @@
           // Cek Basic Middleware: target punya user sendiri; default dapat diedit.
           mw: { url: 'https://httpbin.org/post', method: 'POST', delayMs: 150, sizesKb: [2, 10, 500], busy: false, stop: false, copied: false, csvCopied: false, jsonCopied: false, msg: '', editor: { method: 'POST', url: 'https://httpbin.org/post', headers: 'Content-Type: application/json', body: '{"username":"test","password":"test"}', busy: false, status: null, respHeaders: '', respBody: '', error: '', msg: '' } },
           mwResults: [],
+          pup: { list: [], sel: {}, view: null, edit: { id: null, value: '' }, msg: '', err: '', usage: '' },
           sideW: 330, resizing: false, persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -5166,6 +5667,10 @@
           this.mwResults.forEach(r => { c[r.verdict] = (c[r.verdict] || 0) + 1; });
           return tr('mw_sum_pass') + ': ' + c.LULUS + ' · ' + tr('mw_sum_fail') + ': ' + c.GAGAL + ' · ' + tr('mw_sum_err') + ': ' + c.ERROR;
         },
+        pupRecBookmarklet() { return 'javascript:' + encodeURIComponent(pupScript(pupRecorderMain)); },
+        pupPlayBookmarklet() { return 'javascript:' + encodeURIComponent(pupScript(pupPlayerMain)); },
+        pupSelIds() { return this.pup.list.filter(r => this.pup.sel[r.id]).map(r => r.id); },
+        pupAllSel() { return this.pup.list.length > 0 && this.pupSelIds.length === this.pup.list.length; },
         activeItems() { return this.items.filter(it => it.enabled); },
         allEnabled() { return this.items.length > 0 && this.activeItems.length === this.items.length; },
         projectNames() { return [...new Set(this.items.map(it => it.project))]; },
@@ -5206,6 +5711,7 @@
             this.nextId = this.items.reduce((m, it) => Math.max(m, it.id || 0), 0) + 1;
           }
         } catch (e) { /* data rusak / localStorage tidak tersedia: mulai kosong */ }
+        this.pupInit();
       },
       watch: {
         items: { deep: true, handler() { this.saveItems(); } },
@@ -5217,6 +5723,120 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
+        // ---- Puppeteer Record
+        pupStepTarget(s) { return pupStepTarget(s); },
+        pupStepValue(s) { return pupStepValue(s); },
+        pupErr(err) { this.pup.err = String((err && err.message) || err); },
+        pupInit() {
+          this.pupLoad();
+          try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* abaikan */ }
+          try { this.pupBc = new BroadcastChannel('scaPupRec'); this.pupBc.onmessage = () => { this.pupLoad(); }; } catch (e) { this.pupBc = null; }
+          window.addEventListener('message', e => { this.pupOnMessage(e); });
+          if (location.hash !== '#pup-import') return;
+          // Dibuka oleh bookmarklet Pup Rec: beri tahu tab target bahwa halaman ini siap menerima rekaman.
+          this.tab = 'pup';
+          try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { /* abaikan */ }
+          if (!window.opener) return;
+          let n = 0;
+          const timer = setInterval(() => {
+            if (++n > 30 || this.pupGot) { clearInterval(timer); return; }
+            try { window.opener.postMessage({ type: 'pup-ready' }, '*'); } catch (e) { clearInterval(timer); }
+          }, 300);
+        },
+        pupOnMessage(e) {
+          const d = e.data;
+          if (!d || typeof d !== 'object') return;
+          const back = e.origin && e.origin !== 'null' ? e.origin : '*';
+          if (d.type === 'pup-rec' && e.source && e.source === window.opener && !this.pupGot) {
+            const r = pupNormalize(d.rec);
+            if (!r) return;
+            this.pupGot = true;
+            pupPutMany([r]).then(() => {
+              this.pup.err = ''; this.pup.msg = this.t('pup_saved').replace('{t}', r.title);
+              try { e.source.postMessage({ type: 'pup-saved' }, back); } catch (err) { /* tab target sudah ditutup */ }
+              this.pupNotify();
+              return this.pupLoad();
+            }).catch(err => this.pupErr(err));
+          }
+          if (d.type === 'pup-need' && this.pupArmed && this.pupWin && e.source === this.pupWin) {
+            try { e.source.postMessage({ type: 'pup-play', rec: pupRecorderJson(JSON.parse(JSON.stringify(this.pupArmed))) }, back); } catch (err) { this.pupErr(err); }
+          }
+        },
+        pupNotify() { try { if (this.pupBc) this.pupBc.postMessage('changed'); } catch (e) { /* abaikan */ } },
+        pupLoad() {
+          return pupAll().then(list => {
+            list.sort((a, b) => (b.created || 0) - (a.created || 0));
+            const sel = {};
+            list.forEach(r => { if (this.pup.sel[r.id]) sel[r.id] = true; });
+            this.pup.list = list; this.pup.sel = sel;
+            if (navigator.storage && navigator.storage.estimate) {
+              navigator.storage.estimate().then(est => { this.pup.usage = this.t('pup_usage').replace('{u}', pupFmtBytes(est.usage)).replace('{q}', pupFmtBytes(est.quota)); }).catch(() => { /* abaikan */ });
+            }
+          }).catch(err => this.pupErr(err));
+        },
+        pupToggleAll(on) {
+          const sel = {};
+          if (on) this.pup.list.forEach(r => { sel[r.id] = true; });
+          this.pup.sel = sel;
+        },
+        pupDelete() {
+          const ids = this.pupSelIds;
+          if (!ids.length || !confirm(this.t('pup_confirm_del').replace('{n}', ids.length))) return;
+          pupDelMany(ids).then(() => {
+            this.pup.err = ''; this.pup.msg = this.t('pup_deleted').replace('{n}', ids.length);
+            if (ids.includes(this.pup.view)) this.pup.view = null;
+            this.pupNotify();
+            return this.pupLoad();
+          }).catch(err => this.pupErr(err));
+        },
+        pupExportSel() {
+          const recs = this.pup.list.filter(r => this.pup.sel[r.id]);
+          if (!recs.length) return;
+          if (recs.length === 1) { this.pupExportRecorder(recs[0]); return; }
+          const bundle = { type: 'pup-bundle', version: 1, exported: new Date().toISOString(),
+            recordings: recs.map(r => ({ title: r.title, url: r.url, origin: r.origin, created: r.created, steps: r.steps })) };
+          pupDownload('puppeteer_record_' + recs.length + '.json', JSON.stringify(bundle, null, 2), 'application/json');
+        },
+        pupExportRecorder(r) { pupDownload(pupFileName(r.title, '.json'), JSON.stringify(pupRecorderJson(r), null, 2), 'application/json'); },
+        pupExportJs(r) { pupDownload(pupFileName(r.title, '.js'), pupToPuppeteer(r), 'text/javascript'); },
+        pupImport(ev) {
+          const files = Array.from(ev.target.files || []);
+          ev.target.value = '';
+          if (!files.length) return;
+          const bad = [];
+          let n = 0;
+          Promise.all(files.map(f => f.text().then(txt => {
+            let o = null;
+            try { o = JSON.parse(txt); } catch (e) { bad.push(f.name); return []; }
+            const recs = pupFromFile(o);
+            if (!recs.length) bad.push(f.name);
+            return recs;
+          }))).then(arr => {
+            const all = [].concat(...arr);
+            n = all.length;
+            return all.length ? pupPutMany(all) : null;
+          }).then(() => {
+            this.pup.err = bad.length ? this.t('pup_import_bad').replace('{f}', bad.join(', ')) : '';
+            this.pup.msg = this.t('pup_imported').replace('{n}', n);
+            this.pupNotify();
+            return this.pupLoad();
+          }).catch(err => this.pupErr(err));
+        },
+        pupPlay(r) {
+          const w = window.open(r.url || 'about:blank', '_blank');
+          if (!w) { this.pup.err = this.t('pup_popup_blocked'); return; }
+          this.pupWin = w; this.pupArmed = r;
+          this.pup.err = ''; this.pup.msg = this.t('pup_play_msg').replace('{t}', r.title);
+        },
+        pupStartRename(r) { this.pup.edit = { id: r.id, value: r.title }; },
+        pupSaveRename(r) {
+          if (this.pup.edit.id !== r.id) return;
+          const v = this.pup.edit.value.trim();
+          this.pup.edit = { id: null, value: '' };
+          if (!v || v === r.title) return;
+          const upd = Object.assign(JSON.parse(JSON.stringify(r)), { title: v.slice(0, 200), updated: Date.now() });
+          pupPutMany([upd]).then(() => { this.pupNotify(); return this.pupLoad(); }).catch(err => this.pupErr(err));
+        },
         // ---- Smart Decode
         tipOf(key) { return tips()[this.t(key)] || ''; },
         decConfClass(c) { return c === 'high' ? 'okp' : c === 'med' ? 'medp' : 'errp'; },
