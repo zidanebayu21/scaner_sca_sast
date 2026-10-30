@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.19"></script>
+  <script src="i18n/i18n.js?v=1.20"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -743,7 +743,7 @@
                     <td colspan="7">
                       <table style="margin-top:0;font-size:12px">
                         <thead><tr><th>#</th><th>{{ t('pup_th_gap') }}</th><th>{{ t('pup_th_type') }}</th><th>{{ t('pup_th_target') }}</th><th>{{ t('pup_th_value') }}</th></tr></thead>
-                        <tbody><tr v-for="(s, i) in r.steps" :key="i"><td>{{ i + 1 }}</td><td style="white-space:nowrap;min-width:110px">{{ pupGap(r, i) }}<div v-if="pupGapPct(r, i)" :style="{ height: '4px', marginTop: '2px', borderRadius: '2px', background: 'var(--accent)', width: pupGapPct(r, i) + '%' }"></div></td><td>{{ s.type }}</td><td style="word-break:break-all">{{ pupStepTarget(s) }}</td><td style="word-break:break-all">{{ pupStepValue(s) }}</td></tr></tbody>
+                        <tbody><tr v-for="(s, i) in r.steps" :key="i"><td>{{ i + 1 }}</td><td class="editable" style="white-space:nowrap;min-width:120px" :title="i > 0 ? t('pup_gap_hint') : ''" @click="i > 0 && pup.gapEdit.id !== r.id && pupStartGap(r, i)"><input v-if="pup.gapEdit.id === r.id && pup.gapEdit.i === i" v-focus type="number" min="0" max="600" step="0.1" style="width:80px" v-model="pup.gapEdit.value" @keyup.enter="pupSaveGap(r)" @keyup.esc="pup.gapEdit.id = null" @blur="pupSaveGap(r)" /><span v-else>{{ pupGap(r, i) }}</span><div v-if="pupGapPct(r, i)" :style="{ height: '4px', marginTop: '2px', borderRadius: '2px', background: 'var(--accent)', width: pupGapPct(r, i) + '%' }"></div></td><td>{{ s.type }}</td><td style="word-break:break-all">{{ pupStepTarget(s) }}</td><td style="word-break:break-all">{{ pupStepValue(s) }}</td></tr></tbody>
                       </table>
                     </td>
                   </tr>
@@ -800,7 +800,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.19';
+    const APP_VERSION = '1.20';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -5130,7 +5130,7 @@
         pup_saved: 'Rekaman "{t}" tersimpan.', pup_deleted: '{n} rekaman dihapus.', pup_imported: '{n} rekaman di-import.', pup_import_bad: 'File tidak dikenali: {f}',
         pup_confirm_del: 'Hapus {n} rekaman terpilih?', pup_play_msg: 'Tab target dibuka. Klik Pup Play dari bookmark bar di tab itu; rekaman "{t}" dikirim otomatis.',
         pup_usage: 'Pemakaian storage browser: {u} dari kuota {q}',
-        pup_th_size: 'Ukuran', pup_th_gap: 'Jeda', pup_group_none: 'Tanpa grup', pup_group_new: 'Grup untuk rekaman baru', pup_group_ph: 'mis. CAPEX',
+        pup_th_size: 'Ukuran', pup_th_gap: 'Jeda', pup_gap_hint: 'Klik untuk ubah jeda (detik, maks 600). Kosongkan untuk kembali ke jeda asli.', pup_group_none: 'Tanpa grup', pup_group_new: 'Grup untuk rekaman baru', pup_group_ph: 'mis. CAPEX',
         pup_move: 'Pindahkan terpilih ke grup', pup_move_ph: 'nama grup (kosong = tanpa grup)', pup_moved: '{n} rekaman dipindah ke grup "{g}".',
         pup_total: 'Total {n} rekaman, {s}', pup_group_sel: 'Pilih semua di grup ini', pup_show: 'Tampilkan', pup_hide_g: 'Sembunyikan', pup_no_idb: 'IndexedDB tidak tersedia di browser/mode ini.', pup_popup_blocked: 'Popup diblokir browser. Izinkan popup untuk halaman ini lalu coba lagi.'
       },
@@ -5149,7 +5149,7 @@
         pup_saved: 'Recording "{t}" saved.', pup_deleted: '{n} recordings deleted.', pup_imported: '{n} recordings imported.', pup_import_bad: 'Unrecognized file: {f}',
         pup_confirm_del: 'Delete {n} selected recordings?', pup_play_msg: 'Target tab opened. Click Pup Play from the bookmarks bar there; recording "{t}" is sent automatically.',
         pup_usage: 'Browser storage used: {u} of {q} quota',
-        pup_th_size: 'Size', pup_th_gap: 'Delay', pup_group_none: 'No group', pup_group_new: 'Group for new recordings', pup_group_ph: 'e.g. CAPEX',
+        pup_th_size: 'Size', pup_th_gap: 'Delay', pup_gap_hint: 'Click to edit the delay (seconds, max 600). Clear it to restore the recorded delay.', pup_group_none: 'No group', pup_group_new: 'Group for new recordings', pup_group_ph: 'e.g. CAPEX',
         pup_move: 'Move selected to group', pup_move_ph: 'group name (empty = no group)', pup_moved: '{n} recordings moved to group "{g}".',
         pup_total: 'Total {n} recordings, {s}', pup_group_sel: 'Select all in this group', pup_show: 'Show', pup_hide_g: 'Hide', pup_no_idb: 'IndexedDB is not available in this browser/mode.', pup_popup_blocked: 'The browser blocked the popup. Allow popups for this page and try again.'
       }
@@ -5170,7 +5170,7 @@
       'Elemen tidak ditemukan pada langkah ': 'Element not found at step ', 'Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click Pup Play again once the page has loaded to continue.',
       'Lanjut dari langkah ': 'Continuing from step ', '⇄ Putar': '⇄ Play', '⇄ Rekam': '⇄ Record', '⏺ Rekam': '⏺ Record', '▶ Putar': '▶ Play',
       'Stop dulu sebelum pindah ke Putar.': 'Stop first before switching to Play.', 'Waktu asli': 'Real timing', 'Jeda tetap (ms)': 'Fixed delay (ms)', 'Kecepatan': 'Speed',
-      'Mulai otomatis...': 'Starting automatically...', 'langkah': 'step', 'jeda': 'wait', 'dtk': 's', 'Mulai dari langkah ': 'Start from step ', 'Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.': 'Non-SPA: after every page change, click the Pup bookmark again to continue.',
+      'Mulai otomatis...': 'Starting automatically...', '↻ Ulangi': '↻ Replay', 'langkah': 'step', 'jeda': 'wait', 'dtk': 's', 'Mulai dari langkah ': 'Start from step ', 'Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.': 'Non-SPA: after every page change, click the Pup bookmark again to continue.',
       'Pindah halaman. Klik bookmark Pup lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click the Pup bookmark again once the page has loaded to continue.', 'Lanjut otomatis dari langkah ': 'Auto-continuing from step ', 'Isi password lalu klik Putar.': 'Enter the password then click Play.',
       'Non-SPA: tiap pindah halaman, klik Pup Rec lagi untuk melanjutkan.': 'Non-SPA: after every page change, click Pup Rec again to continue.', 'Peringatan: halaman ini bukan URL awal rekaman: ': 'Warning: this page is not the recording start URL: '
     });
@@ -5178,6 +5178,23 @@
     // ---- Dijalankan DI TAB TARGET (panel Rekam dari bookmarklet Pup).
     function pupRecorderMain(cfg) {
       var KEY = '__pupRec';
+      // Panel bisa digeser lewat judulnya (posisi diingat selama tab ini terbuka).
+      function pupDrag(box, handle) {
+        var on = false, dx = 0, dy = 0;
+        function place(l, t) { box.style.left = Math.min(Math.max(0, l), window.innerWidth - box.offsetWidth) + 'px'; box.style.top = Math.min(Math.max(0, t), window.innerHeight - box.offsetHeight) + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; }
+        handle.style.cursor = 'move';
+        try { var p = JSON.parse(sessionStorage.getItem('__pupPos') || 'null'); if (p) setTimeout(function () { place(p.l, p.t); }, 0); } catch (e) { /* abaikan */ }
+        handle.addEventListener('mousedown', function (e) {
+          if (e.target.tagName === 'BUTTON') return;
+          var r = box.getBoundingClientRect(); on = true; dx = e.clientX - r.left; dy = e.clientY - r.top; e.preventDefault();
+        });
+        document.addEventListener('mousemove', function (e) { if (on) place(e.clientX - dx, e.clientY - dy); }, true);
+        document.addEventListener('mouseup', function () {
+          if (!on) return; on = false;
+          try { sessionStorage.setItem('__pupPos', JSON.stringify({ l: parseInt(box.style.left, 10), t: parseInt(box.style.top, 10) })); } catch (e) { /* abaikan */ }
+        }, true);
+      }
+
       if (window.__pupRecUi) { window.__pupRecUi.style.display = 'flex'; return; }
       var rec = null, lastRec = null, lastUrl = location.href, scrollT = 0;
       try { var saved = JSON.parse(sessionStorage.getItem(KEY) || 'null'); if (saved && saved.active) rec = saved; } catch (e) { rec = null; }
@@ -5194,6 +5211,7 @@
       var row = el('div', { display: 'flex', gap: '6px', flexWrap: 'wrap' });
       var bRec = btn("Rekam", start), bStop = btn("Stop & simpan", stop), bCopy = btn("Salin JSON", copyJson), bDl = btn("Unduh JSON", downloadJson);
       head.appendChild(btn("Tutup", function () { if (rec) stop(); ui.style.display = 'none'; }));
+      pupDrag(ui, head);
       bRec.style.background = '#b91c1c';
       [bRec, bStop, bCopy, bDl].forEach(function (b) { row.appendChild(b); });
       var hint = el('div', { color: '#f59e0b', fontSize: '11px' }, "Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.");
@@ -5361,6 +5379,23 @@
     // ---- Dijalankan DI TAB TARGET (panel Putar dari bookmarklet Pup). boot = { rec, auto } dari tab scanner.
     function pupPlayerMain(cfg, boot) {
       var KEY = '__pupPlay';
+      // Panel bisa digeser lewat judulnya (posisi diingat selama tab ini terbuka).
+      function pupDrag(box, handle) {
+        var on = false, dx = 0, dy = 0;
+        function place(l, t) { box.style.left = Math.min(Math.max(0, l), window.innerWidth - box.offsetWidth) + 'px'; box.style.top = Math.min(Math.max(0, t), window.innerHeight - box.offsetHeight) + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; }
+        handle.style.cursor = 'move';
+        try { var p = JSON.parse(sessionStorage.getItem('__pupPos') || 'null'); if (p) setTimeout(function () { place(p.l, p.t); }, 0); } catch (e) { /* abaikan */ }
+        handle.addEventListener('mousedown', function (e) {
+          if (e.target.tagName === 'BUTTON') return;
+          var r = box.getBoundingClientRect(); on = true; dx = e.clientX - r.left; dy = e.clientY - r.top; e.preventDefault();
+        });
+        document.addEventListener('mousemove', function (e) { if (on) place(e.clientX - dx, e.clientY - dy); }, true);
+        document.addEventListener('mouseup', function () {
+          if (!on) return; on = false;
+          try { sessionStorage.setItem('__pupPos', JSON.stringify({ l: parseInt(box.style.left, 10), t: parseInt(box.style.top, 10) })); } catch (e) { /* abaikan */ }
+        }, true);
+      }
+
       if (window.__pupPlayUi) { window.__pupPlayUi.style.display = 'flex'; return; }
       var rec = null, idx = 0, running = false, stopFlag = false;
       function el(tag, css, text) { var x = document.createElement(tag); if (css) Object.assign(x.style, css); if (text != null) x.textContent = text; return x; }
@@ -5372,6 +5407,7 @@
       head.appendChild(el('b', { flex: '1' }, 'Pup · ' + "Putar"));
       if (cfg.openRec) head.appendChild(btn("⇄ Rekam", function () { if (running) return; ui.remove(); cur.remove(); window.__pupPlayUi = null; cfg.openRec(); }));
       head.appendChild(btn("Tutup", function () { stopFlag = true; ui.style.display = 'none'; cur.style.display = 'none'; }));
+      pupDrag(ui, head);
       var ta = el('textarea', Object.assign({ height: '60px', resize: 'vertical' }, inputCss)); ta.placeholder = "Tempel JSON rekaman di sini";
       var pw = el('input', inputCss); pw.type = 'password'; pw.placeholder = "Password untuk {{password}}"; pw.style.display = 'none';
       var delayRow = el('div', { display: 'flex', gap: '6px', alignItems: 'center' });
@@ -5384,7 +5420,19 @@
       document.body.appendChild(cur);
       var row = el('div', { display: 'flex', gap: '6px', flexWrap: 'wrap' });
       var bPlay = btn("Putar", play); bPlay.style.background = '#16a34a';
-      [btn("Muat JSON", function () { load(ta.value); }), bPlay, btn("Stop", function () { stopFlag = true; }), btn("Lewati", function () { if (rec && idx < rec.steps.length - 1) idx++; pos = eff[idx] || pos; drawBar(''); info.textContent = "Lanjut dari langkah " + (idx + 1); })].forEach(function (b) { row.appendChild(b); });
+      // Ulangi dari awal: bila halaman sudah berpindah, buka URL awal dulu lalu lanjut otomatis (klik bookmark Pup lagi bila reload penuh).
+      var bAgain = btn("↻ Ulangi", function () {
+        if (running || !rec) return;
+        idx = 0; pos = 0; drawBar('');
+        var nav = rec.steps.filter(function (s) { return s.type === 'navigate'; })[0];
+        if (nav && nav.url.split('#')[0] !== location.href.split('#')[0]) {
+          running = true; persist(1); running = false;
+          info.textContent = "Pindah halaman. Klik bookmark Pup lagi setelah halaman terbuka untuk melanjutkan.";
+          location.href = nav.url; return;
+        }
+        play();
+      });
+      [btn("Muat JSON", function () { load(ta.value); }), bPlay, bAgain, btn("Stop", function () { stopFlag = true; }), btn("Lewati", function () { if (rec && idx < rec.steps.length - 1) idx++; pos = eff[idx] || pos; drawBar(''); info.textContent = "Lanjut dari langkah " + (idx + 1); })].forEach(function (b) { row.appendChild(b); });
       var info = el('div', { color: '#94a3b8', maxHeight: '120px', overflow: 'auto', whiteSpace: 'pre-wrap' }, '');
       // Timeline ala video: garis waktu rekaman (jeda asli, maks 15 dtk per jeda), penanda tiap langkah, progres, waktu.
       var bar = el('div', { position: 'relative', height: '12px', background: '#1e293b', borderRadius: '6px', cursor: 'pointer', overflow: 'hidden', display: 'none' });
@@ -5395,11 +5443,18 @@
       document.body.appendChild(ui);
       var eff = [], total = 0, pos = 0, tickT = 0;
       function clamp(d) { return Math.min(15000, Math.max(80, d)); }
+      // Jeda asli sebelum langkah i: 'wait' (diedit di scanner, maks 10 mnt) atau selisih waktu rekaman (80 ms - 15 dtk).
+      function rawGap(i) {
+        var a = rec.steps[i - 1], b = rec.steps[i];
+        if (!b || i === 0) return 0;
+        if (typeof b.wait === 'number') return Math.min(600000, Math.max(0, b.wait));
+        return a && typeof a.t === 'number' && typeof b.t === 'number' ? clamp(b.t - a.t) : 600;
+      }
       // eff[i] = posisi langkah i di timeline (ms): jumlah jeda asli yang sudah dibatasi.
       function buildTimeline() {
         eff = []; var acc = 0;
         rec.steps.forEach(function (s, i) {
-          if (i > 0) { var a = rec.steps[i - 1]; acc += typeof a.t === 'number' && typeof s.t === 'number' ? clamp(s.t - a.t) : 600; }
+          acc += rawGap(i);
           eff.push(acc);
         });
         total = acc || 1;
@@ -5459,9 +5514,7 @@
       // Jeda sebelum langkah i: selisih waktu rekaman (dibatasi 80 ms - 15 dtk), dibagi 2 untuk 2x, atau jeda tetap.
       function gap(i) {
         if (speed.value === 'fixed') return Math.max(0, +delay.value || 0);
-        var a = rec.steps[i - 1], b = rec.steps[i];
-        var d = a && b && typeof a.t === 'number' && typeof b.t === 'number' ? b.t - a.t : 600;
-        d = Math.min(15000, Math.max(80, d));
+        var d = rawGap(i);
         return fast() ? d / 2 : d;
       }
       function moveTo(x) {
@@ -5685,7 +5738,15 @@
     }
     // Format Chrome Recorder murni (tanpa waktu 't' milik Pup); keepT untuk pemutaran di tab target.
     function pupRecorderJson(r, keepT) {
-      return { title: r.title, steps: r.steps.map(s => { const c = Object.assign({}, s); if (!keepT) delete c.t; return c; }) };
+      return { title: r.title, steps: r.steps.map(s => { const c = Object.assign({}, s); if (!keepT) { delete c.t; delete c.wait; } return c; }) };
+    }
+    // Jeda sebelum langkah i (ms): 'wait' hasil edit (maks 10 mnt) atau selisih waktu rekaman (maks 15 dtk).
+    function pupStepGap(r, i) {
+      const a = r.steps[i - 1], b = r.steps[i];
+      if (!a || !b) return null;
+      if (typeof b.wait === 'number') return { ms: Math.min(600000, Math.max(0, b.wait)), edited: true };
+      if (typeof a.t === 'number' && typeof b.t === 'number') return { ms: Math.min(15000, Math.max(0, b.t - a.t)), edited: false, raw: b.t - a.t };
+      return null;
     }
     function pupSize(r) { try { return new Blob([JSON.stringify(r)]).size; } catch (e) { return 0; } }
     function pupFileName(s, ext) { return (String(s || 'rekaman').replace(/[^\w.-]+/g, '_').slice(0, 80) || 'rekaman') + ext; }
@@ -5730,7 +5791,8 @@
         const nav = Array.isArray(s.assertedEvents) && s.assertedEvents.some(a => a.type === 'navigation');
         const prev = r.steps[i - 1];
         lines.push('    // ' + (i + 1) + '. ' + s.type);
-        if (prev && typeof prev.t === 'number' && typeof s.t === 'number' && s.t > prev.t) lines.push('    await wait(' + Math.min(15000, s.t - prev.t) + ');');
+        const g = i > 0 ? pupStepGap(r, i) : null;
+        if (g && g.ms > 0) lines.push('    await wait(' + Math.round(g.ms) + ');');
         if (s.type === 'setViewport') lines.push('    await page.setViewport({ width: ' + (+s.width || 1280) + ', height: ' + (+s.height || 800) + ' });');
         else if (s.type === 'navigate') lines.push('    await page.goto(' + J(s.url) + ", { waitUntil: 'networkidle2' });");
         else if (s.type === 'click' || s.type === 'doubleClick') lines.push('    await (await find(page, ' + sels(s) + ')).click(' + (s.type === 'doubleClick' ? '{ clickCount: 2 }' : '') + ');');
@@ -5837,7 +5899,7 @@
           // Cek Basic Middleware: target punya user sendiri; default dapat diedit.
           mw: { url: 'https://httpbin.org/post', method: 'POST', delayMs: 150, sizesKb: [2, 10, 500], busy: false, stop: false, copied: false, csvCopied: false, jsonCopied: false, msg: '', editor: { method: 'POST', url: 'https://httpbin.org/post', headers: 'Content-Type: application/json', body: '{"username":"test","password":"test"}', busy: false, status: null, respHeaders: '', respBody: '', error: '', msg: '' } },
           mwResults: [],
-          pup: { list: [], sel: {}, view: null, edit: { id: null, value: '' }, msg: '', err: '', usage: '', hidden: {}, newGroup: '', moveTo: '' },
+          pup: { list: [], sel: {}, view: null, edit: { id: null, value: '' }, gapEdit: { id: null, i: -1, value: '' }, msg: '', err: '', usage: '', hidden: {}, newGroup: '', moveTo: '' },
           sideW: 330, resizing: false, persistedIds: [], unsavedIds: [], project: '', pasteName: '', pasteText: '', omitDev: false, enrich: true,
           scanning: false, logs: [], error: '', dropMsg: '', reportUrl: '', reportName: 'laporan_scan.html',
           codeText: 'const el = document.getElementById("out");\nel.innerHTML = userInput;\nconst r = eval(expr);',
@@ -6089,12 +6151,32 @@
         pupFmt(n) { return pupFmtBytes(n); },
         // Lebar batang jeda (relatif terhadap jeda terpanjang di rekaman itu, maks 15 dtk).
         pupGapPct(r, i) {
-          const d = k => { const a = r.steps[k - 1], b = r.steps[k]; return a && b && typeof a.t === 'number' && typeof b.t === 'number' ? Math.min(15000, Math.max(0, b.t - a.t)) : 0; };
+          const d = k => { const g = pupStepGap(r, k); return g ? g.ms : 0; };
           let max = 0;
           for (let k = 1; k < r.steps.length; k++) max = Math.max(max, d(k));
           return max && d(i) ? Math.max(2, Math.round(d(i) / max * 100)) : 0;
         },
-        pupGap(r, i) { const a = r.steps[i - 1], b = r.steps[i]; return a && b && typeof a.t === 'number' && typeof b.t === 'number' ? '+' + ((b.t - a.t) / 1000).toFixed(1) + ' s' : ''; },
+        pupGap(r, i) {
+          const g = pupStepGap(r, i);
+          if (!g) return '';
+          return '+' + (g.ms / 1000).toFixed(1) + ' s' + (g.edited ? ' ✎' : g.raw > 15000 ? ' (' + (g.raw / 1000).toFixed(1) + ' s → 15)' : '');
+        },
+        pupStartGap(r, i) { const g = pupStepGap(r, i); if (!g) return; this.pup.gapEdit = { id: r.id, i, value: (g.ms / 1000).toFixed(1) }; },
+        // Simpan jeda hasil edit sebagai 'wait' (ms) pada langkah itu; kosong = kembali ke jeda asli rekaman.
+        pupSaveGap(r) {
+          const e = this.pup.gapEdit;
+          if (e.id !== r.id) return;
+          this.pup.gapEdit = { id: null, i: -1, value: '' };
+          const upd = JSON.parse(JSON.stringify(r));
+          delete upd.size;
+          const st = upd.steps[e.i];
+          if (!st) return;
+          const v = String(e.value).trim().replace(',', '.');
+          if (v === '') delete st.wait;
+          else { const sec = Number(v); if (!isFinite(sec) || sec < 0) return; st.wait = Math.round(Math.min(600, sec) * 1000); }
+          upd.updated = Date.now();
+          pupPutMany([upd]).then(() => { this.pupNotify(); return this.pupLoad(); }).catch(err => this.pupErr(err));
+        },
         pupStartRename(r) { this.pup.edit = { id: r.id, value: r.title }; },
         pupSaveRename(r) {
           if (this.pup.edit.id !== r.id) return;
