@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.18"></script>
+  <script src="i18n/i18n.js?v=1.19"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -743,7 +743,7 @@
                     <td colspan="7">
                       <table style="margin-top:0;font-size:12px">
                         <thead><tr><th>#</th><th>{{ t('pup_th_gap') }}</th><th>{{ t('pup_th_type') }}</th><th>{{ t('pup_th_target') }}</th><th>{{ t('pup_th_value') }}</th></tr></thead>
-                        <tbody><tr v-for="(s, i) in r.steps" :key="i"><td>{{ i + 1 }}</td><td style="white-space:nowrap">{{ pupGap(r, i) }}</td><td>{{ s.type }}</td><td style="word-break:break-all">{{ pupStepTarget(s) }}</td><td style="word-break:break-all">{{ pupStepValue(s) }}</td></tr></tbody>
+                        <tbody><tr v-for="(s, i) in r.steps" :key="i"><td>{{ i + 1 }}</td><td style="white-space:nowrap;min-width:110px">{{ pupGap(r, i) }}<div v-if="pupGapPct(r, i)" :style="{ height: '4px', marginTop: '2px', borderRadius: '2px', background: 'var(--accent)', width: pupGapPct(r, i) + '%' }"></div></td><td>{{ s.type }}</td><td style="word-break:break-all">{{ pupStepTarget(s) }}</td><td style="word-break:break-all">{{ pupStepValue(s) }}</td></tr></tbody>
                       </table>
                     </td>
                   </tr>
@@ -800,7 +800,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.18';
+    const APP_VERSION = '1.19';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -5170,7 +5170,7 @@
       'Elemen tidak ditemukan pada langkah ': 'Element not found at step ', 'Pindah halaman. Klik Pup Play lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click Pup Play again once the page has loaded to continue.',
       'Lanjut dari langkah ': 'Continuing from step ', '⇄ Putar': '⇄ Play', '⇄ Rekam': '⇄ Record', '⏺ Rekam': '⏺ Record', '▶ Putar': '▶ Play',
       'Stop dulu sebelum pindah ke Putar.': 'Stop first before switching to Play.', 'Waktu asli': 'Real timing', 'Jeda tetap (ms)': 'Fixed delay (ms)', 'Kecepatan': 'Speed',
-      'Mulai otomatis...': 'Starting automatically...', 'Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.': 'Non-SPA: after every page change, click the Pup bookmark again to continue.',
+      'Mulai otomatis...': 'Starting automatically...', 'langkah': 'step', 'jeda': 'wait', 'dtk': 's', 'Mulai dari langkah ': 'Start from step ', 'Non-SPA: tiap pindah halaman, klik bookmark Pup lagi untuk melanjutkan.': 'Non-SPA: after every page change, click the Pup bookmark again to continue.',
       'Pindah halaman. Klik bookmark Pup lagi setelah halaman terbuka untuk melanjutkan.': 'Navigating. Click the Pup bookmark again once the page has loaded to continue.', 'Lanjut otomatis dari langkah ': 'Auto-continuing from step ', 'Isi password lalu klik Putar.': 'Enter the password then click Play.',
       'Non-SPA: tiap pindah halaman, klik Pup Rec lagi untuk melanjutkan.': 'Non-SPA: after every page change, click Pup Rec again to continue.', 'Peringatan: halaman ini bukan URL awal rekaman: ': 'Warning: this page is not the recording start URL: '
     });
@@ -5384,14 +5384,69 @@
       document.body.appendChild(cur);
       var row = el('div', { display: 'flex', gap: '6px', flexWrap: 'wrap' });
       var bPlay = btn("Putar", play); bPlay.style.background = '#16a34a';
-      [btn("Muat JSON", function () { load(ta.value); }), bPlay, btn("Stop", function () { stopFlag = true; }), btn("Lewati", function () { idx++; info.textContent = "Lanjut dari langkah " + (idx + 1); })].forEach(function (b) { row.appendChild(b); });
+      [btn("Muat JSON", function () { load(ta.value); }), bPlay, btn("Stop", function () { stopFlag = true; }), btn("Lewati", function () { if (rec && idx < rec.steps.length - 1) idx++; pos = eff[idx] || pos; drawBar(''); info.textContent = "Lanjut dari langkah " + (idx + 1); })].forEach(function (b) { row.appendChild(b); });
       var info = el('div', { color: '#94a3b8', maxHeight: '120px', overflow: 'auto', whiteSpace: 'pre-wrap' }, '');
-      [head, ta, pw, delayRow, row, info].forEach(function (x) { ui.appendChild(x); });
+      // Timeline ala video: garis waktu rekaman (jeda asli, maks 15 dtk per jeda), penanda tiap langkah, progres, waktu.
+      var bar = el('div', { position: 'relative', height: '12px', background: '#1e293b', borderRadius: '6px', cursor: 'pointer', overflow: 'hidden', display: 'none' });
+      var fill = el('div', { position: 'absolute', left: '0', top: '0', bottom: '0', width: '0%', background: 'rgba(22,163,74,.55)' });
+      bar.appendChild(fill);
+      var clock = el('div', { color: '#cbd5e1', fontSize: '11px', display: 'none' }, '');
+      [head, ta, pw, delayRow, bar, clock, row, info].forEach(function (x) { ui.appendChild(x); });
       document.body.appendChild(ui);
+      var eff = [], total = 0, pos = 0, tickT = 0;
+      function clamp(d) { return Math.min(15000, Math.max(80, d)); }
+      // eff[i] = posisi langkah i di timeline (ms): jumlah jeda asli yang sudah dibatasi.
+      function buildTimeline() {
+        eff = []; var acc = 0;
+        rec.steps.forEach(function (s, i) {
+          if (i > 0) { var a = rec.steps[i - 1]; acc += typeof a.t === 'number' && typeof s.t === 'number' ? clamp(s.t - a.t) : 600; }
+          eff.push(acc);
+        });
+        total = acc || 1;
+        [].slice.call(bar.querySelectorAll('[data-tick]')).forEach(function (x) { x.remove(); });
+        var colors = { click: '#f59e0b', doubleClick: '#f59e0b', change: '#38bdf8', hover: '#c084fc', keyDown: '#94a3b8', keyUp: '#94a3b8', navigate: '#22c55e', scroll: '#64748b' };
+        rec.steps.slice(0, 600).forEach(function (s, i) {
+          if (s.type === 'setViewport' || s.type === 'keyUp') return;
+          var tk = el('div', { position: 'absolute', top: '1px', bottom: '1px', width: '3px', marginLeft: '-1px', borderRadius: '1px', left: (eff[i] / total * 100) + '%', background: colors[s.type] || '#e2e8f0' });
+          tk.setAttribute('data-tick', '1');
+          tk.title = '#' + (i + 1) + ' ' + s.type + (i > 0 ? ' (+' + ((eff[i] - eff[i - 1]) / 1000).toFixed(1) + ' s)' : '');
+          bar.appendChild(tk);
+        });
+        bar.style.display = ''; clock.style.display = '';
+        pos = eff[idx] || 0; drawBar('');
+      }
+      function fmtT(ms) { var sec = ms / 1000, m = Math.floor(sec / 60); return m + ':' + (sec - m * 60).toFixed(1).padStart(4, '0'); }
+      function drawBar(extra) {
+        if (!eff.length) return;
+        fill.style.width = Math.min(100, pos / total * 100) + '%';
+        clock.textContent = fmtT(pos) + ' / ' + fmtT(total) + ' · ' + "langkah" + ' ' + Math.min(idx + 1, rec.steps.length) + '/' + rec.steps.length + (extra ? ' · ' + extra : '');
+      }
+      // Jeda sebelum langkah i sambil menggerakkan progres timeline + hitung mundur.
+      function sleepGap(i) {
+        var g = gap(i), start = Date.now(), from = eff[i - 1] || 0, to = eff[i] || from;
+        if (g <= 0) { pos = to; drawBar(''); return Promise.resolve(); }
+        return new Promise(function (resolve) {
+          clearInterval(tickT);
+          tickT = setInterval(function () {
+            var k = Math.min(1, (Date.now() - start) / g);
+            pos = from + (to - from) * k;
+            drawBar("jeda" + ' ' + Math.max(0, (g - (Date.now() - start)) / 1000).toFixed(1) + ' ' + "dtk");
+            if (k >= 1 || stopFlag) { clearInterval(tickT); resolve(); }
+          }, 50);
+        });
+      }
+      // Klik timeline (saat tidak berjalan) = mulai dari langkah di titik itu.
+      bar.onclick = function (e) {
+        if (running || !rec) return;
+        var r = bar.getBoundingClientRect(), want = (e.clientX - r.left) / r.width * total, j = 0;
+        while (j < eff.length - 1 && eff[j] < want) j++;
+        idx = j; pos = eff[j]; drawBar(''); info.textContent = "Mulai dari langkah " + (idx + 1);
+      };
       function needsPw() { return rec && JSON.stringify(rec.steps).indexOf('{{password}}') >= 0; }
       function setRec(r, from) {
         if (!r || !Array.isArray(r.steps)) { info.textContent = "JSON tidak valid."; return false; }
         rec = r; idx = from || 0; ta.style.display = 'none';
+        buildTimeline();
         pw.style.display = needsPw() ? '' : 'none';
         info.textContent = "Siap diputar: " + (r.title || '') + ' (' + r.steps.length + " langkah" + ')';
         var nav = r.steps.filter(function (s) { return s.type === 'navigate'; })[0];
@@ -5516,13 +5571,14 @@
         running = true; stopFlag = false; ui.style.borderColor = '#16a34a';
         (function next() {
           if (stopFlag) { running = false; persist(); ui.style.borderColor = '#334155'; cur.style.display = 'none'; info.textContent = "Dihentikan."; return; }
-          if (idx >= rec.steps.length) { running = false; ui.style.borderColor = '#334155'; cur.style.display = 'none'; info.textContent = "Selesai."; try { sessionStorage.removeItem(KEY); } catch (e) { /* abaikan */ } return; }
+          if (idx >= rec.steps.length) { running = false; ui.style.borderColor = '#334155'; cur.style.display = 'none'; pos = total; drawBar(''); info.textContent = "Selesai."; try { sessionStorage.removeItem(KEY); } catch (e) { /* abaikan */ } return; }
           persist();
+          pos = eff[idx] || pos; drawBar(rec.steps[idx].type);
           info.textContent = (idx + 1) + '/' + rec.steps.length + ' ' + rec.steps[idx].type;
           run(rec.steps[idx]).then(function (r) {
             if (r === false) { running = false; return; }
             if (r === null) { running = false; persist(); ui.style.borderColor = '#b45309'; return; }
-            idx++; return sleep(idx < rec.steps.length ? gap(idx) : 0).then(next);
+            idx++; return (idx < rec.steps.length ? sleepGap(idx) : Promise.resolve()).then(next);
           });
         })();
       }
@@ -6031,6 +6087,13 @@
           }).catch(err => this.pupErr(err));
         },
         pupFmt(n) { return pupFmtBytes(n); },
+        // Lebar batang jeda (relatif terhadap jeda terpanjang di rekaman itu, maks 15 dtk).
+        pupGapPct(r, i) {
+          const d = k => { const a = r.steps[k - 1], b = r.steps[k]; return a && b && typeof a.t === 'number' && typeof b.t === 'number' ? Math.min(15000, Math.max(0, b.t - a.t)) : 0; };
+          let max = 0;
+          for (let k = 1; k < r.steps.length; k++) max = Math.max(max, d(k));
+          return max && d(i) ? Math.max(2, Math.round(d(i) / max * 100)) : 0;
+        },
         pupGap(r, i) { const a = r.steps[i - 1], b = r.steps[i]; return a && b && typeof a.t === 'number' && typeof b.t === 'number' ? '+' + ((b.t - a.t) / 1000).toFixed(1) + ' s' : ''; },
         pupStartRename(r) { this.pup.edit = { id: r.id, value: r.title }; },
         pupSaveRename(r) {
