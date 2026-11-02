@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.25"></script>
+  <script src="i18n/i18n.js?v=1.26"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -870,7 +870,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.25';
+    const APP_VERSION = '1.26';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -6311,7 +6311,7 @@
           editFields: ['project', 'name'], edit: { id: null, field: '', value: '' }, reupId: null,
           // Smart Decode: key/IV di form hanya di memori (tidak pernah ke localStorage)
           fi: { results: [], busy: false, over: false, copied: '' },
-          ocr: { engine: 'tess', lang: 'ind+eng', imgUrl: '', imgInfo: '', busy: false, progress: '', text: '', done: false, used: '', error: '', copied: false, over: false, spaceKey: '', ai: { preset: 'openrouter', baseUrl: OCR_PRESETS[0].baseUrl, model: OCR_PRESETS[0].model, token: '', mode: 'detail', prompt: '' } },
+          ocr: { engine: 'tess', lang: 'ind+eng', imgUrl: '', imgInfo: '', busy: false, progress: '', text: '', done: false, used: '', error: '', copied: false, over: false, spaceKey: '', spaceEngine: '', ai: { preset: 'openrouter', baseUrl: OCR_PRESETS[0].baseUrl, model: OCR_PRESETS[0].model, token: '', mode: 'detail', prompt: '' } },
           ocrEngines: ['tess', 'space', 'ai'], ocrPresets: OCR_PRESETS,
           dec: { input: '', busy: false, chains: [], error: '', copied: '', note: '', form: decFormDefault(), tries: [], tryBusy: false },
           decSamples: DEC_SAMPLES, decEncs: ['auto', 'hex', 'base64', 'utf8'], decModes: ['CBC', 'GCM', 'CTR', 'ECB']
@@ -6504,7 +6504,7 @@
             else if (o.engine === 'space') o.text = await this.ocrSpace();
             else o.text = await this.ocrAi();
             o.text = (o.text || '').replace(/\r\n/g, '\n').trim();
-            o.used = tr('ocr_eng_' + o.engine) + (o.engine === 'ai' ? ' (' + o.ai.model + ')' : '') + ' · ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s';
+            o.used = tr('ocr_eng_' + o.engine) + (o.engine === 'ai' ? ' (' + o.ai.model + ')' : o.engine === 'space' ? ' (engine ' + o.spaceEngine + ')' : '') + ' · ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s';
             o.done = true; o.progress = '';
           } catch (e) {
             o.error = (e && e.message) || String(e); o.progress = '';
@@ -6533,22 +6533,27 @@
         async ocrSpace() {
           this.ocr.progress = tr('ocr_p_resize');
           const blob = await ocrShrink(this.ocrBlob, 1000 * 1000);
-          const fd = new FormData();
-          fd.append('apikey', this.ocr.spaceKey.trim() || 'helloworld');
-          fd.append('base64Image', await blobToDataUrl(blob));
-          fd.append('OCREngine', '2'); fd.append('language', 'auto'); fd.append('scale', 'true'); fd.append('isOverlayRequired', 'false');
-          this.ocr.progress = tr('ocr_p_send');
-          let res;
-          try { res = await apiFetch('ocrspace', OCR_SPACE_URL, { method: 'POST', body: fd }); } catch (e) { throw new Error(tr('ocr_e_cors') + ' (' + e.message + ')'); }
-          const d = await res.json().catch(() => null);
-          if (!res.ok || !d) throw new Error('OCR.space HTTP ' + res.status);
-          if (d.IsErroredOnProcessing) {
-            apiStats.ocrspace.ok--; apiStats.ocrspace.fail++;
-            const msg = [].concat(d.ErrorMessage || []).join(' ') || d.ErrorDetails || 'error';
-            apiStats.ocrspace.last = msg;
-            throw new Error('OCR.space: ' + msg);
+          const img = await blobToDataUrl(blob);
+          // Engine 2 (bahasa otomatis) dulu; bila server sibuk/menolak (mis. E551 key demo dibatasi), coba engine 1.
+          let lastErr = '';
+          for (const eng of ['2', '1']) {
+            const fd = new FormData();
+            fd.append('apikey', this.ocr.spaceKey.trim() || 'helloworld');
+            fd.append('base64Image', img);
+            fd.append('OCREngine', eng); fd.append('language', eng === '2' ? 'auto' : 'eng'); fd.append('scale', 'true'); fd.append('isOverlayRequired', 'false');
+            this.ocr.progress = tr('ocr_p_send') + ' (engine ' + eng + ')';
+            let res;
+            try { res = await apiFetch('ocrspace', OCR_SPACE_URL, { method: 'POST', body: fd }); } catch (e) { throw new Error(tr('ocr_e_cors') + ' (' + e.message + ')'); }
+            const d = await res.json().catch(() => null);
+            if (res.ok && d && !d.IsErroredOnProcessing) {
+              this.ocr.spaceEngine = eng;
+              return (d.ParsedResults || []).map(p => p.ParsedText || '').join('\n');
+            }
+            if (res.ok) { apiStats.ocrspace.ok--; apiStats.ocrspace.fail++; }
+            lastErr = (d && ([].concat(d.ErrorMessage || d.error || []).join(' ') || d.ErrorDetails)) || ('HTTP ' + res.status);
+            apiStats.ocrspace.last = String(lastErr).slice(0, 160);
           }
-          return (d.ParsedResults || []).map(p => p.ParsedText || '').join('\n');
+          throw new Error('OCR.space: ' + lastErr);
         },
         async ocrAi() {
           const a = this.ocr.ai;
