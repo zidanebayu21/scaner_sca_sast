@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.26"></script>
+  <script src="i18n/i18n.js?v=1.27"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -86,6 +86,21 @@
     .ocr-prev img { max-width: 100%; display: inline-block; }
     .ocr-opt { flex: 1; min-width: 200px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; background: var(--panel-bg); }
     .ocr-opt.on { border-color: var(--accent); }
+    .col-stage { position: relative; margin-top: 8px; max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+    .col-canvas { display: block; max-width: 100%; cursor: crosshair; }
+    .col-loupe { position: absolute; pointer-events: none; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px; font: 12px Consolas, monospace; z-index: 5; }
+    .col-loupe canvas { display: block; border-radius: 4px; image-rendering: pixelated; }
+    .col-sw { display: inline-block; width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border); vertical-align: middle; }
+    .col-chip { display: inline-block; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--border); margin: 2px; cursor: pointer; vertical-align: middle; }
+    .col-chip.sm { width: 22px; height: 22px; border-radius: 4px; }
+    .col-tw { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+    .col-twrow { display: flex; align-items: center; } .col-twname { width: 56px; font-size: 11px; }
+    .col-cur { display: flex; gap: 16px; flex-wrap: wrap; }
+    .col-big { width: 140px; height: 140px; border-radius: 12px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font: bold 34px Arial; }
+    .col-coll { display: flex; flex-wrap: wrap; gap: 10px; }
+    .col-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-bg); }
+    .col-swbig { width: 70px; height: 50px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; }
+    .col-thumb { height: 26px; border-radius: 3px; vertical-align: middle; border: 1px solid var(--border); }
     .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
     .row input[type=text] { flex: 1; min-width: 200px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
@@ -745,6 +760,119 @@
         </div>
       </section>
 
+      <!-- Color Picker -->
+      <section v-else-if="tab === 'color'">
+        <h2 style="margin-top:0">{{ t('col_title') }}</h2>
+        <p class="muted">{{ t('col_intro') }}</p>
+        <div class="actions" style="margin-top:0">
+          <button class="btn blue" @click="colScreen">🎯 {{ t('col_screen') }}</button>
+          <button class="btn gray" @click="colScreenshot">📸 {{ t('col_screenshot') }}</button>
+          <button class="btn gray" @click="$refs.colFile.click()">🖼 {{ t('col_pick_file') }}</button>
+          <button class="btn gray" @click="colPasteBtn">📋 {{ t('col_paste') }}</button>
+          <span class="muted">{{ t('col_samples') }}</span>
+          <button class="btn gray" v-for="s in colSampleList" :key="s" @click="colSample(s)">{{ t('col_sample_' + s) }}</button>
+        </div>
+        <input ref="colFile" type="file" accept="image/*" style="display:none" @change="onColPick" />
+        <div class="muted" v-if="col.msg">{{ col.msg }}</div>
+        <div class="bad" v-if="col.err">{{ col.err }}</div>
+
+        <div class="drop" v-if="!col.imgUrl" :class="{ over: col.over }" @dragover.prevent="col.over = true" @dragleave.prevent="col.over = false" @drop.prevent="onColDrop" @click="$refs.colFile.click()">
+          <b>{{ t('col_drop') }}</b><br><span class="muted">{{ t('col_drop_sub') }}</span>
+        </div>
+        <div v-else class="col-imgwrap" @dragover.prevent @drop.prevent="onColDrop">
+          <div class="row" style="margin-top:0">
+            <b>{{ col.imgName }}</b><span class="muted">{{ col.imgW }}×{{ col.imgH }} px</span>
+            <span>{{ t('col_sample_size') }}</span>
+            <select v-model.number="col.avg"><option :value="1">1 px</option><option :value="3">3×3</option><option :value="5">5×5</option></select>
+            <button class="btn gray" @click="colClearImg">{{ t('col_clear_img') }}</button>
+            <span class="muted">{{ t('col_click_hint') }}</span>
+          </div>
+          <div class="col-stage">
+            <canvas ref="colCanvas" class="col-canvas" @mousemove="colHover" @mouseleave="col.hover = null" @click="colClick"></canvas>
+            <div class="col-loupe" v-if="col.hover" :style="{ left: col.hover.x + 'px', top: col.hover.y + 'px' }">
+              <canvas ref="colLoupe" width="110" height="110"></canvas>
+              <div><span class="col-sw" :style="{ background: col.hover.hex }"></span> {{ col.hover.hex }} · {{ col.hover.px }},{{ col.hover.py }}</div>
+            </div>
+          </div>
+          <div v-if="col.dominant.length" style="margin-top:8px">
+            <span class="muted">{{ t('col_dominant') }}</span>
+            <span class="col-chip" v-for="d in col.dominant" :key="d.hex" :title="d.hex + ' · ' + d.pct + '%'" :style="{ background: d.hex }" @click="colPickHex(d.hex, 'dominant')"></span>
+            <button class="lnk" @click="colAddAllDominant">+ {{ t('col_add_all') }}</button>
+          </div>
+        </div>
+
+        <h3>{{ t('col_palette') }}</h3>
+        <div class="row" style="margin-top:0">
+          <input type="color" :value="colHex6" @input="colPickHex($event.target.value, 'palette', true)" @change="colPickHex($event.target.value, 'palette')" style="width:56px;height:36px;padding:2px" />
+          <input type="text" v-model="col.manual" :placeholder="t('col_manual_ph')" @keyup.enter="colManual" style="max-width:320px" />
+          <button class="btn gray" @click="colManual">OK</button>
+        </div>
+        <div class="col-tw">
+          <div v-for="row in colTw" :key="row.name" class="col-twrow">
+            <span class="muted col-twname">{{ row.name }}</span>
+            <span v-for="c in row.shades" :key="c.k" class="col-chip sm" :title="row.name + '-' + c.k + ' ' + c.hex" :style="{ background: c.hex }" @click="colPickHex(c.hex, 'tailwind ' + row.name + '-' + c.k)"></span>
+          </div>
+        </div>
+
+        <div class="fi-card" v-if="col.cur">
+          <div class="col-cur">
+            <div class="col-big" :style="{ background: colCss.rgba }"><span :style="{ color: colInfo.textOn }">Aa</span></div>
+            <div style="flex:1;min-width:260px">
+              <div class="row" style="margin-top:0">
+                <span>Alpha</span><input type="range" min="0" max="100" v-model.number="col.alphaPct" @input="colSetAlpha" style="flex:1" /><span>{{ col.alphaPct }}%</span>
+                <button class="btn" @click="colCollect">+ {{ t('col_collect') }}</button>
+              </div>
+              <table class="kv" style="margin-top:6px"><tbody>
+                <tr v-for="f in colFormats" :key="f[0]"><th>{{ f[0] }}</th><td><code>{{ f[1] }}</code> <button class="lnk" @click="colCopy(f[1])">{{ col.copied === f[1] ? t('copied') : t('ocr_copy') }}</button></td></tr>
+                <tr><th>{{ t('col_nearest') }}</th><td>{{ colInfo.nearest }}</td></tr>
+                <tr><th>{{ t('col_contrast') }}</th><td>{{ t('col_vs_white') }} {{ colInfo.cWhite }}:1 <span class="pill" :class="colInfo.cWhite >= 4.5 ? 'okp' : 'errp'">{{ colWcag(colInfo.cWhite) }}</span> · {{ t('col_vs_black') }} {{ colInfo.cBlack }}:1 <span class="pill" :class="colInfo.cBlack >= 4.5 ? 'okp' : 'errp'">{{ colWcag(colInfo.cBlack) }}</span></td></tr>
+              </tbody></table>
+              <div style="margin-top:8px"><span class="muted">{{ t('col_shades') }}</span>
+                <span v-for="s in colInfo.scale" :key="s" class="col-chip sm" :title="s" :style="{ background: s }" @click="colPickHex(s, 'tint/shade')"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3>{{ t('col_collection') }} <span class="pill">{{ col.coll.length }}</span></h3>
+        <p class="muted" v-if="!col.coll.length">{{ t('col_coll_empty') }}</p>
+        <div v-else>
+          <div class="col-coll">
+            <div class="col-item" v-for="(c, i) in col.coll" :key="c.id">
+              <div class="col-swbig" :style="{ background: c.rgba }" @click="colPickHex(c.hex8, 'koleksi')"></div>
+              <code>{{ c.hex8.length === 9 && !c.hex8.endsWith('ff') ? c.hex8 : c.hex }}</code>
+              <select v-model="c.role" @change="colSave"><option value="">{{ t('col_role_none') }}</option><option v-for="r in colRoles" :key="r" :value="r">{{ r }}</option></select>
+              <button class="lnk" @click="col.coll.splice(i, 1); colSave()">✕</button>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn gray" @click="colAutoRoles">{{ t('col_auto_roles') }}</button>
+            <select v-model="col.exp"><option value="ai">{{ t('col_exp_ai') }}</option><option value="css">CSS variables</option><option value="tw">Tailwind config</option><option value="json">JSON</option></select>
+            <button class="btn blue" @click="colCopy(colExport)">{{ col.copied === colExport ? t('copied') : t('col_copy_exp') }}</button>
+            <button class="btn gray" @click="colClearColl">{{ t('col_clear_coll') }}</button>
+          </div>
+          <textarea readonly :value="colExport" style="min-height:180px"></textarea>
+        </div>
+
+        <h3>{{ t('col_history') }} <span class="pill">{{ col.hist.length }}</span>
+          <button class="lnk" v-if="col.hist.length" @click="colClearHist" style="font-weight:normal">{{ t('col_clear_hist') }}</button></h3>
+        <table v-if="col.hist.length">
+          <thead><tr><th>{{ t('col_th_color') }}</th><th>HEX</th><th>RGBA</th><th>HSL</th><th>{{ t('col_th_src') }}</th><th>{{ t('col_th_time') }}</th><th></th></tr></thead>
+          <tbody>
+            <tr v-for="h in colHistShown" :key="h.id">
+              <td><span class="col-sw" :style="{ background: h.rgba }"></span></td>
+              <td><code>{{ h.hex8 }}</code></td>
+              <td><code>{{ h.rgba }}</code></td>
+              <td><code>{{ h.hsl }}</code></td>
+              <td><img v-if="col.thumbs[h.img]" :src="col.thumbs[h.img].url" class="col-thumb" :title="col.thumbs[h.img].name" /> {{ h.src }}<span class="muted" v-if="h.px != null"> @{{ h.px }},{{ h.py }}</span></td>
+              <td class="muted">{{ new Date(h.t).toLocaleString() }}</td>
+              <td style="white-space:nowrap"><button class="lnk" @click="colPickHex(h.hex8, 'history')">{{ t('col_use') }}</button> <button class="lnk" @click="colCollectHex(h.hex8)">+</button> <button class="lnk" @click="colDelHist(h.id)">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <button class="lnk" v-if="col.hist.length > col.histLimit" @click="col.histLimit += 50">{{ t('col_more') }} ({{ col.hist.length - col.histLimit }})</button>
+      </section>
+
       <!-- Puppeteer Record -->
       <section v-else-if="tab === 'pup'">
         <h2 style="margin-top:0">{{ t('pup_title') }}</h2>
@@ -870,7 +998,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.26';
+    const APP_VERSION = '1.27';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -987,6 +1115,7 @@
       { key: 'dast', title: 'DAST pasif — cek header situs', desc: 'Hanya dipakai di tab DAST pasif. URL yang Anda masukkan dikirim ke layanan ini; keduanya hanya membaca respons publik situs, tidak menyerang.' },
       { key: 'sast', title: 'SAST — pemeriksaan kode', desc: 'Tidak memakai API apa pun: kode dicek lokal di browser dan tidak dikirim ke mana pun.', none: true },
       { key: 'ocr', title: 'OCR Gambar — baca teks dari gambar', desc: 'Hanya dipakai di tab OCR Gambar. Tesseract jalan di browser; OCR.space dan AI menerima gambar yang Anda kirim.' },
+      { key: 'color', title: 'Color Picker', desc: 'Tidak memakai API: gambar dan warna diproses lokal di browser.', none: true },
       { key: 'app', title: 'Aplikasi — library halaman', desc: 'Dimuat saat halaman dibuka, bukan bagian dari proses scan.' }
     ];
     const API_LIST = [
@@ -6214,6 +6343,192 @@
       return '';
     }
 
+    // ============================================================
+    //  Color Picker: ambil warna dari gambar (tempel/drop/pilih/contoh), dari layar (EyeDropper
+    //  atau screenshot getDisplayMedia), atau dari palet. Format HEX/RGB(A)/HSL/HSV/CMYK, kontras
+    //  WCAG, koleksi dengan peran (primary, background, ...) + ekspor prompt AI / CSS / Tailwind.
+    //  Koleksi + riwayat + thumbnail kecil disimpan di localStorage (tanpa API apa pun).
+    // ============================================================
+    const COL_KEY = 'scaColor';
+    const COL_HIST_MAX = 500, COL_THUMB_MAX = 40;
+    const COL_ROLES = ['primary', 'secondary', 'accent', 'background', 'surface', 'text', 'muted', 'border', 'success', 'warning', 'danger', 'info'];
+    const COL_TW_RAW = {
+      slate: 'f1f5f9 cbd5e1 64748b 334155 0f172a', gray: 'f3f4f6 d1d5db 6b7280 374151 111827',
+      red: 'fee2e2 fca5a5 ef4444 b91c1c 7f1d1d', orange: 'ffedd5 fdba74 f97316 c2410c 7c2d12',
+      amber: 'fef3c7 fcd34d f59e0b b45309 78350f', yellow: 'fef9c3 fde047 eab308 a16207 713f12',
+      lime: 'ecfccb bef264 84cc16 4d7c0f 365314', green: 'dcfce7 86efac 22c55e 15803d 14532d',
+      emerald: 'd1fae5 6ee7b7 10b981 047857 064e3b', teal: 'ccfbf1 5eead4 14b8a6 0f766e 134e4a',
+      cyan: 'cffafe 67e8f9 06b6d4 0e7490 164e63', sky: 'e0f2fe 7dd3fc 0ea5e9 0369a1 0c4a6e',
+      blue: 'dbeafe 93c5fd 3b82f6 1d4ed8 1e3a8a', indigo: 'e0e7ff a5b4fc 6366f1 4338ca 312e81',
+      violet: 'ede9fe c4b5fd 8b5cf6 6d28d9 4c1d95', purple: 'f3e8ff d8b4fe a855f7 7e22ce 581c87',
+      fuchsia: 'fae8ff f0abfc d946ef a21caf 701a75', pink: 'fce7f3 f9a8d4 ec4899 be185d 831843',
+      rose: 'ffe4e6 fda4af f43f5e be123c 881337'
+    };
+    const COL_TW = Object.keys(COL_TW_RAW).map(name => ({ name, shades: COL_TW_RAW[name].split(' ').map((h, i) => ({ k: [100, 300, 500, 700, 900][i], hex: '#' + h })) }));
+    const COL_I18N = {
+      id: {
+        tab_color: 'Color Picker', col_title: 'Color Picker (ambil warna untuk tema FE)',
+        col_intro: 'Ambil warna dari layar, screenshot, gambar yang ditempel (Ctrl+V), contoh gambar, atau palet. Lihat HEX/RGBA/HSL/dll + kontras WCAG, kumpulkan ke koleksi dengan peran (primary, background, ...), lalu ekspor sebagai prompt AI, CSS variables, atau Tailwind. Koleksi & riwayat tersimpan di browser ini.',
+        col_screen: 'Ambil dari layar', col_screenshot: 'Screenshot layar', col_pick_file: 'Pilih gambar', col_paste: 'Tempel dari clipboard',
+        col_samples: 'Contoh:', col_sample_ui: 'Mockup UI', col_sample_spectrum: 'Spektrum', col_sample_sunset: 'Senja',
+        col_drop: 'Ctrl+V untuk tempel gambar, atau drop / klik untuk pilih file', col_drop_sub: 'Klik di gambar untuk ambil warna; warna dominan dihitung otomatis',
+        col_sample_size: 'Sampel', col_clear_img: 'Tutup gambar', col_click_hint: 'Klik = ambil warna', col_dominant: 'Warna dominan:', col_add_all: 'masukkan semua ke koleksi',
+        col_palette: 'Palet', col_manual_ph: '#1e3a8a / rgb(30,58,138) / hsl(224 64% 33%)',
+        col_collect: 'Koleksi', col_nearest: 'Mirip Tailwind', col_contrast: 'Kontras WCAG', col_vs_white: 'vs putih', col_vs_black: 'vs hitam', col_shades: 'Tint/shade:',
+        col_collection: 'Koleksi warna', col_coll_empty: 'Belum ada. Ambil warna lalu klik "+ Koleksi".', col_role_none: '(peran)',
+        col_auto_roles: 'Isi peran otomatis', col_exp_ai: 'Prompt untuk AI', col_copy_exp: 'Copy ekspor', col_clear_coll: 'Kosongkan koleksi',
+        col_history: 'Riwayat ambil warna', col_clear_hist: 'hapus riwayat', col_th_color: 'Warna', col_th_src: 'Sumber', col_th_time: 'Waktu', col_use: 'pakai', col_more: 'Tampilkan lagi',
+        col_e_noimg: 'Clipboard tidak berisi gambar.', col_e_clip: 'Browser menolak baca clipboard. Pakai Ctrl+V langsung di tab ini.', col_e_type: 'File bukan gambar.',
+        col_e_parse: 'Format warna tidak dikenali.', col_e_screen: 'Gagal mengambil layar: ', col_eyedrop_fallback: 'Browser ini belum mendukung EyeDropper; pakai screenshot layar lalu klik di gambar.',
+        col_src_screen: 'layar', col_src_shot: 'screenshot layar', col_cancel: 'Dibatalkan.',
+        col_confirm_clear: 'Hapus semua?',
+        col_ai_head: 'Saya akan membangun sebuah website. Gunakan palet warna berikut sebagai warna dasar tema:',
+        col_ai_tail: 'Buat design token (CSS variables) untuk light dan dark mode dari palet ini, turunkan skala 50-900 bila perlu, pastikan kontras teks memenuhi WCAG AA (min 4.5:1), dan pakai warna secara konsisten untuk tombol, link, background, card, border, dan status (success/warning/danger/info). Tampilkan juga contoh komponen yang memakainya.',
+        col_ai_norole: 'warna tambahan',
+        grp_color_title: 'Color Picker', grp_color_desc: 'Tidak memakai API: gambar dan warna diproses lokal di browser.'
+      },
+      en: {
+        tab_color: 'Color Picker', col_title: 'Color Picker (grab colors for an FE theme)',
+        col_intro: 'Grab colors from the screen, a screenshot, a pasted image (Ctrl+V), a sample image, or a palette. See HEX/RGBA/HSL/etc + WCAG contrast, collect them with roles (primary, background, ...), then export as an AI prompt, CSS variables, or Tailwind. Collection & history are kept in this browser.',
+        col_screen: 'Pick from screen', col_screenshot: 'Screen capture', col_pick_file: 'Pick image', col_paste: 'Paste from clipboard',
+        col_samples: 'Samples:', col_sample_ui: 'UI mockup', col_sample_spectrum: 'Spectrum', col_sample_sunset: 'Sunset',
+        col_drop: 'Ctrl+V to paste an image, or drop / click to pick a file', col_drop_sub: 'Click the image to pick a color; dominant colors are computed automatically',
+        col_sample_size: 'Sample', col_clear_img: 'Close image', col_click_hint: 'Click = pick color', col_dominant: 'Dominant colors:', col_add_all: 'add all to collection',
+        col_palette: 'Palette', col_manual_ph: '#1e3a8a / rgb(30,58,138) / hsl(224 64% 33%)',
+        col_collect: 'Collect', col_nearest: 'Closest Tailwind', col_contrast: 'WCAG contrast', col_vs_white: 'vs white', col_vs_black: 'vs black', col_shades: 'Tints/shades:',
+        col_collection: 'Color collection', col_coll_empty: 'Empty. Pick a color, then click "+ Collect".', col_role_none: '(role)',
+        col_auto_roles: 'Auto-assign roles', col_exp_ai: 'Prompt for AI', col_copy_exp: 'Copy export', col_clear_coll: 'Clear collection',
+        col_history: 'Pick history', col_clear_hist: 'clear history', col_th_color: 'Color', col_th_src: 'Source', col_th_time: 'Time', col_use: 'use', col_more: 'Show more',
+        col_e_noimg: 'The clipboard has no image.', col_e_clip: 'The browser blocked clipboard read. Press Ctrl+V on this tab instead.', col_e_type: 'Not an image file.',
+        col_e_parse: 'Unrecognized color format.', col_e_screen: 'Screen capture failed: ', col_eyedrop_fallback: 'This browser has no EyeDropper yet; use screen capture, then click the image.',
+        col_src_screen: 'screen', col_src_shot: 'screen capture', col_cancel: 'Cancelled.',
+        col_confirm_clear: 'Delete everything?',
+        col_ai_head: 'I am going to build a website. Use the following color palette as the base theme colors:',
+        col_ai_tail: 'Create design tokens (CSS variables) for light and dark mode from this palette, derive a 50-900 scale where needed, make sure text contrast meets WCAG AA (min 4.5:1), and use the colors consistently for buttons, links, backgrounds, cards, borders, and states (success/warning/danger/info). Also show sample components that use them.',
+        col_ai_norole: 'extra color',
+        grp_color_title: 'Color Picker', grp_color_desc: 'Uses no API: images and colors are processed locally in the browser.'
+      }
+    };
+    Object.keys(COL_I18N).forEach(l => { I18N[l] = Object.assign({}, COL_I18N[l], I18N[l] || {}); });
+
+    const colClamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const colH2 = n => Math.round(colClamp(n, 0, 255)).toString(16).padStart(2, '0');
+    function colToHex(c, withAlpha) { return '#' + colH2(c.r) + colH2(c.g) + colH2(c.b) + (withAlpha ? colH2(Math.round((c.a == null ? 1 : c.a) * 255)) : ''); }
+    function colFromHex(h) {
+      let s = String(h || '').trim().replace(/^#/, '');
+      if (!/^([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s)) return null;
+      if (s.length <= 4) s = s.split('').map(ch => ch + ch).join('');
+      const n = i => parseInt(s.slice(i, i + 2), 16);
+      return { r: n(0), g: n(2), b: n(4), a: s.length === 8 ? Math.round(n(6) / 255 * 100) / 100 : 1 };
+    }
+    function colToHsl(c) {
+      const r = c.r / 255, g = c.g / 255, b = c.b / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+      let h = 0, s = 0;
+      if (d) {
+        s = d / (1 - Math.abs(2 * l - 1));
+        h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        h = (h * 60 + 360) % 360;
+      }
+      return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+    function colFromHsl(h, s, l) {
+      s /= 100; l /= 100;
+      const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+      const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+      return { r: Math.round(f(0) * 255), g: Math.round(f(8) * 255), b: Math.round(f(4) * 255), a: 1 };
+    }
+    // Terima #hex, rgb()/rgba(), hsl()/hsla(), atau "r,g,b".
+    function colParse(text) {
+      const s = String(text || '').trim().toLowerCase();
+      const hx = colFromHex(s);
+      if (hx) return hx;
+      const nums = (s.match(/-?[\d.]+%?/g) || []).map(x => ({ v: parseFloat(x), p: x.endsWith('%') }));
+      if (nums.length < 3 || nums.slice(0, 3).some(x => isNaN(x.v))) return null;
+      const alpha = nums[3] ? (nums[3].p ? nums[3].v / 100 : nums[3].v) : 1;
+      if (s.startsWith('hsl')) return { ...colFromHsl(nums[0].v, nums[1].v, nums[2].v), a: colClamp(alpha, 0, 1) };
+      const ch = x => colClamp(Math.round(x.p ? x.v * 2.55 : x.v), 0, 255);
+      return { r: ch(nums[0]), g: ch(nums[1]), b: ch(nums[2]), a: colClamp(alpha, 0, 1) };
+    }
+    function colLum(c) {
+      const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+    }
+    function colContrast(a, b) { const x = colLum(a), y = colLum(b); return Math.round((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) * 100) / 100; }
+    function colMix(c, w, t) { return { r: c.r + (w.r - c.r) * t, g: c.g + (w.g - c.g) * t, b: c.b + (w.b - c.b) * t, a: 1 }; }
+    function colNearestTw(c) {
+      let best = null, bd = Infinity;
+      COL_TW.forEach(row => row.shades.forEach(s => {
+        const o = colFromHex(s.hex), d = (o.r - c.r) ** 2 * 0.3 + (o.g - c.g) ** 2 * 0.59 + (o.b - c.b) ** 2 * 0.11;
+        if (d < bd) { bd = d; best = row.name + '-' + s.k + ' (' + s.hex + ')'; }
+      }));
+      return best;
+    }
+    function colEntry(c, src, extra) {
+      const hsl = colToHsl(c), a = c.a == null ? 1 : c.a;
+      return Object.assign({ id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), hex: colToHex(c), hex8: colToHex({ ...c, a }, true),
+        rgba: 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + a + ')', hsl: 'hsl(' + hsl.h + ' ' + hsl.s + '% ' + hsl.l + '%' + (a < 1 ? ' / ' + a : '') + ')',
+        src, t: Date.now() }, extra || {});
+    }
+    // Warna dominan: gambar diperkecil, dikelompokkan per 16 level/kanal, lalu kelompok yang mirip digabung.
+    function colDominant(canvas, max) {
+      const sc = Math.min(1, 120 / Math.max(canvas.width, canvas.height));
+      const w = Math.max(1, Math.round(canvas.width * sc)), h = Math.max(1, Math.round(canvas.height * sc));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(canvas, 0, 0, w, h);
+      const d = g.getImageData(0, 0, w, h).data, bins = new Map();
+      let total = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 128) continue;
+        const k = (d[i] >> 4) << 8 | (d[i + 1] >> 4) << 4 | (d[i + 2] >> 4);
+        const b = bins.get(k) || { n: 0, r: 0, g: 0, b: 0 };
+        b.n++; b.r += d[i]; b.g += d[i + 1]; b.b += d[i + 2]; bins.set(k, b); total++;
+      }
+      const list = [...bins.values()].sort((a, b) => b.n - a.n).map(b => ({ r: Math.round(b.r / b.n), g: Math.round(b.g / b.n), b: Math.round(b.b / b.n), n: b.n }));
+      const out = [];
+      for (const x of list) {
+        const near = out.find(o => (o.r - x.r) ** 2 + (o.g - x.g) ** 2 + (o.b - x.b) ** 2 < 1600);
+        if (near) { near.n += x.n; continue; }
+        out.push({ ...x });
+        if (out.length >= (max || 8) * 3) break;
+      }
+      return out.sort((a, b) => b.n - a.n).slice(0, max || 8).map(o => ({ hex: colToHex(o), pct: Math.round(o.n / total * 1000) / 10 }));
+    }
+    // Contoh gambar dibuat di canvas (tanpa file/URL luar).
+    function colSampleCanvas(kind) {
+      const c = document.createElement('canvas'); c.width = 900; c.height = 520;
+      const g = c.getContext('2d');
+      if (kind === 'spectrum') {
+        for (let x = 0; x < 900; x++) {
+          const grd = g.createLinearGradient(0, 0, 0, 520);
+          grd.addColorStop(0, '#fff'); grd.addColorStop(0.5, 'hsl(' + (x / 900 * 360) + ' 100% 50%)'); grd.addColorStop(1, '#000');
+          g.fillStyle = grd; g.fillRect(x, 0, 1, 520);
+        }
+      } else if (kind === 'sunset') {
+        const grd = g.createLinearGradient(0, 0, 0, 520);
+        ['#1e1b4b', '#7c3aed', '#db2777', '#f97316', '#fde68a'].forEach((h, i) => grd.addColorStop(i / 4, h));
+        g.fillStyle = grd; g.fillRect(0, 0, 900, 520);
+        g.fillStyle = '#fef3c7'; g.beginPath(); g.arc(450, 400, 80, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#0f172a'; g.fillRect(0, 430, 900, 90);
+      } else {
+        g.fillStyle = '#f1f5f9'; g.fillRect(0, 0, 900, 520);
+        g.fillStyle = '#1e3a8a'; g.fillRect(0, 0, 900, 64);
+        g.fillStyle = '#ffffff'; g.font = 'bold 22px Arial'; g.fillText('Dashboard Proyek', 24, 40);
+        g.fillStyle = '#f97316'; g.fillRect(720, 14, 150, 36);
+        g.fillStyle = '#ffffff'; g.font = '16px Arial'; g.fillText('+ Proyek baru', 742, 38);
+        g.fillStyle = '#ffffff'; g.fillRect(24, 90, 400, 200); g.fillRect(450, 90, 420, 200);
+        g.strokeStyle = '#cbd5e1'; g.strokeRect(24, 90, 400, 200); g.strokeRect(450, 90, 420, 200);
+        g.fillStyle = '#0f172a'; g.font = 'bold 18px Arial'; g.fillText('Realisasi anggaran', 44, 125);
+        g.fillStyle = '#64748b'; g.font = '14px Arial'; g.fillText('Update 2 Nov 2026', 44, 150);
+        [['#22c55e', 120], ['#3b82f6', 90], ['#eab308', 60], ['#ef4444', 30]].forEach((b, i) => { g.fillStyle = b[0]; g.fillRect(470 + i * 95, 270 - b[1] * 1.4, 60, b[1] * 1.4); });
+        g.fillStyle = '#dcfce7'; g.fillRect(44, 180, 160, 34); g.fillStyle = '#15803d'; g.font = '15px Arial'; g.fillText('✓ Disetujui', 60, 203);
+        g.fillStyle = '#fee2e2'; g.fillRect(220, 180, 160, 34); g.fillStyle = '#b91c1c'; g.fillText('✕ Ditolak', 240, 203);
+        g.fillStyle = '#0f172a'; g.fillRect(24, 320, 846, 170);
+        g.fillStyle = '#e2e8f0'; g.font = '15px Consolas, monospace'; g.fillText('$ npm run build  # tema gelap', 44, 360);
+        g.fillStyle = '#a78bfa'; g.fillText('const primary = "#1e3a8a";', 44, 392);
+      }
+      return c;
+    }
+
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
     // Daftar tab atas + kunci localStorage untuk setelan tab mana yang ditampilkan.
@@ -6227,6 +6542,7 @@
       // { key: 'jwt', label: 'JWT Decode' }, -- dinonaktifkan, pakai Smart Decode
       { key: 'decode', label: 'Smart Decode' },
       { key: 'ocr', label: 'OCR Gambar' },
+      { key: 'color', label: 'Color Picker' },
       { key: 'dbg', label: 'Hook Debug' },
       { key: 'rate', label: 'Rate Limiter (dari curl)' },
       { key: 'rto', label: 'RTO (kirim lambat)' },
@@ -6313,6 +6629,8 @@
           fi: { results: [], busy: false, over: false, copied: '' },
           ocr: { engine: 'tess', lang: 'ind+eng', imgUrl: '', imgInfo: '', busy: false, progress: '', text: '', done: false, used: '', error: '', copied: false, over: false, spaceKey: '', spaceEngine: '', ai: { preset: 'openrouter', baseUrl: OCR_PRESETS[0].baseUrl, model: OCR_PRESETS[0].model, token: '', mode: 'detail', prompt: '' } },
           ocrEngines: ['tess', 'space', 'ai'], ocrPresets: OCR_PRESETS,
+          col: { imgUrl: '', imgId: '', imgName: '', imgW: 0, imgH: 0, avg: 1, over: false, msg: '', err: '', hover: null, dominant: [], cur: null, alphaPct: 100, manual: '', copied: '', coll: [], hist: [], thumbs: {}, exp: 'ai', histLimit: 50 },
+          colSampleList: ['ui', 'spectrum', 'sunset'], colTw: COL_TW, colRoles: COL_ROLES,
           dec: { input: '', busy: false, chains: [], error: '', copied: '', note: '', form: decFormDefault(), tries: [], tryBusy: false },
           decSamples: DEC_SAMPLES, decEncs: ['auto', 'hex', 'base64', 'utf8'], decModes: ['CBC', 'GCM', 'CTR', 'ECB']
         };
@@ -6320,6 +6638,42 @@
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
         shownTabs() { return this.tabList.filter(t => this.visibleTabs[t.key]); },
+        colHex6() { return this.col.cur ? colToHex(this.col.cur) : '#1e3a8a'; },
+        colCss() { const c = this.col.cur || { r: 0, g: 0, b: 0, a: 1 }; return { rgba: 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + c.a + ')' }; },
+        colInfo() {
+          const c = this.col.cur;
+          if (!c) return {};
+          const W = { r: 255, g: 255, b: 255 }, K = { r: 0, g: 0, b: 0 };
+          const cWhite = colContrast(c, W), cBlack = colContrast(c, K);
+          const scale = [0.8, 0.6, 0.4, 0.2].map(t => colToHex(colMix(c, W, t))).concat([colToHex(c)], [0.2, 0.4, 0.6, 0.8].map(t => colToHex(colMix(c, K, t))));
+          return { cWhite, cBlack, textOn: cWhite >= cBlack ? '#ffffff' : '#000000', nearest: colNearestTw(c), scale };
+        },
+        colFormats() {
+          const c = this.col.cur;
+          if (!c) return [];
+          const h = colToHsl(c), a = c.a;
+          const mx = Math.max(c.r, c.g, c.b) / 255, mn = Math.min(c.r, c.g, c.b) / 255;
+          const hsv = 'hsv(' + h.h + ', ' + Math.round(mx ? (mx - mn) / mx * 100 : 0) + '%, ' + Math.round(mx * 100) + '%)';
+          const k = 1 - mx, cm = v => Math.round(k >= 1 ? 0 : (1 - v / 255 - k) / (1 - k) * 100);
+          return [
+            ['HEX', colToHex(c)], ['HEX8', colToHex(c, true)],
+            ['RGB', 'rgb(' + c.r + ', ' + c.g + ', ' + c.b + ')'], ['RGBA', 'rgba(' + c.r + ', ' + c.g + ', ' + c.b + ', ' + a + ')'],
+            ['HSL', 'hsl(' + h.h + ', ' + h.s + '%, ' + h.l + '%)'], ['HSLA', 'hsla(' + h.h + ', ' + h.s + '%, ' + h.l + '%, ' + a + ')'],
+            ['HSV', hsv], ['CMYK', 'cmyk(' + cm(c.r) + '%, ' + cm(c.g) + '%, ' + cm(c.b) + '%, ' + Math.round(k * 100) + '%)'],
+            ['CSS var', '--color-primary: ' + colToHex(c, a < 1) + ';'], ['Flutter', 'Color(0x' + colToHex(c, true).slice(7).toUpperCase() + colToHex(c).slice(1).toUpperCase() + ')']
+          ];
+        },
+        colHistShown() { return this.col.hist.slice(0, this.col.histLimit); },
+        colExport() {
+          const list = this.col.coll;
+          if (!list.length) return '';
+          const name = (x, i) => x.role || ('color' + (i + 1));
+          const val = x => (x.hex8.endsWith('ff') ? x.hex : x.hex8);
+          if (this.col.exp === 'css') return ':root {\n' + list.map((x, i) => '  --' + name(x, i) + ': ' + val(x) + ';').join('\n') + '\n}\n';
+          if (this.col.exp === 'tw') return '// tailwind.config.js\nmodule.exports = {\n  theme: {\n    extend: {\n      colors: {\n' + list.map((x, i) => "        '" + name(x, i) + "': '" + val(x) + "',").join('\n') + '\n      }\n    }\n  }\n};\n';
+          if (this.col.exp === 'json') return JSON.stringify(Object.fromEntries(list.map((x, i) => [name(x, i), { hex: val(x), rgba: x.rgba, hsl: x.hsl }])), null, 2) + '\n';
+          return tr('col_ai_head') + '\n' + list.map(x => '- ' + (x.role || tr('col_ai_norole')) + ': ' + val(x) + ' (' + x.rgba + ', ' + x.hsl + ')').join('\n') + '\n\n' + tr('col_ai_tail') + '\n';
+        },
         ocrDefaultPrompt() { return tr('ocr_prompt_' + this.ocr.ai.mode); },
         hookScript() { return HOOK_SCRIPT; },
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
@@ -6414,6 +6768,8 @@
         this.pupInit();
         this.ocrLoadPrefs();
         document.addEventListener('paste', e => { this.onOcrPaste(e); });
+        this.colLoad();
+        document.addEventListener('paste', e => { this.onColPaste(e); });
       },
       watch: {
         items: { deep: true, handler() { this.saveItems(); } },
@@ -6425,6 +6781,201 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
+        // ---- Color Picker
+        colLoad() {
+          try {
+            const d = JSON.parse(localStorage.getItem(COL_KEY) || 'null');
+            if (!d) return;
+            if (Array.isArray(d.coll)) this.col.coll = d.coll.filter(x => x && x.hex);
+            if (Array.isArray(d.hist)) this.col.hist = d.hist.filter(x => x && x.hex8).slice(0, COL_HIST_MAX);
+            if (d.thumbs && typeof d.thumbs === 'object') this.col.thumbs = d.thumbs;
+            if (d.exp) this.col.exp = d.exp;
+          } catch (e) { /* data rusak: mulai kosong */ }
+        },
+        // Simpan koleksi + riwayat; thumbnail hanya untuk gambar yang masih dipakai di riwayat.
+        colSave() {
+          const c = this.col;
+          if (c.hist.length > COL_HIST_MAX) c.hist.splice(COL_HIST_MAX);
+          const used = [...new Set(c.hist.map(h => h.img).filter(Boolean))].slice(0, COL_THUMB_MAX);
+          const thumbs = {};
+          used.forEach(k => { if (c.thumbs[k] && c.thumbs[k].url) thumbs[k] = c.thumbs[k]; });
+          try { localStorage.setItem(COL_KEY, JSON.stringify({ coll: c.coll, hist: c.hist, thumbs, exp: c.exp })); }
+          catch (e) { try { localStorage.setItem(COL_KEY, JSON.stringify({ coll: c.coll, hist: c.hist.slice(0, 100), thumbs: {}, exp: c.exp })); } catch (e2) { /* penuh: abaikan */ } }
+        },
+        colSetCanvas(src, name) {
+          // Batasi sisi terpanjang 4000 px supaya memori aman.
+          const sc = Math.min(1, 4000 / Math.max(src.width, src.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(src.width * sc)); c.height = Math.max(1, Math.round(src.height * sc));
+          c.getContext('2d', { willReadFrequently: true }).drawImage(src, 0, 0, c.width, c.height);
+          this.colSrc = c;
+          const t = document.createElement('canvas'), ts = 64 / c.height;
+          t.width = Math.max(1, Math.round(c.width * ts)); t.height = 64;
+          t.getContext('2d').drawImage(c, 0, 0, t.width, t.height);
+          const id = 'img' + Date.now();
+          this.col.thumbs[id] = { url: t.toDataURL('image/jpeg', 0.7), name };
+          Object.assign(this.col, { imgUrl: id, imgId: id, imgName: name, imgW: c.width, imgH: c.height, err: '', msg: '', hover: null, dominant: colDominant(c, 8) });
+          this.$nextTick(() => {
+            const v = this.$refs.colCanvas;
+            if (!v) return;
+            v.width = c.width; v.height = c.height;
+            v.getContext('2d').drawImage(c, 0, 0);
+          });
+        },
+        async colSetBlob(blob, name) {
+          this.col.err = '';
+          if (!blob || !/^image\//.test(blob.type || '')) { this.col.err = tr('col_e_type'); return; }
+          try { const bmp = await createImageBitmap(blob); this.colSetCanvas(bmp, name || 'gambar'); bmp.close && bmp.close(); }
+          catch (e) { this.col.err = tr('col_e_type'); }
+        },
+        colSample(kind) { this.colSetCanvas(colSampleCanvas(kind), tr('col_sample_' + kind)); },
+        colClearImg() { this.colSrc = null; Object.assign(this.col, { imgUrl: '', imgId: '', imgName: '', hover: null, dominant: [] }); },
+        onColPick(e) { const f = e.target.files && e.target.files[0]; if (f) this.colSetBlob(f, f.name); e.target.value = ''; },
+        onColDrop(e) {
+          this.col.over = false;
+          const f = [...((e.dataTransfer && e.dataTransfer.files) || [])].find(x => /^image\//.test(x.type));
+          if (f) this.colSetBlob(f, f.name); else this.col.err = tr('col_e_type');
+        },
+        onColPaste(e) {
+          if (this.tab !== 'color' || !e.clipboardData) return;
+          const el = e.target, typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+          const img = [...e.clipboardData.items].find(it => it.kind === 'file' && /^image\//.test(it.type));
+          if (img) { e.preventDefault(); this.colSetBlob(img.getAsFile(), 'clipboard'); return; }
+          // Teks warna (#hex / rgb() / hsl()) yang ditempel di luar input langsung dipakai.
+          if (!typing) {
+            const txt = e.clipboardData.getData('text');
+            const c = colParse(txt);
+            if (c) this.colPick(c, 'clipboard'); else this.col.err = tr('col_e_noimg');
+          }
+        },
+        async colPasteBtn() {
+          this.col.err = '';
+          try {
+            if (!navigator.clipboard || !navigator.clipboard.read) throw new Error('no api');
+            const items = await navigator.clipboard.read();
+            for (const it of items) {
+              const type = it.types.find(x => /^image\//.test(x));
+              if (type) { await this.colSetBlob(await it.getType(type), 'clipboard'); return; }
+            }
+            this.col.err = tr('col_e_noimg');
+          } catch (e) { this.col.err = tr('col_e_clip'); }
+        },
+        // Ambil satu titik di layar mana pun (EyeDropper, Chrome/Edge); tanpa dukungan -> screenshot.
+        async colScreen() {
+          this.col.err = ''; this.col.msg = '';
+          if (!window.EyeDropper) { this.col.msg = tr('col_eyedrop_fallback'); return this.colScreenshot(); }
+          try {
+            const r = await new window.EyeDropper().open();
+            const c = colFromHex(r.sRGBHex) || colParse(r.sRGBHex);
+            if (c) this.colPick(c, tr('col_src_screen'));
+          } catch (e) { this.col.msg = tr('col_cancel'); }
+        },
+        // Screenshot satu layar/jendela/tab lewat getDisplayMedia, lalu dipakai seperti gambar biasa.
+        async colScreenshot() {
+          this.col.err = '';
+          let stream = null;
+          try {
+            stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            const v = document.createElement('video');
+            v.muted = true; v.playsInline = true; v.srcObject = stream;
+            await v.play();
+            await new Promise(r => setTimeout(r, 350));
+            const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+            c.getContext('2d').drawImage(v, 0, 0);
+            this.colSetCanvas(c, tr('col_src_shot'));
+          } catch (e) { this.col.err = tr('col_e_screen') + ((e && e.message) || e); }
+          finally { if (stream) stream.getTracks().forEach(tk => tk.stop()); }
+        },
+        colPos(e) {
+          const v = this.$refs.colCanvas, src = this.colSrc;
+          if (!v || !src) return null;
+          const rc = v.getBoundingClientRect();
+          const px = Math.floor((e.clientX - rc.left) / rc.width * src.width), py = Math.floor((e.clientY - rc.top) / rc.height * src.height);
+          if (px < 0 || py < 0 || px >= src.width || py >= src.height) return null;
+          return { px, py, x: e.clientX - rc.left, y: e.clientY - rc.top };
+        },
+        colSampleAt(px, py) {
+          const src = this.colSrc, n = this.col.avg, h = Math.floor(n / 2);
+          const x0 = colClamp(px - h, 0, src.width - 1), y0 = colClamp(py - h, 0, src.height - 1);
+          const w = Math.min(n, src.width - x0), hh = Math.min(n, src.height - y0);
+          const d = src.getContext('2d', { willReadFrequently: true }).getImageData(x0, y0, w, hh).data;
+          let r = 0, g = 0, b = 0, a = 0; const cnt = d.length / 4;
+          for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; a += d[i + 3]; }
+          return { r: Math.round(r / cnt), g: Math.round(g / cnt), b: Math.round(b / cnt), a: Math.round(a / cnt / 255 * 100) / 100 };
+        },
+        colHover(e) {
+          const p = this.colPos(e);
+          if (!p) { this.col.hover = null; return; }
+          const c = this.colSampleAt(p.px, p.py);
+          this.col.hover = { x: p.x + 18, y: p.y + 18, px: p.px, py: p.py, hex: colToHex(c) };
+          this.$nextTick(() => {
+            const l = this.$refs.colLoupe;
+            if (!l) return;
+            const g = l.getContext('2d');
+            g.imageSmoothingEnabled = false;
+            g.clearRect(0, 0, 110, 110);
+            g.drawImage(this.colSrc, p.px - 5, p.py - 5, 11, 11, 0, 0, 110, 110);
+            g.strokeStyle = '#fff'; g.lineWidth = 2; g.strokeRect(50, 50, 10, 10);
+            g.strokeStyle = '#000'; g.lineWidth = 1; g.strokeRect(48.5, 48.5, 13, 13);
+          });
+        },
+        colClick(e) {
+          const p = this.colPos(e);
+          if (!p) return;
+          this.colPick(this.colSampleAt(p.px, p.py), this.col.imgName, { img: this.col.imgId, px: p.px, py: p.py });
+        },
+        // Pilih warna aktif + catat di riwayat (preview=true: hanya ganti warna aktif, mis. saat geser color input).
+        colPick(c, src, extra, preview) {
+          this.col.cur = { r: c.r, g: c.g, b: c.b, a: c.a == null ? 1 : c.a };
+          this.col.alphaPct = Math.round(this.col.cur.a * 100);
+          this.col.err = '';
+          if (preview) return;
+          const last = this.col.hist[0];
+          const e = colEntry(this.col.cur, src, extra);
+          if (last && last.hex8 === e.hex8 && last.src === e.src && last.px === e.px && last.py === e.py) return;
+          this.col.hist.unshift(e);
+          this.colSave();
+        },
+        colPickHex(hex, src, preview) { const c = colFromHex(hex); if (c) this.colPick(c, src, null, preview); },
+        colManual() {
+          const c = colParse(this.col.manual);
+          if (!c) { this.col.err = tr('col_e_parse'); return; }
+          this.colPick(c, 'manual'); this.col.manual = '';
+        },
+        colSetAlpha() { if (this.col.cur) this.col.cur = { ...this.col.cur, a: this.col.alphaPct / 100 }; },
+        colCollectHex(hex8) {
+          const c = colFromHex(hex8);
+          if (!c) return;
+          const e = colEntry(c, '');
+          if (this.col.coll.some(x => x.hex8 === e.hex8)) return;
+          this.col.coll.push({ id: e.id, hex: e.hex, hex8: e.hex8, rgba: e.rgba, hsl: e.hsl, role: '' });
+          this.colSave();
+        },
+        colCollect() { if (this.col.cur) this.colCollectHex(colToHex(this.col.cur, true)); },
+        colAddAllDominant() { this.col.dominant.forEach(d => this.colCollectHex(d.hex + 'ff')); },
+        // Peran otomatis untuk warna tanpa peran: paling terang = background, paling gelap = text,
+        // paling jenuh = primary, lalu secondary/accent.
+        colAutoRoles() {
+          const free = this.col.coll.filter(x => !x.role);
+          const taken = new Set(this.col.coll.map(x => x.role).filter(Boolean));
+          const meta = free.map(x => { const c = colFromHex(x.hex), h = colToHsl(c); return { x, l: colLum(c), s: h.s * (1 - Math.abs(h.l - 50) / 50) }; });
+          const give = (role, pick) => {
+            if (taken.has(role) || !meta.length) return;
+            const m = pick(); m.x.role = role; taken.add(role); meta.splice(meta.indexOf(m), 1);
+          };
+          give('background', () => meta.reduce((a, b) => (b.l > a.l ? b : a)));
+          give('text', () => meta.reduce((a, b) => (b.l < a.l ? b : a)));
+          ['primary', 'secondary', 'accent'].forEach(r => give(r, () => meta.reduce((a, b) => (b.s > a.s ? b : a))));
+          this.colSave();
+        },
+        colClearColl() { if (confirm(tr('col_confirm_clear'))) { this.col.coll = []; this.colSave(); } },
+        colClearHist() { if (confirm(tr('col_confirm_clear'))) { this.col.hist = []; this.col.thumbs = {}; this.colSave(); } },
+        colDelHist(id) { this.col.hist = this.col.hist.filter(h => h.id !== id); this.colSave(); },
+        colWcag(r) { return r >= 7 ? 'AAA' : r >= 4.5 ? 'AA' : r >= 3 ? 'AA large' : 'fail'; },
+        colCopy(s) {
+          const p = navigator.clipboard ? navigator.clipboard.writeText(s) : Promise.reject(new Error('clipboard'));
+          p.then(() => { this.col.copied = s; setTimeout(() => { if (this.col.copied === s) this.col.copied = ''; }, 1500); }).catch(() => { /* abaikan */ });
+        },
         // ---- OCR Gambar
         ocrLoadPrefs() {
           try {
