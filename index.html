@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner Security</title>
   <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-  <script src="i18n/i18n.js?v=1.24"></script>
+  <script src="i18n/i18n.js?v=1.25"></script>
   <style>
     :root {
       --bg: #0f172a; --header-bg: #1e293b; --panel-bg: #111c33; --input-bg: #020617;
@@ -82,6 +82,10 @@
     .drop { border: 2px dashed #475569; border-radius: 10px; padding: 34px 16px; text-align: center; color: var(--muted); cursor: pointer; background: var(--panel-bg); transition: .15s; }
     .drop.over { border-color: var(--accent); background: var(--drop-over-bg); color: var(--text); }
     .drop b { color: var(--text); }
+    .ocr-prev { margin-top: 10px; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); text-align: center; }
+    .ocr-prev img { max-width: 100%; display: inline-block; }
+    .ocr-opt { flex: 1; min-width: 200px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; background: var(--panel-bg); }
+    .ocr-opt.on { border-color: var(--accent); }
     .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
     .row input[type=text] { flex: 1; min-width: 200px; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
@@ -675,6 +679,72 @@
         <div class="muted" style="margin-top:6px">{{ t('mw_note') }}</div>
       </section>
 
+      <!-- OCR Gambar -->
+      <section v-else-if="tab === 'ocr'">
+        <h2 style="margin-top:0">{{ t('ocr_title') }}</h2>
+        <p class="muted">{{ t('ocr_intro') }}</p>
+        <div class="drop" :class="{ over: ocr.over }" tabindex="0" @dragover.prevent="ocr.over = true" @dragleave.prevent="ocr.over = false" @drop.prevent="onOcrDrop" @click="$refs.ocrFile.click()">
+          <b>{{ t('ocr_drop') }}</b><br><span class="muted">{{ t('ocr_drop_sub') }}</span>
+        </div>
+        <input ref="ocrFile" type="file" accept="image/*" style="display:none" @change="onOcrPick" />
+        <div class="actions">
+          <button class="btn gray" @click="ocrPasteBtn">📋 {{ t('ocr_paste_btn') }}</button>
+          <button class="btn gray" v-if="ocr.imgUrl" @click="ocrClear">{{ t('ocr_clear') }}</button>
+          <span class="muted" v-if="ocr.imgInfo">{{ ocr.imgInfo }}</span>
+        </div>
+        <div v-if="ocr.imgUrl" class="ocr-prev"><img :src="ocr.imgUrl" :alt="t('ocr_preview')" /></div>
+
+        <h3>{{ t('ocr_mode') }}</h3>
+        <div class="row">
+          <label v-for="m in ocrEngines" :key="m" class="ocr-opt" :class="{ on: ocr.engine === m }">
+            <input type="radio" :value="m" v-model="ocr.engine" @change="ocrSavePrefs" /> <b>{{ t('ocr_eng_' + m) }}</b><br><span class="muted">{{ t('ocr_eng_' + m + '_d') }}</span>
+          </label>
+        </div>
+
+        <div class="row" v-if="ocr.engine === 'tess'">
+          <span>{{ t('ocr_lang') }}</span>
+          <select v-model="ocr.lang" @change="ocrSavePrefs"><option value="ind+eng">Indonesia + English</option><option value="eng">English</option><option value="ind">Indonesia</option></select>
+          <span class="muted">{{ t('ocr_tess_note') }}</span>
+        </div>
+        <div class="row" v-if="ocr.engine === 'space'">
+          <span>API key</span>
+          <input type="password" v-model="ocr.spaceKey" autocomplete="off" :placeholder="t('ocr_space_ph')" />
+          <span class="muted">{{ t('ocr_space_note') }}</span>
+        </div>
+        <div v-if="ocr.engine === 'ai'" class="fi-card" style="margin-top:10px">
+          <div class="row" style="margin-top:0">
+            <span>{{ t('ocr_ai_preset') }}</span>
+            <select v-model="ocr.ai.preset" @change="ocrPreset"><option v-for="p in ocrPresets" :key="p.key" :value="p.key">{{ p.label }}</option></select>
+            <span>{{ t('ocr_ai_detail') }}</span>
+            <select v-model="ocr.ai.mode" @change="ocr.ai.prompt = ''; ocrSavePrefs()"><option value="detail">{{ t('ocr_ai_m_detail') }}</option><option value="text">{{ t('ocr_ai_m_text') }}</option></select>
+          </div>
+          <div class="row"><span style="min-width:80px">Base URL</span><input type="text" v-model.trim="ocr.ai.baseUrl" placeholder="https://openrouter.ai/api/v1" @change="ocrSavePrefs" /></div>
+          <div class="row"><span style="min-width:80px">Model</span><input type="text" v-model.trim="ocr.ai.model" :placeholder="t('ocr_ai_model_ph')" @change="ocrSavePrefs" /></div>
+          <div class="row"><span style="min-width:80px">Token</span><input type="password" v-model="ocr.ai.token" autocomplete="off" :placeholder="t('ocr_ai_token_ph')" style="flex:1;min-width:200px" /></div>
+          <div class="muted" style="margin-top:6px">{{ t('ocr_ai_note') }}</div>
+          <details style="margin-top:8px"><summary class="muted">{{ t('ocr_ai_prompt') }}</summary>
+            <textarea v-model="ocr.ai.prompt" :placeholder="ocrDefaultPrompt" style="min-height:90px;margin-top:6px"></textarea>
+          </details>
+        </div>
+
+        <div class="actions">
+          <button class="btn" :disabled="!ocr.imgUrl || ocr.busy" @click="runOcr">{{ ocr.busy ? t('running') : t('ocr_run') }}</button>
+          <span class="muted" v-if="ocr.progress">{{ ocr.progress }}</span>
+        </div>
+        <div class="bad" v-if="ocr.error">{{ ocr.error }}</div>
+        <div v-if="ocr.text || ocr.done">
+          <h3>{{ t('ocr_result') }} <span class="muted" style="font-weight:normal">— {{ ocr.used }}</span></h3>
+          <div class="ok" v-if="!ocr.text">{{ t('ocr_empty') }}</div>
+          <textarea v-else v-model="ocr.text" spellcheck="false" style="min-height:220px"></textarea>
+          <div class="actions" v-if="ocr.text">
+            <button class="btn gray" @click="ocrCopy">{{ ocr.copied ? t('copied') : t('ocr_copy') }}</button>
+            <button class="btn gray" @click="ocrDownload">⬇ .txt</button>
+            <button class="btn gray" @click="ocrSendTo('decode')">→ {{ t('tab_decode') }}</button>
+            <button class="btn gray" @click="ocrSendTo('sast')">→ {{ t('tab_sast') }}</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Puppeteer Record -->
       <section v-else-if="tab === 'pup'">
         <h2 style="margin-top:0">{{ t('pup_title') }}</h2>
@@ -800,7 +870,7 @@
     // ============================================================
     //  Util
     // ============================================================
-    const APP_VERSION = '1.24';
+    const APP_VERSION = '1.25';
     const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, UNKNOWN: 0 };
     const SEV_LABEL = {
       id: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', UNKNOWN: 'N/A' },
@@ -916,6 +986,7 @@
       { key: 'scrape', title: 'Scraping — ambil file dari link', desc: 'Hanya dipakai saat memasukkan link repo/file GitHub, GitLab, atau URL. Hasilnya diteruskan ke scan SCA/Dockerfile.' },
       { key: 'dast', title: 'DAST pasif — cek header situs', desc: 'Hanya dipakai di tab DAST pasif. URL yang Anda masukkan dikirim ke layanan ini; keduanya hanya membaca respons publik situs, tidak menyerang.' },
       { key: 'sast', title: 'SAST — pemeriksaan kode', desc: 'Tidak memakai API apa pun: kode dicek lokal di browser dan tidak dikirim ke mana pun.', none: true },
+      { key: 'ocr', title: 'OCR Gambar — baca teks dari gambar', desc: 'Hanya dipakai di tab OCR Gambar. Tesseract jalan di browser; OCR.space dan AI menerima gambar yang Anda kirim.' },
       { key: 'app', title: 'Aplikasi — library halaman', desc: 'Dimuat saat halaman dibuka, bukan bagian dari proses scan.' }
     ];
     const API_LIST = [
@@ -933,6 +1004,9 @@
       { key: 'ht', group: 'dast', name: 'HackerTarget — httpheaders', url: 'GET https://api.hackertarget.com/httpheaders/?q={url}', use: 'Mengambil header respons situs, lalu dianalisis di browser (HSTS, CSP, cookie, dll.). Batas gratis ±50 request/hari.', sends: 'URL yang dicek', when: 'Tab DAST pasif' },
       { key: 'dns', group: 'dast', name: 'Google DNS-over-HTTPS', url: 'GET https://dns.google/resolve?name={host}&type={A,AAAA,MX,NS,TXT}', use: 'Resolusi DNS pasif: IP (A/AAAA), name server, MX, dan TXT domain.', sends: 'nama host/domain', when: 'Tab DAST pasif — opsi domain & port' },
       { key: 'idb', group: 'dast', name: 'Shodan InternetDB', url: 'GET https://internetdb.shodan.io/{ip}', use: 'Data pasif per-IP: port terbuka, CVE diketahui, teknologi (CPE), dan tag — hasil scan Shodan sebelumnya, bukan nmap langsung.', sends: 'alamat IP hasil resolusi DNS', when: 'Tab DAST pasif — opsi domain & port' },
+      { key: 'tess', group: 'ocr', name: 'Tesseract.js 5 (jsDelivr + tessdata)', url: 'GET https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1 + tessdata.projectnaptha.com', use: 'Library OCR (WASM) + data bahasa, jalan lokal di browser.', sends: 'tidak ada (hanya mengunduh library/data)', when: 'Tab OCR Gambar — mode Tesseract' },
+      { key: 'ocrspace', group: 'ocr', name: 'OCR.space API', url: 'POST https://api.ocr.space/parse/image', use: 'API OCR publik (engine 2, bahasa otomatis).', sends: 'gambar (base64), API key', when: 'Tab OCR Gambar — mode OCR.space' },
+      { key: 'aiocr', group: 'ocr', name: 'AI vision (OpenAI-compatible)', url: 'POST {Base URL}/chat/completions', use: 'Model vision membaca gambar; mode detail juga memberi tabel dan ringkasan.', sends: 'gambar (base64), prompt, token Anda', when: 'Tab OCR Gambar — mode AI' },
       { key: 'cdn', group: 'app', name: 'unpkg CDN (Vue 3.5.13)', url: 'GET https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js', use: 'Library Vue, dimuat saat halaman dibuka.', sends: 'tidak ada', when: 'Saat halaman dibuka' },
     ];
     const apiStats = Vue.reactive({});
@@ -6021,6 +6095,125 @@
     }
     function pupFmtBytes(n) { if (!n && n !== 0) return '?'; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return n.toFixed(i ? 1 : 0) + ' ' + u[i]; }
 
+    // ============================================================
+    //  OCR Gambar: tempel/drop gambar -> teks. Simple = Tesseract.js (lokal, via CDN) atau
+    //  OCR.space (API publik); Advance = endpoint AI OpenAI-compatible milik user (vision).
+    //  Token/API key hanya di memori; base URL + model boleh diingat di localStorage.
+    //  Hasil OCR tidak tepercaya: hanya ditampilkan sebagai teks (tanpa v-html).
+    // ============================================================
+    const OCR_PREFS_KEY = 'scaOcrPrefs';
+    const TESS_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    const OCR_SPACE_URL = 'https://api.ocr.space/parse/image';
+    const OCR_PRESETS = [
+      { key: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.5-flash' },
+      { key: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+      { key: 'gemini', label: 'Google Gemini (OpenAI-compatible)', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' },
+      { key: 'ollama', label: 'Ollama (lokal)', baseUrl: 'http://localhost:11434/v1', model: 'llava' },
+      { key: 'custom', label: 'Custom', baseUrl: '', model: '' }
+    ];
+    const OCR_I18N = {
+      id: {
+        tab_ocr: 'OCR Gambar', ocr_title: 'OCR Gambar (gambar -> teks)',
+        ocr_intro: 'Tempel screenshot (Ctrl+V di tab ini), drop, atau pilih gambar, lalu ambil teksnya. Cocok untuk screenshot log, error, token, atau potongan kode yang mau dicek di Smart Decode / SAST.',
+        ocr_drop: 'Ctrl+V untuk tempel gambar, atau drop / klik untuk pilih file', ocr_drop_sub: 'PNG, JPG, WebP, BMP, GIF',
+        ocr_paste_btn: 'Tempel dari clipboard', ocr_clear: 'Hapus gambar', ocr_preview: 'Pratinjau gambar',
+        ocr_mode: 'Mode', ocr_eng_tess: 'Simple: Tesseract.js', ocr_eng_tess_d: 'Jalan di browser, gambar tidak dikirim ke mana-mana',
+        ocr_eng_space: 'Simple: OCR.space API', ocr_eng_space_d: 'API publik gratis, gambar dikirim ke ocr.space',
+        ocr_eng_ai: 'Advance: AI (token sendiri)', ocr_eng_ai_d: 'Model vision OpenAI-compatible, hasil lebih detail',
+        ocr_lang: 'Bahasa', ocr_tess_note: 'Pertama kali perlu unduh library + data bahasa (±5–15 MB), setelah itu di-cache.',
+        ocr_space_ph: 'kosong = key demo publik', ocr_space_note: 'Key demo terbatas (maks ±1 MB, ada rate limit). Daftar key gratis di ocr.space untuk kuota lebih.',
+        ocr_ai_preset: 'Provider', ocr_ai_detail: 'Hasil', ocr_ai_m_detail: 'Detail (teks + tabel + ringkasan)', ocr_ai_m_text: 'Teks saja (persis)',
+        ocr_ai_model_ph: 'nama model yang mendukung gambar', ocr_ai_token_ph: 'API key / token (hanya di memori, hilang saat reload)',
+        ocr_ai_note: 'Endpoint dipanggil langsung dari browser: POST {Base URL}/chat/completions. Provider harus mengizinkan CORS (OpenRouter, OpenAI, Gemini bisa; Ollama perlu OLLAMA_ORIGINS=*). Token tidak pernah disimpan.',
+        ocr_ai_prompt: 'Prompt (opsional, kosong = bawaan)',
+        ocr_run: 'Ambil teks', ocr_result: 'Hasil', ocr_empty: 'Tidak ada teks yang terbaca.', ocr_copy: 'Copy',
+        ocr_e_noimg: 'Clipboard tidak berisi gambar.', ocr_e_clip: 'Browser menolak baca clipboard. Pakai Ctrl+V langsung di tab ini.',
+        ocr_e_type: 'File bukan gambar.', ocr_e_big: 'Gambar terlalu besar (maks 20 MB).', ocr_e_cfg: 'Isi Base URL, Model, dan Token dulu.',
+        ocr_e_url: 'Base URL harus http(s)://', ocr_e_tess: 'Gagal memuat Tesseract.js dari CDN (cek koneksi).',
+        ocr_e_cors: 'Request diblokir (CORS / jaringan). Provider ini mungkin tidak bisa dipanggil langsung dari browser.',
+        ocr_p_load: 'Memuat Tesseract.js…', ocr_p_send: 'Mengirim gambar…', ocr_p_resize: 'Memperkecil gambar…',
+        ocr_prompt_text: 'Transkripsikan semua teks di gambar ini persis apa adanya (pertahankan baris, spasi, simbol, huruf besar/kecil). Jangan menambah penjelasan. Jika tidak ada teks, balas kosong.',
+        ocr_prompt_detail: 'Baca gambar ini secara detail. 1) Transkripsikan semua teks persis apa adanya, pertahankan urutan dan baris. 2) Tabel tulis ulang sebagai tabel Markdown. 3) Kode/log/JSON taruh di blok kode. 4) Akhiri dengan bagian "Ringkasan" berisi 1-3 kalimat tentang isi gambar. Jawab dalam bahasa Indonesia, tetapi teks hasil transkripsi tetap bahasa aslinya.',
+        grp_ocr_title: 'OCR Gambar — baca teks dari gambar', grp_ocr_desc: 'Hanya dipakai di tab OCR Gambar. Tesseract jalan di browser; OCR.space dan AI menerima gambar yang Anda kirim.'
+      },
+      en: {
+        tab_ocr: 'Image OCR', ocr_title: 'Image OCR (image -> text)',
+        ocr_intro: 'Paste a screenshot (Ctrl+V on this tab), drop, or pick an image, then extract its text. Handy for screenshots of logs, errors, tokens, or code you want to check in Smart Decode / SAST.',
+        ocr_drop: 'Ctrl+V to paste an image, or drop / click to pick a file', ocr_drop_sub: 'PNG, JPG, WebP, BMP, GIF',
+        ocr_paste_btn: 'Paste from clipboard', ocr_clear: 'Remove image', ocr_preview: 'Image preview',
+        ocr_mode: 'Mode', ocr_eng_tess: 'Simple: Tesseract.js', ocr_eng_tess_d: 'Runs in the browser, the image is not sent anywhere',
+        ocr_eng_space: 'Simple: OCR.space API', ocr_eng_space_d: 'Free public API, the image is sent to ocr.space',
+        ocr_eng_ai: 'Advanced: AI (your own token)', ocr_eng_ai_d: 'OpenAI-compatible vision model, more detailed output',
+        ocr_lang: 'Language', ocr_tess_note: 'First run downloads the library + language data (±5–15 MB), cached afterwards.',
+        ocr_space_ph: 'empty = public demo key', ocr_space_note: 'The demo key is limited (max ±1 MB, rate limited). Get a free key at ocr.space for more quota.',
+        ocr_ai_preset: 'Provider', ocr_ai_detail: 'Output', ocr_ai_m_detail: 'Detailed (text + tables + summary)', ocr_ai_m_text: 'Text only (verbatim)',
+        ocr_ai_model_ph: 'a model that accepts images', ocr_ai_token_ph: 'API key / token (memory only, gone on reload)',
+        ocr_ai_note: 'The endpoint is called straight from the browser: POST {Base URL}/chat/completions. The provider must allow CORS (OpenRouter, OpenAI, Gemini do; Ollama needs OLLAMA_ORIGINS=*). The token is never stored.',
+        ocr_ai_prompt: 'Prompt (optional, empty = default)',
+        ocr_run: 'Extract text', ocr_result: 'Result', ocr_empty: 'No text found.', ocr_copy: 'Copy',
+        ocr_e_noimg: 'The clipboard has no image.', ocr_e_clip: 'The browser blocked clipboard read. Press Ctrl+V on this tab instead.',
+        ocr_e_type: 'Not an image file.', ocr_e_big: 'Image too large (max 20 MB).', ocr_e_cfg: 'Fill in Base URL, Model, and Token first.',
+        ocr_e_url: 'Base URL must start with http(s)://', ocr_e_tess: 'Could not load Tesseract.js from the CDN (check your connection).',
+        ocr_e_cors: 'Request blocked (CORS / network). This provider may not allow direct browser calls.',
+        ocr_p_load: 'Loading Tesseract.js…', ocr_p_send: 'Sending image…', ocr_p_resize: 'Shrinking image…',
+        ocr_prompt_text: 'Transcribe all text in this image exactly as it is (keep lines, spacing, symbols, letter case). Do not add any explanation. If there is no text, reply with nothing.',
+        ocr_prompt_detail: 'Read this image in detail. 1) Transcribe all text exactly as it is, keeping order and line breaks. 2) Rewrite tables as Markdown tables. 3) Put code/logs/JSON in code blocks. 4) End with a "Summary" section of 1-3 sentences about the image. Answer in English, but keep transcribed text in its original language.',
+        grp_ocr_title: 'Image OCR — read text from images', grp_ocr_desc: 'Used only in the Image OCR tab. Tesseract runs in the browser; OCR.space and the AI endpoint receive the image you send.',
+        api_tess_use: 'OCR library (WASM) + language data, runs locally in the browser.', api_tess_sends: 'nothing (downloads the library/data only)', api_tess_when: 'Image OCR tab — Tesseract mode',
+        api_ocrspace_use: 'Public OCR API (engine 2, auto language).', api_ocrspace_sends: 'the image (base64), API key', api_ocrspace_when: 'Image OCR tab — OCR.space mode',
+        api_aiocr_use: 'Vision model reads the image; detailed mode also returns tables and a summary.', api_aiocr_sends: 'the image (base64), prompt, your token', api_aiocr_when: 'Image OCR tab — AI mode'
+      }
+    };
+    Object.keys(OCR_I18N).forEach(l => { I18N[l] = Object.assign({}, OCR_I18N[l], I18N[l] || {}); });
+    // Muat Tesseract.js sekali (elemen <script> dari CDN, bukan eval).
+    let tessLoading = null;
+    function loadTesseract() {
+      if (window.Tesseract) return Promise.resolve(window.Tesseract);
+      if (tessLoading) return tessLoading;
+      tessLoading = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = TESS_SRC; s.async = true; s.crossOrigin = 'anonymous';
+        s.onload = () => (window.Tesseract ? resolve(window.Tesseract) : reject(new Error(tr('ocr_e_tess'))));
+        s.onerror = () => { tessLoading = null; s.remove(); reject(new Error(tr('ocr_e_tess'))); };
+        document.head.appendChild(s);
+      });
+      return tessLoading;
+    }
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result); r.onerror = () => reject(r.error);
+        r.readAsDataURL(blob);
+      });
+    }
+    // Perkecil gambar (sisi terpanjang <= maxSide, lalu turunkan kualitas JPEG) sampai <= maxBytes.
+    async function ocrShrink(blob, maxBytes, maxSide) {
+      if (blob.size <= maxBytes && !maxSide) return blob;
+      const bmp = await createImageBitmap(blob);
+      let side = Math.max(bmp.width, bmp.height);
+      let scale = maxSide && side > maxSide ? maxSide / side : 1;
+      if (scale === 1 && blob.size <= maxBytes) { bmp.close && bmp.close(); return blob; }
+      let out = blob;
+      for (let i = 0; i < 8; i++) {
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(bmp.width * scale)); c.height = Math.max(1, Math.round(bmp.height * scale));
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+        out = await new Promise(res => c.toBlob(res, 'image/jpeg', i < 3 ? 0.9 : 0.8));
+        if (out && out.size <= maxBytes) break;
+        scale *= 0.8;
+      }
+      bmp.close && bmp.close();
+      return out || blob;
+    }
+    // Isi jawaban chat/completions bisa string atau array bagian {type:'text', text}.
+    function aiContentText(msg) {
+      const c = msg && msg.content;
+      if (typeof c === 'string') return c;
+      if (Array.isArray(c)) return c.map(p => (p && typeof p.text === 'string' ? p.text : '')).join('');
+      return '';
+    }
+
     const SIDE_KEY = 'scaSideWidth', SIDE_MIN = 220, SIDE_MAX = 720;
     const ITEMS_KEY = 'scaItems';
     // Daftar tab atas + kunci localStorage untuk setelan tab mana yang ditampilkan.
@@ -6033,6 +6226,7 @@
       { key: 'file', label: 'Analisis file' },
       // { key: 'jwt', label: 'JWT Decode' }, -- dinonaktifkan, pakai Smart Decode
       { key: 'decode', label: 'Smart Decode' },
+      { key: 'ocr', label: 'OCR Gambar' },
       { key: 'dbg', label: 'Hook Debug' },
       { key: 'rate', label: 'Rate Limiter (dari curl)' },
       { key: 'rto', label: 'RTO (kirim lambat)' },
@@ -6117,6 +6311,8 @@
           editFields: ['project', 'name'], edit: { id: null, field: '', value: '' }, reupId: null,
           // Smart Decode: key/IV di form hanya di memori (tidak pernah ke localStorage)
           fi: { results: [], busy: false, over: false, copied: '' },
+          ocr: { engine: 'tess', lang: 'ind+eng', imgUrl: '', imgInfo: '', busy: false, progress: '', text: '', done: false, used: '', error: '', copied: false, over: false, spaceKey: '', ai: { preset: 'openrouter', baseUrl: OCR_PRESETS[0].baseUrl, model: OCR_PRESETS[0].model, token: '', mode: 'detail', prompt: '' } },
+          ocrEngines: ['tess', 'space', 'ai'], ocrPresets: OCR_PRESETS,
           dec: { input: '', busy: false, chains: [], error: '', copied: '', note: '', form: decFormDefault(), tries: [], tryBusy: false },
           decSamples: DEC_SAMPLES, decEncs: ['auto', 'hex', 'base64', 'utf8'], decModes: ['CBC', 'GCM', 'CTR', 'ECB']
         };
@@ -6124,6 +6320,7 @@
       computed: {
         allDetailOpen() { return this.apis.every(a => this.openKeys[a.key]); },
         shownTabs() { return this.tabList.filter(t => this.visibleTabs[t.key]); },
+        ocrDefaultPrompt() { return tr('ocr_prompt_' + this.ocr.ai.mode); },
         hookScript() { return HOOK_SCRIPT; },
         hookBookmarklet() { return 'javascript:' + encodeURIComponent(HOOK_SCRIPT); },
         rateScript() { return this.rl.url.trim() && !rateCfgError(this.rl) ? buildRateScript(this.rl) : ''; },
@@ -6215,6 +6412,8 @@
           }
         } catch (e) { /* data rusak / localStorage tidak tersedia: mulai kosong */ }
         this.pupInit();
+        this.ocrLoadPrefs();
+        document.addEventListener('paste', e => { this.onOcrPaste(e); });
       },
       watch: {
         items: { deep: true, handler() { this.saveItems(); } },
@@ -6226,6 +6425,175 @@
       },
       methods: {
         log(m) { this.logs.push(m); },
+        // ---- OCR Gambar
+        ocrLoadPrefs() {
+          try {
+            const p = JSON.parse(localStorage.getItem(OCR_PREFS_KEY) || 'null');
+            if (!p) return;
+            if (['tess', 'space', 'ai'].includes(p.engine)) this.ocr.engine = p.engine;
+            if (['ind+eng', 'eng', 'ind'].includes(p.lang)) this.ocr.lang = p.lang;
+            if (OCR_PRESETS.some(x => x.key === p.preset)) this.ocr.ai.preset = p.preset;
+            if (typeof p.baseUrl === 'string') this.ocr.ai.baseUrl = p.baseUrl;
+            if (typeof p.model === 'string') this.ocr.ai.model = p.model;
+            if (p.mode === 'text' || p.mode === 'detail') this.ocr.ai.mode = p.mode;
+          } catch (e) { /* abaikan */ }
+        },
+        // Token & API key sengaja tidak ikut disimpan.
+        ocrSavePrefs() {
+          const a = this.ocr.ai;
+          try { localStorage.setItem(OCR_PREFS_KEY, JSON.stringify({ engine: this.ocr.engine, lang: this.ocr.lang, preset: a.preset, baseUrl: a.baseUrl, model: a.model, mode: a.mode })); } catch (e) { /* abaikan */ }
+        },
+        ocrPreset() {
+          const p = OCR_PRESETS.find(x => x.key === this.ocr.ai.preset);
+          if (p && p.key !== 'custom') { this.ocr.ai.baseUrl = p.baseUrl; this.ocr.ai.model = p.model; }
+          this.ocrSavePrefs();
+        },
+        ocrSetImage(blob, name) {
+          this.ocr.error = '';
+          if (!blob || !/^image\//.test(blob.type || '')) { this.ocr.error = tr('ocr_e_type'); return; }
+          if (blob.size > MAX_FILE_BYTES) { this.ocr.error = tr('ocr_e_big'); return; }
+          if (this.ocr.imgUrl) URL.revokeObjectURL(this.ocr.imgUrl);
+          this.ocrBlob = blob;
+          this.ocr.imgUrl = URL.createObjectURL(blob);
+          this.ocr.imgInfo = (name || 'clipboard') + ' · ' + pupFmtBytes(blob.size) + ' · ' + blob.type;
+          this.ocr.text = ''; this.ocr.done = false; this.ocr.progress = '';
+        },
+        ocrClear() {
+          if (this.ocr.imgUrl) URL.revokeObjectURL(this.ocr.imgUrl);
+          this.ocrBlob = null;
+          Object.assign(this.ocr, { imgUrl: '', imgInfo: '', text: '', done: false, error: '', progress: '' });
+        },
+        onOcrPick(e) { const f = e.target.files && e.target.files[0]; if (f) this.ocrSetImage(f, f.name); e.target.value = ''; },
+        onOcrDrop(e) {
+          this.ocr.over = false;
+          const f = [...((e.dataTransfer && e.dataTransfer.files) || [])].find(x => /^image\//.test(x.type));
+          if (f) this.ocrSetImage(f, f.name); else this.ocr.error = tr('ocr_e_type');
+        },
+        // Ctrl+V di mana pun saat tab OCR aktif (kecuali sedang mengetik di input teks).
+        onOcrPaste(e) {
+          if (this.tab !== 'ocr' || !e.clipboardData) return;
+          const img = [...e.clipboardData.items].find(it => it.kind === 'file' && /^image\//.test(it.type));
+          if (!img) {
+            const el = e.target;
+            if (!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'))) this.ocr.error = tr('ocr_e_noimg');
+            return;
+          }
+          e.preventDefault();
+          const f = img.getAsFile();
+          this.ocrSetImage(f, f && f.name && f.name !== 'image.png' ? f.name : 'clipboard');
+        },
+        async ocrPasteBtn() {
+          this.ocr.error = '';
+          try {
+            if (!navigator.clipboard || !navigator.clipboard.read) throw new Error('no api');
+            const items = await navigator.clipboard.read();
+            for (const it of items) {
+              const type = it.types.find(x => /^image\//.test(x));
+              if (type) { this.ocrSetImage(await it.getType(type), 'clipboard'); return; }
+            }
+            this.ocr.error = tr('ocr_e_noimg');
+          } catch (e) { this.ocr.error = tr('ocr_e_clip'); }
+        },
+        async runOcr() {
+          if (!this.ocrBlob || this.ocr.busy) return;
+          const o = this.ocr;
+          o.busy = true; o.error = ''; o.text = ''; o.done = false; o.progress = ''; o.used = '';
+          const t0 = performance.now();
+          try {
+            if (o.engine === 'tess') o.text = await this.ocrTesseract();
+            else if (o.engine === 'space') o.text = await this.ocrSpace();
+            else o.text = await this.ocrAi();
+            o.text = (o.text || '').replace(/\r\n/g, '\n').trim();
+            o.used = tr('ocr_eng_' + o.engine) + (o.engine === 'ai' ? ' (' + o.ai.model + ')' : '') + ' · ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s';
+            o.done = true; o.progress = '';
+          } catch (e) {
+            o.error = (e && e.message) || String(e); o.progress = '';
+          } finally { o.busy = false; }
+        },
+        async ocrTesseract() {
+          const s = apiStats.tess;
+          s.calls++;
+          this.ocr.progress = tr('ocr_p_load');
+          try {
+            const T = await loadTesseract();
+            const lang = this.ocr.lang;
+            if (!this.tessWorker || this.tessLang !== lang) {
+              if (this.tessWorker) { try { await this.tessWorker.terminate(); } catch (e) { /* abaikan */ } }
+              this.tessWorker = null;
+              this.tessWorker = await T.createWorker(lang, 1, {
+                logger: m => { if (m && m.status) this.ocr.progress = m.status + (m.progress ? ' ' + Math.round(m.progress * 100) + '%' : ''); }
+              });
+              this.tessLang = lang;
+            }
+            const r = await this.tessWorker.recognize(this.ocrBlob);
+            s.ok++;
+            return (r && r.data && r.data.text) || '';
+          } catch (e) { s.fail++; s.last = (e && e.message) || String(e); throw e; }
+        },
+        async ocrSpace() {
+          this.ocr.progress = tr('ocr_p_resize');
+          const blob = await ocrShrink(this.ocrBlob, 1000 * 1000);
+          const fd = new FormData();
+          fd.append('apikey', this.ocr.spaceKey.trim() || 'helloworld');
+          fd.append('base64Image', await blobToDataUrl(blob));
+          fd.append('OCREngine', '2'); fd.append('language', 'auto'); fd.append('scale', 'true'); fd.append('isOverlayRequired', 'false');
+          this.ocr.progress = tr('ocr_p_send');
+          let res;
+          try { res = await apiFetch('ocrspace', OCR_SPACE_URL, { method: 'POST', body: fd }); } catch (e) { throw new Error(tr('ocr_e_cors') + ' (' + e.message + ')'); }
+          const d = await res.json().catch(() => null);
+          if (!res.ok || !d) throw new Error('OCR.space HTTP ' + res.status);
+          if (d.IsErroredOnProcessing) {
+            apiStats.ocrspace.ok--; apiStats.ocrspace.fail++;
+            const msg = [].concat(d.ErrorMessage || []).join(' ') || d.ErrorDetails || 'error';
+            apiStats.ocrspace.last = msg;
+            throw new Error('OCR.space: ' + msg);
+          }
+          return (d.ParsedResults || []).map(p => p.ParsedText || '').join('\n');
+        },
+        async ocrAi() {
+          const a = this.ocr.ai;
+          if (!a.baseUrl || !a.model || !a.token.trim()) throw new Error(tr('ocr_e_cfg'));
+          if (!/^https?:\/\//i.test(a.baseUrl)) throw new Error(tr('ocr_e_url'));
+          this.ocr.progress = tr('ocr_p_resize');
+          const blob = await ocrShrink(this.ocrBlob, 4 * 1024 * 1024, 2048);
+          const body = {
+            model: a.model, temperature: 0,
+            messages: [{ role: 'user', content: [
+              { type: 'text', text: a.prompt.trim() || this.ocrDefaultPrompt },
+              { type: 'image_url', image_url: { url: await blobToDataUrl(blob) } }
+            ] }]
+          };
+          this.ocr.progress = tr('ocr_p_send');
+          const url = a.baseUrl.replace(/\/+$/, '') + '/chat/completions';
+          let res;
+          try {
+            res = await apiFetch('aiocr', url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + a.token.trim() }, body: JSON.stringify(body) });
+          } catch (e) { throw new Error(tr('ocr_e_cors') + ' (' + e.message + ')'); }
+          const d = await res.json().catch(() => null);
+          if (!res.ok) {
+            const m = d && (d.error && (d.error.message || d.error) || d.message);
+            throw new Error('AI HTTP ' + res.status + (m ? ': ' + (typeof m === 'string' ? m : JSON.stringify(m)) : ''));
+          }
+          const ch = d && d.choices && d.choices[0];
+          return aiContentText(ch && ch.message);
+        },
+        ocrCopy() {
+          const p = navigator.clipboard ? navigator.clipboard.writeText(this.ocr.text) : Promise.reject(new Error('clipboard'));
+          p.then(() => { this.ocr.copied = true; setTimeout(() => { this.ocr.copied = false; }, 1500); }).catch(() => { /* abaikan */ });
+        },
+        ocrDownload() {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([this.ocr.text], { type: 'text/plain;charset=utf-8' }));
+          a.download = 'ocr.txt';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        },
+        ocrSendTo(where) {
+          if (where === 'decode') this.dec.input = this.ocr.text.trim();
+          else this.codeText = this.ocr.text;
+          this.visibleTabs[where] = true;
+          this.tab = where;
+        },
         // ---- Puppeteer Record
         pupStepTarget(s) { return pupStepTarget(s); },
         pupStepValue(s) { return pupStepValue(s); },
