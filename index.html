@@ -107,6 +107,10 @@
     .gl-ref { display: inline-block; font: 600 11px/16px Consolas, monospace; border-radius: 4px; padding: 0 5px; margin-right: 4px; color: #fff; background: #2563eb; }
     .gl-ref.gl-remote { background: #475569; } .gl-ref.gl-tag { background: #b45309; } .gl-ref.gl-head { background: #16a34a; } .gl-ref.gl-other { background: #7c3aed; }
     .gl-refs { margin-top: 4px; }
+    .gl-bell { background: var(--panel-bg); border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+    .gl-bell.hot { border-color: #dc2626; color: #fecaca; background: rgba(220, 38, 38, .18); animation: pingBlink 1.2s ease-in-out infinite alternate; }
+    .gl-bell.on { outline: 2px solid var(--accent); }
+    .gl-prog { height: 6px; background: var(--border); border-radius: 3px; margin-top: 6px; overflow: hidden; } .gl-prog div { height: 100%; background: #dc2626; transition: width .2s; }
     .gl-own { font: 12px Consolas, monospace; color: var(--link); }
     .gl-gantt { display: flex; border: 1px solid var(--border); border-radius: 8px; max-height: 560px; overflow-y: auto; overflow-x: hidden; background: var(--panel-bg); margin-top: 6px; }
     .gl-gantt-lab { position: relative; flex: 0 0 190px; border-right: 1px solid var(--border); background: var(--header-bg); }
@@ -818,6 +822,9 @@
             <button class="btn" :class="gl.view === 'stats' ? 'blue' : 'gray'" @click="gl.view = 'stats'">📊 {{ t('gl_v_stats') }}</button>
             <button class="btn" :class="gl.view === 'gantt' ? 'blue' : 'gray'" @click="gl.view = 'gantt'">📈 {{ t('gl_v_gantt') }}</button>
             <button class="btn" :class="gl.view === 'report' ? 'blue' : 'gray'" @click="gl.view = 'report'">🗓 {{ t('gl_v_report') }}</button>
+            <button class="gl-bell" v-if="glLeakState.any" :class="{ hot: glLeakCount, on: gl.view === 'leaks' }" @click="gl.view = 'leaks'" :title="t('gl_lk_bell_tip')">
+              🔔 <b>{{ glLeakCount }}</b> {{ t('gl_lk_leak') }}<span v-if="glLeakState.run" class="muted"> · ⏳ {{ glLeakState.pct }}%</span>
+            </button>
             <span class="muted">{{ t('gl_shown').replace('{n}', glFiltered.length).replace('{t}', gl.commits.length) }}</span>
             <button class="lnk" v-if="glAnyFilter" @click="glResetFilter">✕ {{ t('gl_reset') }}</button>
           </div>
@@ -874,6 +881,45 @@
               </table>
             </div>
             <div class="actions" v-if="glFiltered.length > gl.page"><button class="btn gray" @click="gl.page += 300">{{ t('gl_more').replace('{n}', glFiltered.length - gl.page) }}</button></div>
+          </template>
+
+          <!-- Secret bocor di riwayat git -->
+          <template v-if="gl.view === 'leaks'">
+            <div class="ping-box" style="border-color:#b91c1c">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <b style="font-size:15px">🔔 {{ t('gl_lk_title') }}: {{ glLeakCount }}</b>
+                <span class="muted" v-if="glLeakState.run">⏳ {{ t('gl_lk_prog').replace('{d}', glLeakState.done).replace('{t}', glLeakState.total).replace('{b}', glLeakState.blobs) }}</span>
+                <span class="muted" v-else-if="glLeakState.any">✓ {{ t('gl_lk_done').replace('{t}', glLeakState.total).replace('{b}', glLeakState.blobs) }}</span>
+                <button class="btn gray" v-if="glLeakState.run" @click="glStopLeaks">⏹ Stop</button>
+                <button class="btn gray" v-else @click="glRescanLeaks">↻ {{ t('gl_lk_rescan') }}</button>
+              </div>
+              <div class="gl-prog" v-if="glLeakState.run"><div :style="{ width: glLeakState.pct + '%' }"></div></div>
+              <div class="bad" v-if="glLeakState.err">{{ glLeakState.err }}</div>
+              <p class="muted" style="margin:6px 0 0;font-size:12px">{{ t('gl_lk_desc') }}</p>
+              <div class="actions">
+                <label class="tab-opt"><input type="checkbox" v-model="gl.leakShow" /> {{ t('gl_lk_show') }}</label>
+                <select v-model="gl.leakSev" style="max-width:160px"><option value="">{{ t('gl_lk_all_sev') }}</option><option>HIGH</option><option>MEDIUM</option></select>
+                <button class="btn gray" :disabled="!glLeaks.length" @click="glExportLeaks('csv')">⬇ CSV</button>
+                <button class="btn gray" :disabled="!glLeaks.length" @click="glExportLeaks('html')">⬇ HTML</button>
+              </div>
+            </div>
+            <div class="muted" v-if="!glLeaks.length && !glLeakState.run" style="margin-top:8px">{{ t('gl_lk_none') }}</div>
+            <table v-if="glLeaks.length" style="margin-top:8px">
+              <thead><tr><th>Severity</th><th>{{ t('gl_lk_rule') }}</th><th>{{ t('gl_lk_value') }}</th><th>{{ t('gl_lk_file') }}</th><th :title="t('gl_lk_first_tip')">{{ t('gl_lk_first') }}</th><th :title="t('gl_lk_count_tip')">{{ t('gl_lk_count') }}</th><th :title="t('gl_lk_st_tip')">Status</th><th>{{ t('gl_lk_fix') }}</th></tr></thead>
+              <tbody>
+                <tr v-for="r in glLeaks.slice(0, 500)" :key="r.id">
+                  <td :class="'sev-' + r.severity" style="font-weight:700">{{ r.severity }}</td>
+                  <td>{{ L(r.rule) }}</td>
+                  <td style="font-family:Consolas,monospace;max-width:280px;word-break:break-all;font-size:12px">{{ gl.leakShow ? r.value : glMask(r.value) }}</td>
+                  <td style="font-family:Consolas,monospace;max-width:240px;word-break:break-all;font-size:12px">{{ r.path }}:{{ r.line }}<div class="muted" v-if="r.paths.length > 1">+{{ r.paths.length - 1 }} file</div></td>
+                  <td class="gl-nw"><button class="lnk mono" @click="glLeakOpen(r)">{{ r.sha.slice(0, 8) }}</button><div style="font-size:12px">{{ r.an }}</div><div class="muted mono" style="font-size:11px">{{ glFmt(r.at) }}</div></td>
+                  <td>{{ r.count }}</td>
+                  <td :class="r.status === 'head' ? 'bad' : 'muted'" class="gl-nw">{{ r.status ? t('gl_lk_st_' + r.status) : '…' }}</td>
+                  <td style="font-size:12px;max-width:260px">{{ L(r.fix) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="ping-box" v-if="glLeaks.length" style="margin-top:10px;font-size:13px"><b>{{ t('gl_lk_advice_t') }}</b><div class="muted" style="margin-top:4px;white-space:pre-line">{{ t('gl_lk_advice') }}</div></div>
           </template>
 
           <!-- Timeline / Gantt per branch -->
@@ -8245,8 +8291,8 @@
         const A = await tree(x), B = await tree(y);
         for (const [n, e] of A) {
           const f = B.get(n);
-          if (!f) { if (e.dir) await walk(e.sha, null, pre + n + '/'); else out.push({ st: 'A', path: pre + n }); }
-          else if (f.sha !== e.sha) { if (e.dir && f.dir) await walk(e.sha, f.sha, pre + n + '/'); else out.push({ st: 'M', path: pre + n }); }
+          if (!f) { if (e.dir) await walk(e.sha, null, pre + n + '/'); else out.push({ st: 'A', path: pre + n, sha: e.sha }); }
+          else if (f.sha !== e.sha) { if (e.dir && f.dir) await walk(e.sha, f.sha, pre + n + '/'); else out.push({ st: 'M', path: pre + n, sha: e.sha }); }
         }
         for (const [n, f] of B) if (!A.has(n)) { if (f.dir) await walk(null, f.sha, pre + n + '/'); else out.push({ st: 'D', path: pre + n }); }
       };
@@ -8393,6 +8439,50 @@
       const now = Date.now() / 1000;
       return { rows, dots, links, ticks, w: Math.ceil(X(t1)) + 20, h: TOP + rows.length * RH + 6, top: TOP, rh: RH, nowX: now >= t0 && now <= t1 ? X(now) : null };
     }
+    // Aturan secret untuk scan riwayat git: aturan 'raw' dari SAST + pola tambahan khas file config/.env.
+    const GL_SECRET_RULES = SAST_RULES.filter(r => r.view === 'raw').concat([
+      { re: /^\s*(?:export\s+)?[A-Za-z0-9_.]*(?:PASSWORD|PASSWD|PWD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|ACCESS_?KEY|CLIENT_?SECRET)[A-Za-z0-9_.]*\s*[=:]\s*(?!\$\{|\$\(|<|%|\s*$|["']?\s*["']?\s*$)["']?[^\s"'#]{4,}/i, rule: 'Secret di file env/config', severity: 'HIGH', fix: 'Pindahkan ke secret manager / variabel environment server; jangan commit file .env (tambahkan ke .gitignore).' },
+      { re: /\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|mariadb|redis|amqp|mssql|sqlserver):\/\/[^\s:@/'"]+:[^\s@/'"]{3,}@/i, rule: 'Connection string berisi password', severity: 'HIGH', fix: 'Ganti password database itu, lalu ambil connection string dari environment/secret manager.' },
+      { re: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, rule: 'Token JWT ter-hardcode', severity: 'MEDIUM', fix: 'Cabut token/sesinya, ganti signing key bila token masih berlaku lama.' },
+      { re: /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]{20,}|https:\/\/discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]{20,}/, rule: 'Webhook URL ter-hardcode', severity: 'MEDIUM', fix: 'Buat ulang webhook (URL lama bisa dipakai siapa saja untuk kirim pesan).' },
+      { re: /\bAuthorization['"]?\s*[:=]\s*['"]?(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{16,}/i, rule: 'Header Authorization ter-hardcode', severity: 'HIGH', fix: 'Cabut token/kredensial itu dan ambil dari konfigurasi saat runtime.' }
+    ]);
+    const GL_SKIP_EXT = /\.(png|jpe?g|gif|bmp|ico|webp|svgz?|woff2?|ttf|eot|otf|zip|gz|tgz|rar|7z|jar|war|ear|dll|exe|so|dylib|pdb|pdf|docx?|xlsx?|pptx?|mp[34]|mov|avi|wav|class|o|a|min\.js|min\.css|map|lock)$/i;
+    const GL_SKIP_NAME = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|Pipfile\.lock|poetry\.lock|Cargo\.lock|go\.sum|packages\.lock\.json)$|(^|\/)(node_modules|vendor|bower_components|dist|\.angular)\//i;
+    function glMask(v) { v = String(v || ''); if (v.length <= 8) return v.slice(0, 2) + '•••'; return v.slice(0, 4) + '•'.repeat(Math.min(12, v.length - 6)) + v.slice(-2); }
+    // Scan satu teks blob -> [{rule, severity, fix, value, line, text}]
+    function glScanText(text) {
+      const out = [], lines = text.split('\n');
+      for (let i = 0; i < lines.length && i < 50000; i++) {
+        const line = lines[i].length > 4000 ? lines[i].slice(0, 4000) : lines[i];
+        if (line.length < 8) continue;
+        for (const r of GL_SECRET_RULES) {
+          if (!r.re.test(line)) continue;
+          const m = line.match(r.re);
+          out.push({ rule: r.rule, severity: r.severity, fix: r.fix, value: (m ? m[0] : line).trim().slice(0, 300), line: i + 1, text: line.trim().slice(0, 300) }); break;
+        }
+      }
+      return out;
+    }
+    // Cari sha blob di tree berdasarkan path (mis. 'src/app/config.ts'); null bila tidak ada.
+    async function glBlobAt(repo, treeSha, path) {
+      let cur = treeSha;
+      const parts = path.split('/');
+      for (let k = 0; k < parts.length; k++) {
+        const o = await repo.readObject(cur);
+        if (!o || o.type !== 'tree') return null;
+        const d = o.data;
+        let p = 0, hit = null;
+        while (p < d.length) {
+          const sp = d.indexOf(32, p), z = d.indexOf(0, sp);
+          if (repo.dec.decode(d.subarray(sp + 1, z)) === parts[k]) { hit = glHex(d, z + 1); break; }
+          p = z + 21;
+        }
+        if (!hit) return null;
+        cur = hit;
+      }
+      return cur;
+    }
     function glTidy(s) { s = String(s || '').replace(/\s+/g, ' ').trim().replace(/\.+$/, ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
     function glCsv(rows) { return rows.map(r => r.map(v => { v = v == null ? '' : String(v); return /[",\n;]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(',')).join('\r\n'); }
     const GL_I18N = {
@@ -8406,6 +8496,14 @@
         gl_all_authors: 'Semua author', gl_all_projects: 'Semua project', gl_m_all: 'Commit + merge', gl_m_no: 'Tanpa merge', gl_m_only: 'Merge saja',
         gl_from: 'Dari', gl_to: 'Sampai', gl_tip_datekind: 'Tanggal author = saat perubahan dibuat; tanggal commit = saat commit dibuat/di-rebase/cherry-pick.', gl_d_author: 'Tanggal author', gl_d_commit: 'Tanggal commit',
         gl_all_branches: 'Semua branch', gl_tip_branch: 'Hanya commit yang ada di branch/tag ini (seperti git log <branch>).', gl_tip_owner: 'Branch asal commit: rantai first-parent dari tip branch; commit dari branch yang sudah dihapus dikenali dari pesan "Merge branch \'x\'".',
+        gl_lk_leak: 'secret bocor', gl_lk_bell_tip: 'Hasil scan secret (password, token, key) di seluruh riwayat commit. Klik untuk lihat.',
+        gl_lk_title: 'Secret bocor di riwayat git', gl_lk_prog: 'scan commit {d}/{t} · {b} file dibaca', gl_lk_done: 'selesai: {t} commit, {b} versi file dibaca', gl_lk_rescan: 'Scan ulang',
+        gl_lk_desc: 'Setiap versi file di setiap commit diperiksa satu per satu (commit lama ke baru), termasuk file yang sudah dihapus atau ditimpa. Lockfile, gambar, file biner, node_modules/vendor/dist dilewati. Aturan = aturan secret tab SAST + pola .env/connection string/JWT/webhook.',
+        gl_lk_show: 'Tampilkan nilai penuh (hanya di layar ini)', gl_lk_all_sev: 'Semua severity', gl_lk_none: 'Belum ada secret yang terdeteksi.',
+        gl_lk_rule: 'Jenis', gl_lk_value: 'Nilai yang bocor', gl_lk_file: 'File:baris', gl_lk_first: 'Commit pertama', gl_lk_first_tip: 'Commit paling lama yang memasukkan secret ini (klik untuk detail commit).',
+        gl_lk_count: 'Muncul', gl_lk_count_tip: 'Berapa versi file yang berisi secret yang sama.', gl_lk_st_tip: 'Masih ada di versi terbaru (HEAD) atau hanya tersisa di riwayat.',
+        gl_lk_st_head: 'masih di HEAD', gl_lk_st_history: 'hanya di history', gl_lk_fix: 'Saran',
+        gl_lk_advice_t: 'Langkah perbaikan', gl_lk_advice: '1. Anggap semua secret di atas sudah bocor: ganti/rotate (password DB, API key, token) di sistem aslinya. Menghapus dari kode saja tidak cukup.\n2. Pindahkan ke secret manager / environment server, tambahkan file .env ke .gitignore.\n3. Bila repo pernah dibagikan, bersihkan riwayat dengan git filter-repo (atau BFG), lalu force push dan minta semua orang clone ulang.\n4. Pasang pengecekan sebelum commit (pre-commit hook / gitleaks di CI) supaya tidak terulang.',
         gl_v_gantt: 'Timeline branch', gl_gantt_need: 'Timeline butuh satu project dengan data parent (folder .git atau git log format yang disarankan). Pilih project dulu.',
         gl_gantt_desc: 'Satu baris per branch, sumbu X = tanggal (geser kiri-kanan).', gl_zoom: 'Zoom', gl_z_auto: 'otomatis', gl_z_dayu: 'hari', gl_gantt_latest: 'Ke paling baru',
         gl_gantt_cap: 'Ditampilkan 6000 commit terbaru; pakai filter tanggal untuk melihat yang lebih lama.',
@@ -8437,6 +8535,14 @@
         gl_all_authors: 'All authors', gl_all_projects: 'All projects', gl_m_all: 'Commits + merges', gl_m_no: 'No merges', gl_m_only: 'Merges only',
         gl_from: 'From', gl_to: 'To', gl_tip_datekind: 'Author date = when the change was made; commit date = when it was committed/rebased/cherry-picked.', gl_d_author: 'Author date', gl_d_commit: 'Commit date',
         gl_all_branches: 'All branches', gl_tip_branch: 'Only commits contained in this branch/tag (like git log <branch>).', gl_tip_owner: 'Branch a commit belongs to: first-parent chain from the branch tip; commits from deleted branches are named from "Merge branch \'x\'" messages.',
+        gl_lk_leak: 'leaked secrets', gl_lk_bell_tip: 'Secret scan (passwords, tokens, keys) across the whole commit history. Click to view.',
+        gl_lk_title: 'Secrets leaked in git history', gl_lk_prog: 'scanning commit {d}/{t} · {b} files read', gl_lk_done: 'done: {t} commits, {b} file versions read', gl_lk_rescan: 'Rescan',
+        gl_lk_desc: 'Every file version in every commit is checked one by one (oldest to newest), including files that were later deleted or overwritten. Lockfiles, images, binaries, node_modules/vendor/dist are skipped. Rules = the SAST tab secret rules + .env/connection string/JWT/webhook patterns.',
+        gl_lk_show: 'Show full values (on this screen only)', gl_lk_all_sev: 'All severities', gl_lk_none: 'No secrets detected yet.',
+        gl_lk_rule: 'Type', gl_lk_value: 'Leaked value', gl_lk_file: 'File:line', gl_lk_first: 'First commit', gl_lk_first_tip: 'The oldest commit that introduced this secret (click for commit details).',
+        gl_lk_count: 'Seen', gl_lk_count_tip: 'How many file versions contain the same secret.', gl_lk_st_tip: 'Still present in the latest version (HEAD) or only left in history.',
+        gl_lk_st_head: 'still in HEAD', gl_lk_st_history: 'history only', gl_lk_fix: 'Fix',
+        gl_lk_advice_t: 'How to fix', gl_lk_advice: '1. Treat every secret above as leaked: rotate it (DB password, API key, token) in the real system. Removing it from code is not enough.\n2. Move it to a secret manager / server environment and add .env files to .gitignore.\n3. If the repo was ever shared, clean the history with git filter-repo (or BFG), force push and ask everyone to re-clone.\n4. Add a pre-commit hook / gitleaks in CI so it does not happen again.',
         gl_v_gantt: 'Branch timeline', gl_gantt_need: 'The timeline needs one project with parent data (a .git folder or git log in the suggested format). Pick a project first.',
         gl_gantt_desc: 'One row per branch, X axis = date (scroll left/right).', gl_zoom: 'Zoom', gl_z_auto: 'auto', gl_z_dayu: 'day', gl_gantt_latest: 'Jump to latest',
         gl_gantt_cap: 'Showing the 6000 newest commits; use the date filter for older ones.',
@@ -8949,7 +9055,7 @@
           tabList: TAB_LIST.slice(), visibleTabs: {}, dragTab: null, overTab: null,
           apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
           hookCopied: false, hookMsg: '',
-          gl: { sources: [], commits: [], order: {}, binfo: {}, branch: '', zoom: 0, q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, dateKind: 'a', view: 'list', page: 300, sel: null, files: null, filesBusy: false, busy: false, prog: '', err: '', msg: '', paste: '', pasteName: '', over: false, max: 20000, repNoMerge: true, copied: false },
+          gl: { sources: [], commits: [], order: {}, binfo: {}, leak: {}, leakVer: 0, leakShow: false, leakSev: '', branch: '', zoom: 0, q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, dateKind: 'a', view: 'list', page: 300, sel: null, files: null, filesBusy: false, busy: false, prog: '', err: '', msg: '', paste: '', pasteName: '', over: false, max: 20000, repNoMerge: true, copied: false },
           clock: { q: '', pins: [], now: Date.now(), live: true, fixedMs: null, base: 'mine', ts: '', copied: false },
           ping: { targets: [], collapsed: {}, form: { name: '', url: '', group: '', interval: 10, timeout: 5000, expect: 'any', method: 'GET' }, editId: null, bulk: '', bulkGroup: '', bulkInterval: 10, filter: 'all', q: '', selId: null, sound: true, alarmDown: false, notif: false, running: true, tick: 0, now: Date.now(), alarm: null, err: '', msg: '', mixedOk: null, mixedAt: 0, dlBusy: false },
           swag: { url: '', text: '', over: false, busy: false, err: '', msg: '', model: null, src: '', baseUrl: '', token: '', tags: {}, fmt: 'pm', copied: false, scriptCopied: false },
@@ -9075,6 +9181,21 @@
           if (g.project) { const s = g.sources.find(x => x.name === g.project); return s ? (g.order[s.id] || []) : []; }
           return g.sources.length === 1 ? (g.order[g.sources[0].id] || []) : g.commits;
         },
+        glLeakState() {
+          void this.gl.leakVer;
+          const g = this.gl, ids = g.sources.filter(s => s.kind === 'git' && !(g.project && s.name !== g.project)).map(s => s.id);
+          let done = 0, total = 0, run = false, any = false, blobs = 0;
+          ids.forEach(id => { const st = g.leak[id]; if (!st) return; any = true; done += st.done; total += st.total; blobs += st.blobs; if (st.state === 'run') run = true; });
+          return { any, run, done, total, blobs, pct: total ? Math.floor(done / total * 100) : 0, err: ids.map(id => g.leak[id] && g.leak[id].err).filter(Boolean).join('; ') };
+        },
+        glLeaks() {
+          void this.gl.leakVer;
+          const g = this.gl, out = [];
+          g.sources.forEach(s => { if (g.project && s.name !== g.project) return; (this.glLeakItems[s.id] || []).forEach(it => out.push(it)); });
+          const sev = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+          return out.filter(x => !g.leakSev || x.severity === g.leakSev).sort((a, b) => (sev[a.severity] - sev[b.severity]) || (a.status === 'head' ? -1 : 0) - (b.status === 'head' ? -1 : 0) || b.at - a.at);
+        },
+        glLeakCount() { void this.gl.leakVer; let n = 0; this.gl.sources.forEach(s => { if (!this.gl.project || s.name === this.gl.project) n += (this.glLeakItems[s.id] || []).length; }); return n; },
         glBranchOpts() {
           const g = this.gl, out = [];
           g.sources.forEach(s => {
@@ -9326,7 +9447,7 @@
         this.applyTheme();
         this.pingInit();
         this.clkInit();
-        this.glRepos = {};
+        this.glRepos = {}; this.glLeakItems = {};
         try { document.documentElement.lang = this.lang; } catch (e) { /* abaikan */ }
         try { const w = parseInt(localStorage.getItem(SIDE_KEY), 10); if (w) this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, w)); } catch (e) { /* abaikan */ }
         // Setelan tab yang tampil; localStorage kosong/rusak -> semua tab tampil.
@@ -9427,11 +9548,13 @@
           }
           this.gl.page = 300;
           this.gl.msg = tr('gl_loaded').replace('{n}', commits.length).replace('{p}', name);
+          return id;
         },
         glRemove(id) {
           this.gl.sources = this.gl.sources.filter(s => s.id !== id);
           this.gl.commits = Vue.markRaw(this.gl.commits.filter(c => c.srcId !== id));
-          delete this.glRepos[id]; delete this.gl.order[id]; delete this.gl.binfo[id];
+          if (this.gl.leak[id]) this.gl.leak[id].stop = true;
+          delete this.glRepos[id]; delete this.gl.order[id]; delete this.gl.binfo[id]; delete this.gl.leak[id]; delete this.glLeakItems[id]; this.gl.leakVer++;
           if (this.gl.branch.split(':')[0] === id) this.gl.branch = '';
           if (this.gl.project && !this.gl.sources.some(s => s.name === this.gl.project)) this.gl.project = '';
           this.gl.sel = null;
@@ -9465,7 +9588,8 @@
             this.gl.prog = tr('gl_prog_sort');
             await new Promise(r => setTimeout(r, 0));
             const ordered = glTopo(list2);
-            this.glAddSource(repoName, 'git', ordered, refs, true, repo);
+            const sid = this.glAddSource(repoName, 'git', ordered, refs, true, repo);
+            this.$nextTick(() => setTimeout(() => this.glScanLeaks(sid), 400));
             if (list2.length >= max) this.gl.msg += ' ' + tr('gl_capped').replace('{n}', max);
           } catch (e) { this.gl.err = tr('gl_err_read') + ' ' + (e.message || e); }
           finally { this.gl.busy = false; this.gl.prog = ''; }
@@ -9509,6 +9633,79 @@
           this.gl.paste = '';
         },
         glResetFilter() { Object.assign(this.gl, { q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, branch: '' }); },
+        // Scan secret di seluruh riwayat: commit lama -> baru, blob baru per commit (dibanding parent pertama), tiap blob sekali.
+        async glScanLeaks(id) {
+          const repo = this.glRepos[id], list = this.gl.order[id];
+          if (!repo || !list) return;
+          if (this.gl.leak[id] && this.gl.leak[id].state === 'run') return;
+          const st = { state: 'run', done: 0, total: list.length, blobs: 0, stop: false, t0: Date.now() };
+          this.gl.leak[id] = st;
+          const items = [], byKey = new Map(), seen = new Set(), bySha = new Map(list.map(c => [c.sha, c]));
+          this.glLeakItems[id] = items;
+          const old = list.slice().reverse();
+          let tick = Date.now();
+          try {
+            for (let i = 0; i < old.length && !st.stop; i++) {
+              const c = old[i];
+              let pt = null;
+              if (c.parents[0]) { const pc = bySha.get(c.parents[0]); if (pc) pt = pc.tree; else { const o = await repo.readObject(c.parents[0]); const m = o && repo.dec.decode(o.data).match(/^tree ([0-9a-f]{40})/); pt = m ? m[1] : null; } }
+              const diff = await glTreeDiff(repo, c.tree, pt);
+              for (const f of diff) {
+                if (st.stop) break;
+                if (f.st === 'D' || !f.sha || seen.has(f.sha)) continue;
+                seen.add(f.sha);
+                if (GL_SKIP_EXT.test(f.path) || GL_SKIP_NAME.test(f.path)) continue;
+                const o = await repo.readObject(f.sha);
+                if (!o || o.type !== 'blob' || o.data.length > 1500000) continue;
+                const head = o.data.subarray(0, 8000);
+                if (head.indexOf(0) >= 0) continue;
+                st.blobs++;
+                const hits = glScanText(repo.dec.decode(o.data));
+                hits.forEach(h => {
+                  const k = h.rule + '|' + h.value;
+                  const ex = byKey.get(k);
+                  if (ex) { ex.count++; if (ex.paths.indexOf(f.path) < 0 && ex.paths.length < 20) ex.paths.push(f.path); ex.lastSha = c.sha; ex.lastAt = c.at; return; }
+                  const it = { id: id + ':' + items.length, srcId: id, project: c.project, rule: h.rule, severity: h.severity, fix: h.fix, value: h.value, text: h.text, path: f.path, line: h.line, sha: c.sha, an: c.an, at: c.at, count: 1, paths: [f.path], lastSha: c.sha, lastAt: c.at, status: '' };
+                  byKey.set(k, it); items.push(it);
+                });
+              }
+              st.done = i + 1;
+              if (Date.now() - tick > 40) { this.gl.leakVer++; await new Promise(r => setTimeout(r, 0)); tick = Date.now(); }
+            }
+            // Masih ada di versi terbaru (HEAD)? cek file yang sama di tree HEAD.
+            const heads = (this.gl.binfo[id] && list.length) ? list : [];
+            const headC = heads.find(c => c.refs.some(r => r.kind === 'head')) || heads[0];
+            if (headC) for (const it of items) {
+              if (st.stop) break;
+              const b = await glBlobAt(repo, headC.tree, it.path);
+              let present = false;
+              if (b) { const o = await repo.readObject(b); present = !!(o && o.type === 'blob' && repo.dec.decode(o.data).indexOf(it.value) >= 0); }
+              it.status = present ? 'head' : 'history';
+            }
+            st.state = st.stop ? 'stop' : 'done';
+          } catch (e) { st.state = 'error'; st.err = String(e.message || e); }
+          st.ms = Date.now() - st.t0;
+          this.gl.leakVer++;
+        },
+        glMask(v) { return glMask(v); },
+        glStopLeaks() { Object.values(this.gl.leak).forEach(s => { if (s.state === 'run') s.stop = true; }); },
+        glRescanLeaks() { this.gl.sources.filter(s => s.kind === 'git' && !(this.gl.project && s.name !== this.gl.project)).forEach(s => this.glScanLeaks(s.id)); },
+        glLeakOpen(it) { this.gl.sel = it.sha; this.gl.view = 'list'; },
+        glExportLeaks(kind) {
+          const R = this.glLeaks, show = this.gl.leakShow;
+          const head = ['Severity', tr('gl_lk_rule'), tr('gl_lk_value'), tr('gl_lk_file'), tr('gl_lk_first'), 'Author', tr('gl_th_day'), tr('gl_lk_count'), 'Status', tr('gl_lk_fix')];
+          const row = r => [r.severity, L(r.rule), show ? r.value : glMask(r.value), r.path + ':' + r.line, r.sha.slice(0, 10), r.an, this.glFmt(r.at), r.count, tr('gl_lk_st_' + (r.status || 'history')), L(r.fix)];
+          if (kind === 'csv') { pupDownload('git-secret-leaks.csv', '\ufeff' + glCsv([head].concat(R.map(row))), 'text/csv'); return; }
+          const body = R.map(r => '<tr>' + row(r).map((v, i) => '<td' + (i === 0 ? ' class="s-' + esc(r.severity) + '"' : '') + '>' + esc(String(v)) + '</td>').join('') + '</tr>').join('');
+          const html = '<!DOCTYPE html><html lang="' + LANG + '"><head><meta charset="UTF-8"><title>' + esc(tr('gl_lk_title')) + '</title>' + FAV_LINK + '<style>'
+            + 'body{font:14px/1.5 Segoe UI,system-ui,sans-serif;margin:24px;color:#0f172a}table{border-collapse:collapse;width:100%}'
+            + 'caption{caption-side:top;text-align:left;font-size:18px;font-weight:700;padding:10px 12px;background:#7f1d1d;color:#fff;border-radius:8px 8px 0 0}'
+            + 'th{background:#b91c1c;color:#fff;padding:8px;border:1px solid #7f1d1d;text-align:left}td{padding:7px 8px;border:1px solid #cbd5e1;vertical-align:top;word-break:break-word}'
+            + 'tr:nth-child(even) td{background:#f8fafc}.s-HIGH{color:#b91c1c;font-weight:700}.s-MEDIUM{color:#b45309;font-weight:700}.note{color:#475569;margin-top:12px}</style></head><body>'
+            + '<table><caption>' + esc(tr('gl_lk_title')) + ' · ' + R.length + '</caption><thead><tr>' + head.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' + body + '</tbody></table>'
+            + '<p class="note">' + esc(tr('gl_lk_advice')) + '</p></body></html>';
+          pupDownload('git-secret-leaks.html', html, 'text/html');
+        },
         glGanttEnd() { this.$nextTick(() => { const el = this.$refs.glGanttScroll; if (el) el.scrollLeft = el.scrollWidth; }); },
         glGanttTip(c) { return this.glFmt(this.glT(c)) + ' · ' + c.sha.slice(0, 8) + ' · ' + c.an + '\n' + c.subject; },
         glSelect(c) { this.gl.sel = this.gl.sel === c.sha ? null : c.sha; },
