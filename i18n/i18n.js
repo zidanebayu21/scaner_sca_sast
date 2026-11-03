@@ -332,7 +332,7 @@ window.APP_I18N = {
       text_en: {
         // Umum / tabel file
         '(detail tidak berhasil diambil)': '(details could not be fetched)', '(tidak dikenali)': '(unrecognized)',
-        'BELUM ADA': 'NONE YET', 'ya': 'yes', 'langsung': 'direct', 'transitif': 'transitive', 'baris {x}': 'line {x}',
+        'BELUM ADA': 'NONE YET', 'ya': 'yes', 'langsung': 'direct', 'Link langsung': 'Direct link', 'transitif': 'transitive', 'baris {x}': 'line {x}',
         'Geser untuk mengubah lebar (klik dua kali untuk reset)': 'Drag to resize (double-click to reset)',
         ' dtk': ' s', ' mnt': ' min',
         '{n} file ditambahkan ke daftar. Klik "Scan & buka laporan".': '{n} file(s) added to the list. Click "Scan & open report".',
