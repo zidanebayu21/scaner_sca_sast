@@ -330,6 +330,15 @@ window.APP_I18N = {
       },
       // Kamus frasa untuk L()/Lf()/localizeScript(): kunci = teks Indonesia apa adanya di index.html.
       text_en: {
+        'Buka file Google Sheets dulu (docs.google.com/spreadsheets/d/...).': 'Open a Google Sheets file first (docs.google.com/spreadsheets/d/...).',
+        ' Klik Unduh xlsx, lalu seret file-nya ke tab Sheet Viewer.': ' Click Download xlsx, then drag the file into the Sheet Viewer tab.',
+        'Unduh xlsx': 'Download xlsx',
+        'Mengunduh semua tab sebagai xlsx...': 'Downloading every tab as xlsx...',
+        'Terunduh ': 'Downloaded ',
+        'Tab scanner tidak terbuka (popup diblokir / file lokal).': 'Scanner tab did not open (popup blocked / local file).',
+        'Terkirim ke Sheet Viewer.': 'Sent to Sheet Viewer.',
+        'Tab scanner tidak merespons.': 'Scanner tab is not responding.',
+        'Unduh langsung gagal (': 'Direct download failed (',
         ' produk (API ': ' products (API ',
         ') · terkirim ': ') · sent ',
         'Baca ulang kartu produk yang tampil': 'Re-read the product cards shown',
