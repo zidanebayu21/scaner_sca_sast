@@ -353,8 +353,8 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
   border-bottom: 1px solid var(--border);
 }
 .pipe-bar input[type=search] { flex: 1; min-width: 160px; padding: 5px 9px; font-size: 12px; }
-.pipe-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.pipe-list { flex: 1; overflow: auto; }
+.pipe-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--panel-bg); }
+.pipe-list { flex: 1; overflow: auto; background: var(--panel-bg); }
 .pipe-tbl { width: 100%; border-collapse: collapse; margin: 0; font-size: 12px; }
 .pipe-tbl th { position: sticky; top: 0; z-index: 2; padding: 6px 8px; font-size: 11.5px; }
 .pipe-tbl td { padding: 5px 8px; border-bottom: 1px solid var(--border); cursor: pointer; vertical-align: middle; }
