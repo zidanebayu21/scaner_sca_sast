@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.2';
+    window.APP_VERSION = '2.3';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -528,6 +528,35 @@
           <div class="log mt-0"><div>{{ colabCmd[kind] }}</div></div>
         </template>
         <div class="muted mt-15" v-html="t('colab_note')"></div>
+
+        <h3 class="mt-5">{{ t('colab_ai_head') }}</h3>
+        <p class="muted" v-html="t('colab_ai_desc')"></p>
+        <div class="actions">
+          <a class="btn blue" :href="colab.aiNotebook" target="_blank" rel="noopener noreferrer">{{ t('colab_ai_open') }}</a>
+        </div>
+        <ol class="muted list-tight">
+          <li v-for="n in 3" :key="n" v-html="t('colab_ai_step' + n)"></li>
+        </ol>
+        <div class="row">
+          <input type="text" v-model="colab.ai.url" :placeholder="t('colab_ai_url')" />
+          <input type="password" v-model="colab.ai.key" :placeholder="t('colab_ai_key')" autocomplete="off" />
+          <button class="btn" :disabled="!colab.ai.url.trim() || !colab.ai.key.trim()" @click="aiConnect">{{ t('colab_ai_connect') }}</button>
+        </div>
+        <div class="ok mt-15" v-if="colab.ai.msg">{{ colab.ai.msg }}</div>
+        <div class="bad mt-15" v-if="colab.ai.err">{{ colab.ai.err }}</div>
+        <template v-if="colab.ai.model">
+          <div class="log" style="max-height:460px" v-if="colab.ai.msgs.length">
+            <div v-for="(m, i) in colab.ai.msgs" :key="i" :class="{ 'c-warn': m.role === 'user' }" class="mb-25"><b>{{ m.role === 'user' ? t('colab_ai_you') : colab.ai.model }}</b>
+{{ m.content || (colab.ai.busy ? '…' : '') }}</div>
+          </div>
+          <textarea v-model="colab.ai.q" :placeholder="t('colab_ai_q_ph')" class="mt-25" style="min-height:110px" @keydown.ctrl.enter.prevent="aiSend"></textarea>
+          <div class="actions">
+            <button class="btn" :disabled="colab.ai.busy || !colab.ai.q.trim()" @click="aiSend">{{ colab.ai.busy ? t('running') : t('colab_ai_send') }}</button>
+            <button class="btn gray" v-if="colab.ai.busy" @click="aiStop">{{ t('stop') }}</button>
+            <button class="btn gray" v-if="colab.ai.msgs.length && !colab.ai.busy" @click="colab.ai.msgs = []">{{ t('colab_ai_clear') }}</button>
+          </div>
+        </template>
+        <div class="muted mt-15" v-html="t('colab_ai_note')"></div>
       </section>
 
       <!-- JWT Decode dinonaktifkan: sudah tercakup di Smart Decode (recJwt memakai decodeJwt yang sama). Untuk mengaktifkan lagi: buka komentar ini, entri TAB_LIST 'jwt', serta kembalikan data jwtText dan computed jwt() { return decodeJwt(this.jwtText); }.
