@@ -227,7 +227,24 @@ window.APP_I18N = {
         diff_mask_sample: 'Contoh Data Sensitif', diff_mask_copy: 'Salin Hasil Sensor', diff_mask_to_diff: 'Kirim ke Diff (Cek apa yang disensor)',
         diff_mask_found: '{n} data sensitif disensor', diff_mask_none: 'Tidak ditemukan pola rahasia pada teks masukan.',
         diff_r_env: 'Nilai .env / Config Secret', diff_r_jwt: 'Token JWT', diff_r_apikey: 'API Key & Bearer Token',
-        diff_r_conn: 'Password URL Database', diff_r_pem: 'Private Key (PEM)', diff_r_email: 'Alamat Email', diff_r_phone: 'Nomor Telepon/HP', diff_r_ip: 'Alamat IPv4'
+        diff_r_conn: 'Password URL Database', diff_r_pem: 'Private Key (PEM)', diff_r_email: 'Alamat Email', diff_r_phone: 'Nomor Telepon/HP', diff_r_ip: 'Alamat IPv4',
+        // v2.2: Colab Server (SonarQube di Google Colab)
+        tab_colab: 'Colab Server',
+        colab_title: 'Colab Server — jalankan server tool di Google Colab',
+        colab_intro: 'Server tool yang berat untuk browser (mis. <b>SonarQube</b>) dijalankan gratis di <b>Google Colab</b> lalu dibuka ke internet lewat <b>Cloudflare quick tunnel</b>, jadi bisa dipakai dari laptop tanpa memasang server sendiri.',
+        colab_sonar_head: 'SonarQube (SAST server)',
+        colab_sonar_desc: 'Satu cell notebook menyalakan SonarQube Community Build, mengganti password admin default, membuat token analysis, dan memberi link publik <code>https://xxx.trycloudflare.com</code>. Dari laptop cukup jalankan <code>sonar-scanner</code> ke link itu.',
+        colab_open: '▶ Buka notebook SonarQube di Colab',
+        colab_step1: 'Buka notebook, login Google, lalu klik <b>Connect</b>. Bila muncul peringatan notebook bukan buatan Google, pilih <b>Run anyway</b>. Agar bisa diubah sendiri: <b>File &gt; Save a copy in Drive</b>.',
+        colab_step2: 'Jalankan cell (tombol ▶ atau <code>Ctrl+Enter</code>). Progress tampil per tahap: install Java 21 + unduh SonarQube + cloudflared (sekali per runtime), start server (status <code>STARTING</code> → <code>UP</code>, ±3-5 menit), akun admin, token, lalu tunnel. Bila server mati, log error langsung ditampilkan.',
+        colab_step3: 'Setelah muncul <b>=== SonarQube siap ===</b>, salin baris <code>$env:SONAR_TOKEN = ...; sonar-scanner ...</code> lalu tempel di form di bawah (URL dan token terisi otomatis).',
+        colab_step4: 'Di laptop, pasang <a href="https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/" target="_blank" rel="noopener noreferrer">SonarScanner CLI</a>, buka terminal di folder project, lalu jalankan perintahnya. Hasil scan dibuka di URL yang sama (login <code>admin</code> + password dari output cell).',
+        colab_form_head: 'Susun perintah scan',
+        colab_paste: 'Tempel baris dari output cell (opsional)',
+        colab_paste_ph: '$env:SONAR_TOKEN = "sqa_..."; sonar-scanner "-Dsonar.host.url=https://....trycloudflare.com"',
+        colab_url: 'URL server (https://....trycloudflare.com)', colab_token: 'Token (sqa_...)', colab_key: 'Project key (opsional)',
+        colab_ps: 'PowerShell', colab_sh: 'Bash / Git Bash', colab_copy: 'Salin',
+        colab_note: 'Catatan: runtime Colab gratis terputus saat idle atau setelah beberapa jam; setiap runtime baru, URL, token, password admin, dan hasil scan berganti/hilang (database H2 bawaan, cocok untuk evaluasi). Link publik bisa dibuka siapa saja, tetapi upload scan tetap butuh token. Token hanya disimpan di memori halaman ini. Kode dikirim ke pihak ketiga (Google Colab + Cloudflare), jadi pastikan Anda boleh mengirimnya. Project key: isi bila project belum punya <code>sonar-project.properties</code>.'
       },
       en: {
         tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
@@ -476,7 +493,26 @@ window.APP_I18N = {
         diff_mask_sample: 'Sample Sensitive Text', diff_mask_copy: 'Copy Redacted Text', diff_mask_to_diff: 'Send to Diff (Review Redactions)',
         diff_mask_found: '{n} sensitive item(s) redacted', diff_mask_none: 'No secret patterns detected in the input text.',
         diff_r_env: '.env / Config Secret Values', diff_r_jwt: 'JWT Tokens', diff_r_apikey: 'API Keys & Bearer Tokens',
-        diff_r_conn: 'Database URL Passwords', diff_r_pem: 'Private Keys (PEM)', diff_r_email: 'Email Addresses', diff_r_phone: 'Phone Numbers', diff_r_ip: 'IPv4 Addresses'
+        diff_r_conn: 'Database URL Passwords', diff_r_pem: 'Private Keys (PEM)', diff_r_email: 'Email Addresses', diff_r_phone: 'Phone Numbers', diff_r_ip: 'IPv4 Addresses',
+        // v2.2: Colab Server (SonarQube on Google Colab)
+        tab_colab: 'Colab Server',
+        colab_title: 'Colab Server — run tool servers on Google Colab',
+        colab_intro: 'Tool servers too heavy for the browser (e.g. <b>SonarQube</b>) run for free on <b>Google Colab</b> and are exposed to the internet through a <b>Cloudflare quick tunnel</b>, so you can use them from your laptop without hosting a server.',
+        colab_sonar_head: 'SonarQube (SAST server)',
+        colab_sonar_desc: 'One notebook cell starts SonarQube Community Build, replaces the default admin password, creates an analysis token, and prints a public link <code>https://xxx.trycloudflare.com</code>. From your laptop just run <code>sonar-scanner</code> against that link.',
+        colab_open: '▶ Open the SonarQube notebook in Colab',
+        colab_step1: 'Open the notebook, sign in to Google, then click <b>Connect</b>. If a warning says the notebook was not authored by Google, choose <b>Run anyway</b>. To edit it yourself: <b>File &gt; Save a copy in Drive</b>.',
+        colab_step2: 'Run the cell (▶ button or <code>Ctrl+Enter</code>). Progress is shown per stage: install Java 21 + download SonarQube + cloudflared (once per runtime), start the server (status <code>STARTING</code> → <code>UP</code>, ~3-5 minutes), admin account, token, then the tunnel. If the server dies, its error log is shown right away.',
+        colab_step3: 'When <b>=== SonarQube siap ===</b> appears, copy the <code>$env:SONAR_TOKEN = ...; sonar-scanner ...</code> line and paste it into the form below (URL and token are filled in automatically).',
+        colab_step4: 'On your laptop, install the <a href="https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/" target="_blank" rel="noopener noreferrer">SonarScanner CLI</a>, open a terminal in the project folder, and run the command. Results are at the same URL (log in as <code>admin</code> with the password from the cell output).',
+        colab_form_head: 'Build the scan command',
+        colab_paste: 'Paste the line from the cell output (optional)',
+        colab_paste_ph: '$env:SONAR_TOKEN = "sqa_..."; sonar-scanner "-Dsonar.host.url=https://....trycloudflare.com"',
+        colab_url: 'Server URL (https://....trycloudflare.com)', colab_token: 'Token (sqa_...)', colab_key: 'Project key (optional)',
+        colab_ps: 'PowerShell', colab_sh: 'Bash / Git Bash', colab_copy: 'Copy',
+        colab_note: 'Notes: free Colab runtimes disconnect when idle or after a few hours; each new runtime changes or loses the URL, token, admin password, and scan results (built-in H2 database, fine for evaluation). Anyone can open the public link, but uploading a scan still needs the token. The token is kept only in this page\'s memory. Your code is sent to third parties (Google Colab + Cloudflare), so make sure you are allowed to send it. Project key: fill it in if the project has no <code>sonar-project.properties</code>.',
+        grp_colab_title: 'Colab Server — SonarQube',
+        grp_colab_desc: 'This page calls no API: it only links to a Google Colab notebook. Code is sent by sonar-scanner on your computer to the Colab server through a Cloudflare quick tunnel.'
       },
       // Kamus frasa untuk L()/Lf()/localizeScript(): kunci = teks Indonesia apa adanya di index.html.
       text_en: {

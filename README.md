@@ -1,4 +1,4 @@
-# Scanner Security (v2.0)
+# Scanner Security (v2.2)
 
 Aplikasi client-side mandiri (Vue 3 lokal offline, tanpa build step) untuk memeriksa keamanan proyek, jaringan, dan otomasi langsung di browser:
 
@@ -62,6 +62,16 @@ Tab **Rate Limiter (dari curl)**: seperti Postman, khusus cek rate limiter. Temp
 Tab **RTO (kirim lambat)**: menguji apakah server menerapkan *request read timeout*. Tempel curl satu endpoint berbody (POST/PUT/PATCH), atur laju kirim (2–100000 kbps) dan ukuran payload; body dikirim menetes lewat streaming upload (`fetch` + `ReadableStream`). Kalau server menunggu data terlalu lama ia akan menutup koneksi — itulah RTO yang diukur, dilaporkan sebagai "diputus server (kemungkinan read timeout)" lengkap dengan waktu dan byte terkirim. Ini satu koneksi lambat untuk diagnostik timeout (OWASP Slow HTTP / CWE-400), bukan membanjiri server; server yang sehat *seharusnya* memutus klien lambat. Sama seperti Rate Limiter ada dua opsi: **Opsi 1** hit langsung dari halaman (butuh HTTPS/HTTP-2 + CORS, tanpa cookie), **Opsi 2** skrip same-origin di tab target (cookie sesi ikut). Hanya untuk sistem yang Anda berwenang menguji.
 
 Tab **SAST** memeriksa pola kode berbahaya dari teks yang ditempel; `eval(x)` di komentar atau di dalam string tidak lagi dilaporkan.
+
+Tab **Colab Server** (v2.2): menjalankan server tool yang terlalu berat untuk browser di **Google Colab**, dibuka ke internet lewat **Cloudflare quick tunnel** (tanpa akun). Isi pertama: **SonarQube** — [notebook Colab](https://colab.research.google.com/drive/1_Mx-FfnXU9aqYy6UqIzlX7myA3ysdwSt?usp=sharing).
+1. Buka notebook, **Connect**, lalu jalankan cell (`Ctrl+Enter`). Progress tampil per tahap: install Java 21 + SonarQube Community Build + cloudflared, start server (`STARTING` → `UP`, ±3-5 menit), ganti password admin default, buat token analysis, buka tunnel. Bila server mati, log error langsung ditampilkan.
+2. Output terakhir berisi URL publik, login admin, dan baris siap pakai:
+   ```powershell
+   $env:SONAR_TOKEN = "sqa_..."; sonar-scanner "-Dsonar.host.url=https://xxx.trycloudflare.com"
+   ```
+3. Tempel baris itu di form tab Colab Server (URL & token terisi otomatis, project key opsional) untuk menyalin versi PowerShell atau Bash, lalu jalankan di folder project dengan [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-server/latest/analyzing-source-code/scanners/sonarscanner/).
+
+Catatan: runtime Colab gratis terputus saat idle; setiap runtime baru URL, token, password admin, dan hasil scan berganti/hilang (database H2 bawaan). Penyesuaian di notebook: port web 9100 (9000 dipakai Colab) dan log JVM dialihkan ke stderr (warning cgroup Colab merusak launch descriptor Elasticsearch). Halaman ini sendiri tidak memanggil API; token hanya di memori.
 
 **Bahasa/ekosistem SCA yang didukung** (semua lewat OSV.dev): JavaScript (package-lock, yarn.lock, pnpm-lock.yaml, package.json), PHP (composer.lock), .NET (packages.lock.json, *.csproj, packages.config), Java (pom.xml, build.gradle(.kts), gradle.lockfile), Rust (Cargo.lock, Cargo.toml), Go (go.mod), Python (requirements.txt, poetry.lock, uv.lock, Pipfile.lock), Ruby (Gemfile.lock), Dart (pubspec.lock), Elixir (mix.lock), dan paket yang dipin di Dockerfile. File berbentuk lockfile memuat dependency transitif; pom.xml, build.gradle, Cargo.toml, dan requirements.txt hanya dependency langsung/yang dipin.
 

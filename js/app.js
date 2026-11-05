@@ -10,6 +10,7 @@ const TAB_LIST = [
   { key: 'eol', label: 'EOL runtime/framework' },
   { key: 'dast', label: 'DAST pasif (URL)' },
   { key: 'sast', label: 'SAST (Kode)' },
+  { key: 'colab', label: 'Colab Server' },
   { key: 'file', label: 'Analisis file' },
   // { key: 'jwt', label: 'JWT Decode' }, -- dinonaktifkan, pakai Smart Decode
   { key: 'decode', label: 'Smart Decode' },
@@ -30,6 +31,7 @@ const TAB_LIST = [
   { key: 'img', label: 'Studio Gambar' },
   { key: 'pup', label: 'Puppeteer Record' }
 ];
+const COLAB_SONAR_URL = 'https://colab.research.google.com/drive/1_Mx-FfnXU9aqYy6UqIzlX7myA3ysdwSt?usp=sharing';
 const DEFAULT_PROJECT = 'Tanpa nama';
 // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
 function projectFromContent(type, text) {
@@ -119,6 +121,7 @@ createApp({
       wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },
       gl: { sources: [], commits: [], order: {}, binfo: {}, leak: {}, leakVer: 0, leakShow: false, leakSev: '', branch: '', zoom: 0, q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, dateKind: 'a', view: 'list', page: 300, sel: null, files: null, filesBusy: false, busy: false, prog: '', err: '', msg: '', paste: '', pasteName: '', over: false, max: 20000, repNoMerge: true, copied: false },
       clock: { q: '', pins: [], now: Date.now(), live: true, fixedMs: null, base: 'mine', ts: '', copied: false },
+      colab: { sonarUrl: COLAB_SONAR_URL, paste: '', url: '', token: '', key: '', copied: '' },
       ping: { targets: [], collapsed: {}, form: { name: '', url: '', group: '', interval: 10, timeout: 5000, expect: 'any', method: 'GET' }, editId: null, bulk: '', bulkGroup: '', bulkInterval: 10, filter: 'all', q: '', selId: null, sound: true, alarmDown: false, notif: false, running: true, tick: 0, now: Date.now(), alarm: null, err: '', msg: '', mixedOk: location.protocol !== 'https:', mixedTesting: false, mixedAt: 0, dlBusy: false },
       swag: { url: '', text: '', over: false, busy: false, err: '', msg: '', model: null, src: '', baseUrl: '', token: '', tags: {}, fmt: 'pm', copied: false, scriptCopied: false },
       rl: { err: '', curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
@@ -153,6 +156,14 @@ createApp({
       return pinned.concat(rest);
     },
     tabOrderChanged() { return this.tabList.some((t, i) => t.key !== TAB_LIST[i].key); },
+    // Perintah sonar-scanner dari URL + token output notebook Colab (token hanya di memori).
+    colabCmd() {
+      const c = this.colab, url = c.url.trim() || '<URL>', token = c.token.trim() || '<TOKEN>', key = c.key.trim();
+      return {
+        ps: `$env:SONAR_TOKEN = "${token}"; sonar-scanner "-Dsonar.host.url=${url}"` + (key ? ` "-Dsonar.projectKey=${key}"` : ''),
+        sh: `SONAR_TOKEN="${token}" sonar-scanner -Dsonar.host.url=${url}` + (key ? ` -Dsonar.projectKey=${key}` : '')
+      };
+    },
     cmdList() {
       const catTab = this.t('cmdCatTab'), catAct = this.t('cmdCatAct');
       const tabs = this.tabList.map(t => ({
@@ -2348,6 +2359,17 @@ createApp({
     },
     copySwagScript() {
       navigator.clipboard.writeText(swagScript()).then(() => { this.swag.scriptCopied = true; setTimeout(() => { this.swag.scriptCopied = false; }, 1500); });
+    },
+    // ---- Colab Server: ambil URL & token dari baris output cell yang ditempel
+    colabParse() {
+      const s = this.colab.paste;
+      const url = s.match(/sonar\.host\.url=([^\s"']+)/) || s.match(/https:\/\/[\w.-]+\.trycloudflare\.com/);
+      const token = s.match(/\bsq[apu]_[0-9a-f]+/);
+      if (url) this.colab.url = url[1] || url[0];
+      if (token) this.colab.token = token[0];
+    },
+    colabCopy(kind) {
+      navigator.clipboard.writeText(this.colabCmd[kind]).then(() => { this.colab.copied = kind; setTimeout(() => { this.colab.copied = ''; }, 1500); });
     },
     // ---- Color Picker
     colLoad() {
