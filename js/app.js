@@ -599,12 +599,40 @@ createApp({
         }
         return true;
       });
-      out.sort((a, b) => (b.ts || b.seen || 0) - (a.ts || a.seen || 0));
+      const getT = r => {
+        let t = r ? (r.ts || r.seen || 0) : 0;
+        const nowLimit = Date.now() + 43200000;
+        if (t > nowLimit) {
+          const d = new Date(t);
+          const y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+          if (day >= 1 && day <= 12 && m >= 1 && m <= 31) {
+            const sw = new Date(y, day - 1, m, d.getHours(), d.getMinutes(), d.getSeconds());
+            if (sw.getTime() <= nowLimit) return sw.getTime();
+          }
+          return r.seen || Date.now();
+        }
+        return t;
+      };
+      out.sort((a, b) => getT(b) - getT(a));
       return out;
     },
     waRows() {
+      const getT = r => {
+        let t = r ? (r.ts || r.seen || 0) : 0;
+        const nowLimit = Date.now() + 43200000;
+        if (t > nowLimit) {
+          const d = new Date(t);
+          const y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+          if (day >= 1 && day <= 12 && m >= 1 && m <= 31) {
+            const sw = new Date(y, day - 1, m, d.getHours(), d.getMinutes(), d.getSeconds());
+            if (sw.getTime() <= nowLimit) return sw.getTime();
+          }
+          return r.seen || Date.now();
+        }
+        return t;
+      };
       return this.sortBy('wa', this.waFiltered, {
-        ts: r => r.ts || r.seen || 0,
+        ts: r => getT(r),
         chat: 'chat',
         sender: r => r.sender || (r.dir === 'out' ? this.t('wa_me') : r.chat),
         text: 'text',
@@ -1839,7 +1867,18 @@ createApp({
       }
     },
     waLoad() {
-      return waAll().then(list => { this.wa.list = Vue.markRaw(list); }).catch(err => { this.wa.err = String(err.message || err); });
+      return waAll().then(list => {
+        const dirty = [];
+        const cleaned = (list || []).map(item => {
+          const c = waClean(item);
+          if (c && item && (c.ts !== item.ts || c.timeText !== item.timeText)) dirty.push(c);
+          return c;
+        }).filter(Boolean);
+        if (dirty.length) {
+          waPutMany(dirty).catch(() => {});
+        }
+        this.wa.list = Vue.markRaw(cleaned);
+      }).catch(err => { this.wa.err = String(err.message || err); });
     },
     copyWaScript() {
       navigator.clipboard.writeText(this.waScript).catch(() => {});
@@ -1880,7 +1919,19 @@ createApp({
       navigator.clipboard.writeText(parts.join('\n')).catch(() => {});
     },
     waTime(r) {
-      const t = r.ts || r.seen;
+      let t = r.ts || r.seen;
+      const nowLimit = Date.now() + 43200000;
+      if (t && t > nowLimit) {
+        const d = new Date(t);
+        const y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+        if (day >= 1 && day <= 12 && m >= 1 && m <= 31) {
+          const sw = new Date(y, day - 1, m, d.getHours(), d.getMinutes(), d.getSeconds());
+          if (sw.getTime() <= nowLimit) t = sw.getTime();
+          else t = r.seen || Date.now();
+        } else {
+          t = r.seen || Date.now();
+        }
+      }
       if (!t) return r.timeText || '—';
       return new Date(t).toLocaleString(LANG === 'en' ? 'en-GB' : 'id-ID', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     },

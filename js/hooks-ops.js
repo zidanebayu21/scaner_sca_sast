@@ -3714,10 +3714,22 @@ function waHookMain(cfg) {
       y = c < 100 ? 2000 + c : c;
       if (a > 12) { d = a; mo = b; }
       else if (b > 12) { mo = a; d = b; }
-      else if (/^en-US/i.test(navigator.language || '')) { mo = a; d = b; }
+      else if (/^en-US/i.test((document.documentElement && document.documentElement.lang) || navigator.language || '')) { mo = a; d = b; }
       else { d = a; mo = b; }
     }
     if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    // Penjagaan anti masa depan: tanggal pesan chat tidak mungkin di masa depan
+    var nowMs = Date.now() + 43200000;
+    var dt = new Date(y, mo - 1, d);
+    if (dt.getTime() > nowMs) {
+      if (d <= 12 && mo <= 31) {
+        var alt = new Date(y, d - 1, mo);
+        if (alt.getTime() <= nowMs) {
+          var tmp = mo; mo = d; d = tmp;
+        }
+      }
+    }
+    if (new Date(y, mo - 1, d).getTime() > nowMs) return null;
     return [y, mo, d];
   }
   function parseTimePart(tm) {
@@ -3741,8 +3753,18 @@ function waHookMain(cfg) {
     if (ymd && hms) {
       var dt = new Date(ymd[0], ymd[1] - 1, ymd[2], hms[0], hms[1], hms[2]);
       if (!isNaN(dt.getTime())) {
-        ts = dt.getTime();
-        timeText = ymd[0] + '-' + p2(ymd[1]) + '-' + p2(ymd[2]) + ' ' + p2(hms[0]) + ':' + p2(hms[1]);
+        var nowMs = Date.now() + 43200000;
+        if (dt.getTime() > nowMs && ymd[2] <= 12 && ymd[1] <= 31) {
+          var alt = new Date(ymd[0], ymd[2] - 1, ymd[1], hms[0], hms[1], hms[2]);
+          if (alt.getTime() <= nowMs) {
+            ymd = [ymd[0], ymd[2], ymd[1]];
+            dt = alt;
+          }
+        }
+        if (dt.getTime() <= nowMs) {
+          ts = dt.getTime();
+          timeText = ymd[0] + '-' + p2(ymd[1]) + '-' + p2(ymd[2]) + ' ' + p2(hms[0]) + ':' + p2(hms[1]);
+        }
       }
     }
     return { sender: sender, ts: ts, timeText: timeText, ymd: ymd };
@@ -3971,7 +3993,12 @@ function waHookMain(cfg) {
             var hms = parseTimePart(tm);
             if (hms && curYmd) {
               var dt = new Date(curYmd[0], curYmd[1] - 1, curYmd[2], hms[0], hms[1], 0);
-              if (!isNaN(dt.getTime())) {
+              var nowMs = Date.now() + 43200000;
+              if (dt.getTime() > nowMs && curYmd[2] <= 12 && curYmd[1] <= 31) {
+                var alt = new Date(curYmd[0], curYmd[2] - 1, curYmd[1], hms[0], hms[1], 0);
+                if (alt.getTime() <= nowMs) dt = alt;
+              }
+              if (dt.getTime() <= nowMs && !isNaN(dt.getTime())) {
                 ts = dt.getTime();
                 timeText = curYmd[0] + '-' + p2(curYmd[1]) + '-' + p2(curYmd[2]) + ' ' + p2(hms[0]) + ':' + p2(hms[1]);
               }
@@ -4283,9 +4310,33 @@ function waClean(it) {
   const text = s(it.text, 4000), quote = s(it.quote, 240);
   const media = ['image', 'video', 'audio', 'sticker'].includes(it.media) ? it.media : '';
   if (!text && !links.length && !docs.length && !media) return null;
+
+  let ts = n(it.ts);
+  let timeText = s(it.timeText, 40);
+  const now = Date.now();
+  const nowLimit = now + 43200000;
+  // Penjagaan anti masa depan: perbaiki otomatis tanggal terbalik (MM/DD vs DD/MM)
+  if (ts && ts > nowLimit) {
+    const d = new Date(ts);
+    const y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+    const h = d.getHours(), mi = d.getMinutes(), sc = d.getSeconds();
+    if (day >= 1 && day <= 12 && m >= 1 && m <= 31) {
+      const sw = new Date(y, day - 1, m, h, mi, sc);
+      if (sw.getTime() <= nowLimit) {
+        ts = sw.getTime();
+        const p2 = v => String(v).padStart(2, '0');
+        timeText = y + '-' + p2(day) + '-' + p2(m) + ' ' + p2(h) + ':' + p2(mi);
+      } else {
+        ts = n(it.seen) || now;
+      }
+    } else {
+      ts = n(it.seen) || now;
+    }
+  }
+
   return {
     id, chat, isGroup: !!it.isGroup, sender: s(it.sender, 120), dir: it.dir === 'out' ? 'out' : 'in',
-    ts: n(it.ts), timeText: s(it.timeText, 40), text, quote, links, docs, media, seen: n(it.seen) || Date.now()
+    ts, timeText, text, quote, links, docs, media, seen: n(it.seen) || now
   };
 }
 function waMerge(old, it) {
