@@ -244,7 +244,20 @@ window.APP_I18N = {
         colab_paste_ph: '$env:SONAR_TOKEN = "sqa_..."; sonar-scanner "-Dsonar.host.url=https://....trycloudflare.com"',
         colab_url: 'URL server (https://....trycloudflare.com)', colab_token: 'Token (sqa_...)', colab_key: 'Project key (opsional)',
         colab_ps: 'PowerShell', colab_sh: 'Bash / Git Bash', colab_copy: 'Salin',
-        colab_note: 'Catatan: runtime Colab gratis terputus saat idle atau setelah beberapa jam; setiap runtime baru, URL, token, password admin, dan hasil scan berganti/hilang (database H2 bawaan, cocok untuk evaluasi). Link publik bisa dibuka siapa saja, tetapi upload scan tetap butuh token. Token hanya disimpan di memori halaman ini. Kode dikirim ke pihak ketiga (Google Colab + Cloudflare), jadi pastikan Anda boleh mengirimnya. Project key: isi bila project belum punya <code>sonar-project.properties</code>.'
+        colab_note: 'Catatan: runtime Colab gratis terputus saat idle atau setelah beberapa jam; setiap runtime baru, URL, token, password admin, dan hasil scan berganti/hilang (database H2 bawaan, cocok untuk evaluasi). Link publik bisa dibuka siapa saja, tetapi upload scan tetap butuh token. Token hanya disimpan di memori halaman ini. Kode dikirim ke pihak ketiga (Google Colab + Cloudflare), jadi pastikan Anda boleh mengirimnya. Project key: isi bila project belum punya <code>sonar-project.properties</code>.',
+        colab_ai_head: 'Tanya Kode (AI di GPU Colab)',
+        colab_ai_desc: 'Notebook memilih model coder terbaik yang muat di GPU (T4 gratis: <b>Qwen2.5-Coder 14B</b>; GPU ≥ 22 GB: <b>Qwen3-Coder 30B</b>), menjalankannya dengan Ollama di balik gateway ber-<b>API key</b>, lalu memberi URL publik yang kompatibel OpenAI (<code>/v1/chat/completions</code>).',
+        colab_ai_open: '▶ Buka notebook AI di Colab',
+        colab_ai_step1: 'Buka notebook, pastikan <b>Runtime &gt; Change runtime type &gt; T4 GPU</b> (atau GPU lebih besar bila ada), lalu jalankan cell. Unduh model ±9 GB, total ±3-5 menit.',
+        colab_ai_step2: 'Setelah <b>=== AI siap ===</b>, klik link <b>Hubungkan otomatis</b> di output: halaman ini terbuka dan langsung terhubung.',
+        colab_ai_step3: 'Atau salin <b>Base URL</b> dan <b>API key</b> ke kolom di bawah, lalu klik Hubungkan.',
+        colab_ai_url: 'Base URL (https://....trycloudflare.com/v1)', colab_ai_key: 'API key (sk-colab-...)',
+        colab_ai_connect: 'Hubungkan', colab_ai_checking: 'Memeriksa koneksi...', colab_ai_ok: 'Terhubung · model {m}',
+        colab_ai_fail: 'Gagal terhubung: ', colab_ai_nomodel: 'Server menjawab tetapi tidak ada model.',
+        colab_ai_you: 'Anda', colab_ai_send: 'Tanya (Ctrl+Enter)', colab_ai_clear: 'Bersihkan percakapan',
+        colab_ai_q_ph: 'Tanyakan kode Anda, mis. "Kenapa fungsi ini error?" lalu tempel kodenya...',
+        colab_ai_system: 'Anda asisten pemrograman senior. Jawab dalam bahasa yang dipakai pengguna, ringkas dan tepat, sertakan contoh kode bila membantu. Untuk isu keamanan, jelaskan risikonya dan sebut referensi OWASP/CWE yang relevan.',
+        colab_ai_note: 'Pertanyaan dan kode dikirim ke runtime Colab Anda (lewat Cloudflare), bukan ke OpenAI/Gemini. API key hanya di memori halaman ini; link Hubungkan otomatis membawa key di bagian <code>#</code> URL (tidak terkirim ke server) dan langsung dihapus dari address bar. Runtime gratis terputus saat idle; setiap run baru URL dan API key berganti.'
       },
       en: {
         tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
@@ -511,8 +524,21 @@ window.APP_I18N = {
         colab_url: 'Server URL (https://....trycloudflare.com)', colab_token: 'Token (sqa_...)', colab_key: 'Project key (optional)',
         colab_ps: 'PowerShell', colab_sh: 'Bash / Git Bash', colab_copy: 'Copy',
         colab_note: 'Notes: free Colab runtimes disconnect when idle or after a few hours; each new runtime changes or loses the URL, token, admin password, and scan results (built-in H2 database, fine for evaluation). Anyone can open the public link, but uploading a scan still needs the token. The token is kept only in this page\'s memory. Your code is sent to third parties (Google Colab + Cloudflare), so make sure you are allowed to send it. Project key: fill it in if the project has no <code>sonar-project.properties</code>.',
-        grp_colab_title: 'Colab Server — SonarQube',
-        grp_colab_desc: 'This page calls no API: it only links to a Google Colab notebook. Code is sent by sonar-scanner on your computer to the Colab server through a Cloudflare quick tunnel.'
+        colab_ai_head: 'Ask Code (AI on Colab GPU)',
+        colab_ai_desc: 'The notebook picks the best coder model that fits the GPU (free T4: <b>Qwen2.5-Coder 14B</b>; GPU ≥ 22 GB: <b>Qwen3-Coder 30B</b>), runs it with Ollama behind an <b>API key</b> gateway, and prints an OpenAI-compatible public URL (<code>/v1/chat/completions</code>).',
+        colab_ai_open: '▶ Open the AI notebook in Colab',
+        colab_ai_step1: 'Open the notebook, make sure <b>Runtime &gt; Change runtime type &gt; T4 GPU</b> (or a bigger GPU if available), then run the cell. Model download ~9 GB, ~3-5 minutes total.',
+        colab_ai_step2: 'When <b>=== AI siap ===</b> appears, click the <b>Hubungkan otomatis</b> link in the output: this page opens and connects right away.',
+        colab_ai_step3: 'Or copy the <b>Base URL</b> and <b>API key</b> into the fields below and click Connect.',
+        colab_ai_url: 'Base URL (https://....trycloudflare.com/v1)', colab_ai_key: 'API key (sk-colab-...)',
+        colab_ai_connect: 'Connect', colab_ai_checking: 'Checking connection...', colab_ai_ok: 'Connected · model {m}',
+        colab_ai_fail: 'Connection failed: ', colab_ai_nomodel: 'Server responded but has no model.',
+        colab_ai_you: 'You', colab_ai_send: 'Ask (Ctrl+Enter)', colab_ai_clear: 'Clear conversation',
+        colab_ai_q_ph: 'Ask about your code, e.g. "Why does this function fail?" then paste the code...',
+        colab_ai_system: 'You are a senior programming assistant. Answer in the language the user writes in, concise and precise, with code examples when helpful. For security issues, explain the risk and cite relevant OWASP/CWE references.',
+        colab_ai_note: 'Questions and code are sent to your own Colab runtime (through Cloudflare), not to OpenAI/Gemini. The API key stays only in this page\'s memory; the auto-connect link carries the key in the URL <code>#</code> part (never sent to a server) and it is removed from the address bar immediately. Free runtimes disconnect when idle; every new run changes the URL and API key.',
+        grp_colab_title: 'Colab Server — SonarQube & AI',
+        grp_colab_desc: 'This page only calls the Colab server you run yourself: sonar-scanner on your computer sends code to SonarQube, and the Ask Code chat sends questions to the LLM gateway (API key), both through a Cloudflare quick tunnel.'
       },
       // Kamus frasa untuk L()/Lf()/localizeScript(): kunci = teks Indonesia apa adanya di index.html.
       text_en: {

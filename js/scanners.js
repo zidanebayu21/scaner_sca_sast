@@ -158,7 +158,7 @@ const API_GROUPS = [
   { key: 'scrape', title: 'Scraping — ambil file dari link', desc: 'Hanya dipakai saat memasukkan link repo/file GitHub, GitLab, atau URL. Hasilnya diteruskan ke scan SCA/Dockerfile.' },
   { key: 'dast', title: 'DAST pasif — cek header situs', desc: 'Hanya dipakai di tab DAST pasif. URL yang Anda masukkan dikirim ke layanan ini; keduanya hanya membaca respons publik situs, tidak menyerang.' },
   { key: 'sast', title: 'SAST — pemeriksaan kode', desc: 'Tidak memakai API apa pun: kode dicek lokal di browser dan tidak dikirim ke mana pun.', none: true },
-  { key: 'colab', title: 'Colab Server — SonarQube', desc: 'Halaman ini tidak memanggil API: hanya tautan ke notebook Google Colab. Kode dikirim oleh sonar-scanner di komputer Anda ke server Colab lewat Cloudflare quick tunnel.', none: true },
+  { key: 'colab', title: 'Colab Server — SonarQube & AI', desc: 'Hanya memanggil server Colab yang Anda jalankan sendiri: sonar-scanner di komputer Anda mengirim kode ke SonarQube, dan chat Tanya Kode mengirim pertanyaan ke gateway LLM (API key), keduanya lewat Cloudflare quick tunnel.', none: true },
   { key: 'ocr', title: 'OCR Gambar — baca teks dari gambar', desc: 'Hanya dipakai di tab OCR Gambar. Tesseract jalan di browser; OCR.space dan AI menerima gambar yang Anda kirim.' },
   { key: 'color', title: 'Color Picker', desc: 'Tidak memakai API: gambar dan warna diproses lokal di browser.', none: true },
   { key: 'img', title: 'Studio Gambar', desc: 'Lokal di browser. Opsional: runtime + model Real-ESRGAN dari jsDelivr/Hugging Face, dan API AI pilihan Anda (OpenAI, Gemini, OpenRouter, Stability) dengan key Anda.', none: true },

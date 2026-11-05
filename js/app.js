@@ -32,6 +32,13 @@ const TAB_LIST = [
   { key: 'pup', label: 'Puppeteer Record' }
 ];
 const COLAB_SONAR_URL = 'https://colab.research.google.com/drive/1_Mx-FfnXU9aqYy6UqIzlX7myA3ysdwSt?usp=sharing';
+const COLAB_AI_URL = 'https://colab.research.google.com/drive/1J0ikc9KemPid4dzbdNQeQkHDRRovoTBP?usp=sharing';
+// Potongan jawaban dari satu baris SSE chat completions ("data: {...}"); baris lain diabaikan.
+function aiDelta(line) {
+  const d = line.replace(/^data:\s*/, '').trim();
+  if (!d || d === '[DONE]') return '';
+  try { return JSON.parse(d).choices[0].delta.content || ''; } catch (e) { return ''; }
+}
 const DEFAULT_PROJECT = 'Tanpa nama';
 // Nama project dari isi file (field "name"/artifactId/module); kosong bila tidak ada.
 function projectFromContent(type, text) {
@@ -121,7 +128,8 @@ createApp({
       wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },
       gl: { sources: [], commits: [], order: {}, binfo: {}, leak: {}, leakVer: 0, leakShow: false, leakSev: '', branch: '', zoom: 0, q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, dateKind: 'a', view: 'list', page: 300, sel: null, files: null, filesBusy: false, busy: false, prog: '', err: '', msg: '', paste: '', pasteName: '', over: false, max: 20000, repNoMerge: true, copied: false },
       clock: { q: '', pins: [], now: Date.now(), live: true, fixedMs: null, base: 'mine', ts: '', copied: false },
-      colab: { sonarUrl: COLAB_SONAR_URL, paste: '', url: '', token: '', key: '', copied: '' },
+      colab: { sonarUrl: COLAB_SONAR_URL, paste: '', url: '', token: '', key: '', copied: '', aiNotebook: COLAB_AI_URL,
+        ai: { url: '', key: '', model: '', msg: '', err: '', q: '', msgs: [], busy: false } },
       ping: { targets: [], collapsed: {}, form: { name: '', url: '', group: '', interval: 10, timeout: 5000, expect: 'any', method: 'GET' }, editId: null, bulk: '', bulkGroup: '', bulkInterval: 10, filter: 'all', q: '', selId: null, sound: true, alarmDown: false, notif: false, running: true, tick: 0, now: Date.now(), alarm: null, err: '', msg: '', mixedOk: location.protocol !== 'https:', mixedTesting: false, mixedAt: 0, dlBusy: false },
       swag: { url: '', text: '', over: false, busy: false, err: '', msg: '', model: null, src: '', baseUrl: '', token: '', tags: {}, fmt: 'pm', copied: false, scriptCopied: false },
       rl: { err: '', curl: '', method: 'GET', url: '', headers: [], body: '', count: 20, delay: 150, copied: false, msg: '', busy: false, stop: false, results: [], csvCopied: false },
@@ -799,6 +807,7 @@ createApp({
       }
     } catch (e) { /* simpanan rusak: pakai urutan bawaan */ }
     if (!vis[this.tab]) { const first = this.tabList.find(t => vis[t.key]); if (first) this.tab = first.key; }
+    this.colabAiFromHash();
     // Hapus token Sonatype yang pernah tersimpan oleh versi sebelumnya.
     try { localStorage.removeItem('scaSonatype'); } catch (e) { /* localStorage tidak tersedia: abaikan */ }
     try {
@@ -2371,6 +2380,60 @@ createApp({
     colabCopy(kind) {
       navigator.clipboard.writeText(this.colabCmd[kind]).then(() => { this.colab.copied = kind; setTimeout(() => { this.colab.copied = ''; }, 1500); });
     },
+    // ---- Colab Server: tanya kode ke LLM di notebook Colab (gateway OpenAI-compatible + API key)
+    // Link dari notebook: ?tab=colab#ai=<url>&key=<key>; fragment tidak terkirim ke server dan langsung dihapus dari URL.
+    colabAiFromHash() {
+      const h = new URLSearchParams(location.hash.slice(1));
+      if (!h.get('ai') || !h.get('key')) return;
+      Object.assign(this.colab.ai, { url: h.get('ai'), key: h.get('key') });
+      history.replaceState(null, '', location.pathname + location.search);
+      this.visibleTabs.colab = true; this.tab = 'colab';
+      this.aiConnect();
+    },
+    async aiFetch(path, init) {
+      const ai = this.colab.ai, base = ai.url.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+      const res = await fetch(base + path, { ...init, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ai.key.trim() } });
+      if (res.ok) return res;
+      let detail = '';
+      try { const e = (await res.json()).error; detail = (e && e.message) || e || ''; } catch (e) { /* respons bukan JSON */ }
+      throw new Error(res.status + ' ' + detail);
+    },
+    async aiConnect() {
+      const ai = this.colab.ai;
+      Object.assign(ai, { err: '', model: '', msg: this.t('colab_ai_checking') });
+      try {
+        const list = await (await this.aiFetch('/v1/models')).json();
+        ai.model = (list.data && list.data[0] && list.data[0].id) || '';
+        ai.msg = ai.model ? this.t('colab_ai_ok').replace('{m}', ai.model) : '';
+        if (!ai.model) ai.err = this.t('colab_ai_nomodel');
+      } catch (e) { Object.assign(ai, { msg: '', err: this.t('colab_ai_fail') + String(e.message || e) }); }
+    },
+    async aiSend() {
+      const ai = this.colab.ai, q = ai.q.trim();
+      if (!q || ai.busy) return;
+      ai.msgs.push({ role: 'user', content: q });
+      const messages = [{ role: 'system', content: this.t('colab_ai_system') }, ...ai.msgs.map(m => ({ role: m.role, content: m.content }))];
+      ai.msgs.push({ role: 'assistant', content: '' });
+      const reply = ai.msgs[ai.msgs.length - 1];
+      Object.assign(ai, { q: '', err: '', busy: true });
+      this.aiCtl = new AbortController();
+      try {
+        const res = await this.aiFetch('/v1/chat/completions', { method: 'POST', signal: this.aiCtl.signal, body: JSON.stringify({ model: ai.model, stream: true, messages }) });
+        const reader = res.body.getReader(), dec = new TextDecoder();
+        let buf = '';
+        // Stream SSE: baris "data: {json}" berisi potongan jawaban di choices[0].delta.content
+        for (let r = await reader.read(); !r.done; r = await reader.read()) {
+          const lines = (buf + dec.decode(r.value, { stream: true })).split('\n');
+          buf = lines.pop();
+          reply.content += lines.map(aiDelta).join('');
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') ai.err = String(e.message || e);
+      } finally {
+        ai.busy = false; this.aiCtl = null;
+      }
+    },
+    aiStop() { if (this.aiCtl) this.aiCtl.abort(); },
     // ---- Color Picker
     colLoad() {
       try {
