@@ -1,6 +1,13 @@
-# Scanner Security
+# Scanner Security (v2.0)
 
-Aplikasi HTML-only (Vue 3 via CDN) untuk memeriksa keamanan proyek langsung di browser:
+Aplikasi client-side mandiri (Vue 3 lokal offline, tanpa build step) untuk memeriksa keamanan proyek, jaringan, dan otomasi langsung di browser:
+
+- **Pipa Log (Inbound & Outbound Inspector)**: Pencatat lalu lintas data HTTP, WebSocket, CDN, Inbound Hook (WA/Shopee/Sheet/Pup/Debug), dan operasi IndexedDB/localStorage secara transparan dan persisten di browser (IndexedDB `scaPipeLog`). Dilengkapi mini-widget live log 2-baris di header dan floating inspector detail.
+- **SCA & SAST Mandiri**: Software Composition Analysis (OSV.dev, EPSS, KEV, lisensi dependency) dan Static Code Analysis lokal (zero-outbound) tanpa backend.
+- **Smart Diff & Secret Masker**: Pembanding file/JSON/.env lokal berdampingan dengan auto-redact rahasia/token/kunci sensitif (14 pola deteksi).
+- **Master Hook**: 1 bookmarklet cerdas yang mendeteksi otomatis halaman target (WhatsApp Web, Shopee, Google Sheets, Swagger) atau membuka peluncur 6 alat interaktif.
+- **Reset Full & Backup**: Penghitung total volume data browser dari seluruh hook/fitur dan penghapusan menyeluruh (Factory Wipe) dengan 1 klik cadangan `.json`.
+- **100% Offline Ready**: Berjalan langsung via `file://` atau GitHub Pages dengan 0 request CDN eksternal saat dibuka, serta ekspor laporan HTML mandiri 1-file.
 
 - **SCA (Software Composition Analysis)**: tempel `package.json`, dependency dicek ke database kerentanan [OSV.dev](https://osv.dev).
 - **SAST (Static Application Security Testing)**: tempel kode JS/TS, dicek terhadap pola berbahaya (eval, new Function, setTimeout berisi string, innerHTML/outerHTML, document.write, v-html, child_process, RegExp.exec) dan secret ter-hardcode (AWS key, private key, token GitHub/Slack/Stripe/Google, password/secret). Komentar dan isi string diabaikan untuk pola eksekusi kode, tetapi tetap diperiksa untuk secret.
