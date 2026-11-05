@@ -1,5 +1,5 @@
 /* ============================================================
-   Scanner Security v2.2 — Core Inbound/Outbound & IndexedDB Full Pipe + Smart Diff/Masker
+   Scanner Security — Core Inbound/Outbound & IndexedDB Full Pipe + Smart Diff/Masker
    Mandiri, tanpa innerHTML / eval / RegExp.exec, kompatibel https:// & file://
    Seluruh log penuh (Outbound, Inbound Hook, Input & IndexedDB/LocalStorage) disimpan di IndexedDB (scaPipeLog)
    ============================================================ */

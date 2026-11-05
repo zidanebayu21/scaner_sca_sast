@@ -1,4 +1,4 @@
-# Scanner Security (v2.2)
+# Scanner Security
 
 Aplikasi client-side mandiri (Vue 3 lokal offline, tanpa build step) untuk memeriksa keamanan proyek, jaringan, dan otomasi langsung di browser:
 
