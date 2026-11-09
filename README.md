@@ -152,3 +152,7 @@ Each judge on the panel scores every entry from 1 to 10 on each criterion. The w
 | Presentation | 20% | A clear demo and write-up that show what it does and why. |
 
 **Judges:** Hendra, Hari Sabintang, Dendry Pamungkas, Tabita Dewi, Achmad Rodhi and Contest Admin. The staff vote decides People's Choice and doesn't change the score.
+
+## Folder vpn-docker (alat terpisah, di luar index.html)
+
+`vpn-docker/` berisi `run_vpn_docker.ps1` dan extension Chrome `vpn_proxy_ext`. Gunanya menjalankan VPN kantor (FortiGate SSL VPN, login password/OTP atau SAML) di dalam container Docker dan membukanya sebagai SOCKS5 `127.0.0.1:1080`. Jadi hanya Chrome (lewat extension, per profil) dan SSH/MobaXterm/PuTTY/DBeaver yang masuk jaringan kantor; PC tidak ikut ter-VPN. Profil dibaca dari backup FortiClient (`vpn_backup.conf`, jangan di-commit). Kredensial disimpan terenkripsi DPAPI di `%LOCALAPPDATA%\vpn_docker`. Panduan lengkap (setelan awal, menyalakan VPN, pasang extension, SSH lewat proxy) ada di `vpn-docker/README.md`.

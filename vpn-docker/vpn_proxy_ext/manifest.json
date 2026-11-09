@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "VPN Docker Proxy",
+  "version": "1.0",
+  "description": "Arahkan alamat internal (10.x, 172.16-31.x, 192.168.x + domain pilihan) ke SOCKS5 VPN di container Docker; sisanya langsung.",
+  "permissions": ["proxy", "storage"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "VPN Docker Proxy" }
+}

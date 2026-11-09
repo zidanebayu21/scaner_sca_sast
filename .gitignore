@@ -1,1 +1,3 @@
 zpic/
+vpn-docker/*.conf
+vpn_backup*.conf
