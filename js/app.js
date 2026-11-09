@@ -28,6 +28,7 @@ const TAB_LIST = [
   { key: 'shop', label: 'Shopee Hook' },
   { key: 'wa', label: 'WA Hook' },
   { key: 'skip', label: 'Skip Link' },
+  { key: 'vpn', label: 'VPN Docker' },
   { key: 'sheet', label: 'Sheet Viewer' },
   { key: 'img', label: 'Studio Gambar' },
   { key: 'pup', label: 'Puppeteer Record' }
@@ -118,7 +119,7 @@ createApp({
         maskIn: '',
         rules: { env: true, jwt: true, apikey: true, conn: true, pem: true, email: true, phone: true, ip: false }
       },
-      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', skip: { auto: localStorage.getItem('scaSkipAuto') !== '0', url: '', msg: '' }, dastLast: null, cj: { url: '', shown: '', op: 0.5, marks: {}, err: '' }, jsr: { res: null, msg: '', err: '', full: false, q: '', hot: false }, apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
+      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', vpn: { copied: '' }, vpnSteps: VPN_STEPS, vpnTrouble: VPN_TROUBLE, skip: { auto: localStorage.getItem('scaSkipAuto') !== '0', url: '', msg: '' }, dastLast: null, cj: { url: '', shown: '', op: 0.5, marks: {}, err: '' }, jsr: { res: null, msg: '', err: '', full: false, q: '', hot: false }, apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
       hookCopied: false, hookMsg: '',
       im: { src: {}, cur: {}, meta: null, hist: 0, tool: 'compress', busy: '', prog: 0, err: '', msg: '', over: false, fmt: 'image/webp', q: 82, outScale: 1, outSize: 0, outW: 0, outH: 0, outMeta: null, encBusy: false, avif: false, table: [], tableBusy: false, target: 500, cmp: 0, actual: false, aiGen: false,
         rs: { pct: 100, w: 0, h: 0, lock: true, alg: 'lanczos3' },
@@ -3702,6 +3703,10 @@ createApp({
         this.dastError = Lf('Pemeriksaan gagal: {x}', { x: e.message });
         if (w) w.close();
       } finally { this.dastBusy = false; }
+    },
+    vpnCopy(text, id) {
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(text).then(() => { this.vpn.copied = id; setTimeout(() => { if (this.vpn.copied === id) this.vpn.copied = ''; }, 1500); }).catch(() => { /* abaikan */ });
     },
     skipSaveAuto() { try { localStorage.setItem('scaSkipAuto', this.skip.auto ? '1' : '0'); } catch (e) { /* abaikan */ } },
     // ---- DAST: Clickjacking PoC + JS Bundle Recon

@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.7';
+    window.APP_VERSION = '2.8';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1223,6 +1223,39 @@
           </template>
         </template>
         <div class="muted mt-3 text-xs">{{ t('gl_note') }}</div>
+      </section>
+
+      <!-- VPN Docker -->
+      <section v-else-if="tab === 'vpn'">
+        <h2 class="mt-0">{{ t('vpn_title') }}</h2>
+        <p class="muted">{{ t('vpn_intro') }}</p>
+        <pre class="vpn-flow">Chrome / SSH ──► SOCKS5 127.0.0.1:1080 ──► Docker: openfortivpn (ppp0) ──► FortiGate ──► 10.x
+{{ t('vpn_flow_direct') }} ──────────────────────────────────────────────────────────► internet</pre>
+        <div class="actions">
+          <a class="btn blue" href="vpn-docker.zip" download="vpn-docker.zip">⬇ {{ t('vpn_download') }}</a>
+        </div>
+        <p class="muted">{{ t('vpn_need') }}</p>
+        <div class="dx-box" v-for="st in vpnSteps" :key="st.k">
+          <h3 class="mt-0">{{ t('vpn_s' + st.k + '_title') }}</h3>
+          <p class="muted">{{ t('vpn_s' + st.k + '_desc') }}</p>
+          <div class="vpn-cmd" v-for="(c, i) in st.cmds" :key="i">
+            <pre>{{ c }}</pre>
+            <button class="btn gray" @click="vpnCopy(c, st.k + '-' + i)">{{ vpn.copied === st.k + '-' + i ? '✓ ' + t('vpn_copied') : '📋 ' + t('vpn_copy') }}</button>
+          </div>
+          <ul class="muted list-tight">
+            <li v-for="n in st.notes" :key="n">{{ t(n) }}</li>
+          </ul>
+        </div>
+        <h3 class="mt-5">{{ t('vpn_trouble') }}</h3>
+        <div class="overflow-x">
+          <table>
+            <thead><tr><th>{{ t('vpn_th_sym') }}</th><th>{{ t('vpn_th_fix') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="n in vpnTrouble" :key="n"><td><code>{{ t('vpn_t' + n + '_a') }}</code></td><td>{{ t('vpn_t' + n + '_b') }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted c-warn">{{ t('vpn_policy') }}</p>
       </section>
 
       <!-- Skip Link -->

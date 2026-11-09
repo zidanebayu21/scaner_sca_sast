@@ -837,3 +837,8 @@ details.ping-box[open] > summary::after { transform: rotate(90deg); }
 .cj-stage { position: relative; height: 460px; border: 2px dashed #dc2626; border-radius: 6px; background: #fff; overflow: hidden; margin-top: 8px; }
 .cj-stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; z-index: 1; background: transparent; }
 .cj-bait { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 0; background: #dc2626; color: #fff; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 18px; }
+/* VPN Docker */
+.vpn-flow { font-size: 12px; overflow-x: auto; }
+.vpn-cmd { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
+.vpn-cmd pre { flex: 1; margin: 0; overflow-x: auto; white-space: pre; }
+.vpn-cmd .btn { flex-shrink: 0; }

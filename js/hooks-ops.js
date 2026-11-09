@@ -6339,3 +6339,83 @@ const SKIP_I18N = {
   }
 };
 Object.keys(SKIP_I18N).forEach(l => { I18N[l] = Object.assign({}, SKIP_I18N[l], I18N[l] || {}); });
+
+// ============================================================
+//  Tab VPN Docker: panduan + unduhan vpn-docker.zip (VPN FortiGate di container, SOCKS5 untuk Chrome/SSH)
+// ============================================================
+const VPN_STEPS = [
+  { k: 1, cmds: ['cd C:\\path\\vpn-docker', '.\\run_vpn_docker.ps1 -Setup -Config "C:\\path\\vpn_backup.conf" -ChromeEmail "nama@gmail.com" -ProxyDomains "kantor.co.id"'], notes: ['vpn_s1_n1', 'vpn_s1_n2'] },
+  { k: 2, cmds: ['.\\run_vpn_docker.ps1 -List', '.\\run_vpn_docker.ps1 -Name "Nama Profil"', '.\\run_vpn_docker.ps1 -Status', '.\\run_vpn_docker.ps1 -Stop'], notes: ['vpn_s2_n1', 'vpn_s2_n2', 'vpn_s2_n3', 'vpn_s2_n4'] },
+  { k: 3, cmds: ['.\\run_vpn_docker.ps1 -Chrome'], notes: ['vpn_s3_n1', 'vpn_s3_n2', 'vpn_s3_n3', 'vpn_s3_n4'] },
+  { k: 4, cmds: ['Host 10.*\n    ProxyCommand "C:/Program Files/Git/mingw64/bin/connect.exe" -S 127.0.0.1:1080 %h %p', "ssh -o ProxyCommand='connect -S 127.0.0.1:1080 %h %p' user@10.x.x.x", 'docker exec vpn-forti ping -c 2 10.x.x.x'], notes: ['vpn_s4_n1', 'vpn_s4_n2', 'vpn_s4_n3', 'vpn_s4_n4'] }
+];
+const VPN_TROUBLE = [1, 2, 3, 4, 5];
+const VPN_I18N = {
+  id: {
+    tab_vpn: 'VPN Docker', grp_vpn_title: 'VPN Docker', grp_vpn_desc: 'Tidak memanggil API: hanya panduan dan file unduhan untuk dijalankan di PC Anda.',
+    vpn_title: 'VPN Docker — hanya Chrome & SSH yang lewat VPN kantor',
+    vpn_intro: 'VPN kantor (FortiGate SSL VPN, login password/OTP atau SAML) dijalankan di dalam container Docker dan dibuka sebagai proxy SOCKS5 127.0.0.1:1080. PC tidak ikut ter-VPN: hanya Chrome (lewat extension, per profil) dan SSH/MobaXterm/PuTTY/DBeaver yang masuk jaringan kantor. Internet biasa tetap langsung.',
+    vpn_flow_direct: 'internet biasa', vpn_download: 'Unduh vpn-docker.zip',
+    vpn_need: 'Butuh: Windows + Docker Desktop + file backup FortiClient (vpn_backup.conf). Isi zip: run_vpn_docker.ps1, extension vpn_proxy_ext, README.md.',
+    vpn_copy: 'Salin', vpn_copied: 'Disalin',
+    vpn_s1_title: '1. Setelan awal (sekali)', vpn_s1_desc: 'Ekstrak zip, buka PowerShell di folder vpn-docker, lalu simpan lokasi backup, email profil Chrome, dan domain kantor.',
+    vpn_s1_n1: 'Backup diambil dari FortiClient → Settings → Backup. Script hanya membaca nama profil, gateway, dan jenis login. Username/password terenkripsi di backup tidak dibuka.',
+    vpn_s1_n2: 'Setelan disimpan di %LOCALAPPDATA%\\vpn_docker\\settings.json, di luar folder ini. Jangan bagikan atau commit vpn_backup.conf.',
+    vpn_s2_title: '2. Nyalakan VPN', vpn_s2_desc: 'Pilih profil dari menu atau langsung dengan -Name. Docker Desktop dinyalakan otomatis, image dibuat sekali.',
+    vpn_s2_n1: 'Login password: username, password, dan pilihan OTP ditanya sekali, disimpan terenkripsi DPAPI (hanya akun Windows ini). Kode OTP ditanya saat diminta, atau pakai -Otp 123456. Ganti akun: -Reset.',
+    vpn_s2_n2: 'Login SAML (mis. Microsoft): browser terbuka ke halaman login FortiGate, lalu kembali ke 127.0.0.1:8020 dan tunnel tersambung. Kalau sesi Microsoft masih aktif, login lewat sendiri.',
+    vpn_s2_n3: 'Sertifikat gateway baru langsung dipercaya dan diingat (-AskTrust untuk ditanya dulu). Kalau sertifikat berubah, selalu muncul peringatan.',
+    vpn_s2_n4: 'Satu VPN aktif pada satu waktu. Profil password tanpa OTP menyambung ulang sendiri; SAML/OTP dijalankan ulang kalau putus. Log: -Logs.',
+    vpn_s3_title: '3. Pasang extension di Chrome (sekali per profil)', vpn_s3_desc: 'Perintah ini membuka profil Chrome milik email di setelan. Kalau extension belum ada, yang terbuka chrome://extensions.',
+    vpn_s3_n1: 'Nyalakan Developer mode (kanan atas), klik Load unpacked, pilih folder vpn-docker\\vpn_proxy_ext.',
+    vpn_s3_n2: 'Ikon VPN Docker Proxy dengan badge hijau "VPN" = aktif. Popup: on/off, port SOCKS, "semua situs lewat VPN", daftar domain kantor.',
+    vpn_s3_n3: '10.x, 172.16–31.x, 192.168.x dan domain di daftar lewat VPN; situs lain langsung. Hanya berlaku di profil tempat extension dipasang.',
+    vpn_s3_n4: 'Kalau VPN mati, alamat internal dicoba langsung (Chrome tidak macet). Tanpa extension: -Chrome -ChromeEmail "" membuka Chrome terpisah dengan proxy.',
+    vpn_s4_title: '4. SSH lewat proxy', vpn_s4_desc: 'Arahkan klien SSH ke SOCKS5 127.0.0.1:1080. Untuk OpenSSH, cara paling aman lewat %USERPROFILE%\\.ssh\\config (baris pertama), lalu cukup ssh user@10.x.x.x.',
+    vpn_s4_n1: 'MobaXterm: Session → SSH → tab Network settings → Proxy SOCKS5, host 127.0.0.1, port 1080.',
+    vpn_s4_n2: 'PuTTY: Connection → Proxy → SOCKS 5, 127.0.0.1:1080, "Do DNS name lookup at proxy end" = Yes. WinSCP: Advanced → Connection → Proxy → SOCKS5.',
+    vpn_s4_n3: 'DBeaver / klien DB: tab Proxy (atau SSH → Proxy) → SOCKS5 127.0.0.1:1080. Baris kedua untuk Git Bash (connect.exe bawaan Git).',
+    vpn_s4_n4: 'Ping dari Windows tidak lewat proxy (SOCKS hanya TCP). Cek jaringan dengan perintah ketiga.',
+    vpn_trouble: 'Masalah yang sering muncul', vpn_th_sym: 'Gejala', vpn_th_fix: 'Penyebab / solusi',
+    vpn_t1_a: 'Couldn\'t set tty to PPP discipline', vpn_t1_b: 'Container perlu izin SYS_MODULE untuk memuat modul ppp_async. Versi script di zip sudah memakainya.',
+    vpn_t2_a: 'Browser "localhost refused to connect" setelah login SAML', vpn_t2_b: 'Port 8020 dipakai aplikasi lain atau container berhenti. Cek -Logs.',
+    vpn_t3_a: 'Login ditolak', vpn_t3_b: 'Username/password salah: jalankan -Reset. Jangan diulang terus supaya akun tidak terkunci.',
+    vpn_t4_a: 'Login sukses tapi langsung putus', vpn_t4_b: 'FortiGate mewajibkan FortiClient asli (EMS/compliance); cara ini tidak bisa untuk profil itu.',
+    vpn_t5_a: 'ports are not available', vpn_t5_b: 'Port 1080/8020 bentrok atau masuk range yang direservasi Windows. Pakai -SocksPort lain dan samakan port di extension; port 8020 dipakai FortiGate untuk SAML.',
+    vpn_policy: 'Pastikan pemakaian split seperti ini sesuai kebijakan IT kantor.'
+  },
+  en: {
+    tab_vpn: 'VPN Docker', grp_vpn_title: 'VPN Docker', grp_vpn_desc: 'Calls no API: just a guide and a download to run on your PC.',
+    vpn_title: 'VPN Docker — only Chrome & SSH go through the office VPN',
+    vpn_intro: 'The office VPN (FortiGate SSL VPN, password/OTP or SAML login) runs inside a Docker container and is exposed as a SOCKS5 proxy on 127.0.0.1:1080. The PC itself is not on the VPN: only Chrome (through an extension, per profile) and SSH/MobaXterm/PuTTY/DBeaver reach the office network. Normal internet traffic stays direct.',
+    vpn_flow_direct: 'normal internet', vpn_download: 'Download vpn-docker.zip',
+    vpn_need: 'Needs: Windows + Docker Desktop + a FortiClient backup file (vpn_backup.conf). The zip holds run_vpn_docker.ps1, the vpn_proxy_ext extension and README.md.',
+    vpn_copy: 'Copy', vpn_copied: 'Copied',
+    vpn_s1_title: '1. First-time setup', vpn_s1_desc: 'Extract the zip, open PowerShell in the vpn-docker folder, then save the backup location, the Chrome profile email and your office domains.',
+    vpn_s1_n1: 'Export the backup from FortiClient → Settings → Backup. The script only reads profile names, gateways and login types. Encrypted usernames/passwords in the backup are never opened.',
+    vpn_s1_n2: 'Settings are stored in %LOCALAPPDATA%\\vpn_docker\\settings.json, outside this folder. Never share or commit vpn_backup.conf.',
+    vpn_s2_title: '2. Start the VPN', vpn_s2_desc: 'Pick a profile from the menu or pass -Name. Docker Desktop is started automatically and the image is built once.',
+    vpn_s2_n1: 'Password login: username, password and the OTP choice are asked once and stored with DPAPI encryption (this Windows account only). OTP codes are asked when needed, or pass -Otp 123456. Switch account: -Reset.',
+    vpn_s2_n2: 'SAML login (e.g. Microsoft): the browser opens the FortiGate login page, then returns to 127.0.0.1:8020 and the tunnel comes up. If your Microsoft session is still active, it signs in by itself.',
+    vpn_s2_n3: 'A new gateway certificate is trusted and remembered automatically (-AskTrust to be asked first). A changed certificate always shows a warning.',
+    vpn_s2_n4: 'One VPN at a time. Password profiles without OTP reconnect by themselves; rerun SAML/OTP profiles when they drop. Logs: -Logs.',
+    vpn_s3_title: '3. Install the Chrome extension (once per profile)', vpn_s3_desc: 'This command opens the Chrome profile of the email in your settings. If the extension is not installed yet, it opens chrome://extensions.',
+    vpn_s3_n1: 'Turn on Developer mode (top right), click Load unpacked and pick the vpn-docker\\vpn_proxy_ext folder.',
+    vpn_s3_n2: 'The VPN Docker Proxy icon with a green "VPN" badge means active. Popup: on/off, SOCKS port, "all sites through VPN", office domain list.',
+    vpn_s3_n3: '10.x, 172.16–31.x, 192.168.x and the listed domains go through the VPN; other sites go direct. It only applies to the profile where the extension is installed.',
+    vpn_s3_n4: 'If the VPN is down, internal addresses are tried directly (Chrome does not hang). Without the extension: -Chrome -ChromeEmail "" opens a separate Chrome with the proxy set.',
+    vpn_s4_title: '4. SSH through the proxy', vpn_s4_desc: 'Point your SSH client at SOCKS5 127.0.0.1:1080. For OpenSSH the safest way is %USERPROFILE%\\.ssh\\config (first block), then just ssh user@10.x.x.x.',
+    vpn_s4_n1: 'MobaXterm: Session → SSH → Network settings tab → Proxy SOCKS5, host 127.0.0.1, port 1080.',
+    vpn_s4_n2: 'PuTTY: Connection → Proxy → SOCKS 5, 127.0.0.1:1080, "Do DNS name lookup at proxy end" = Yes. WinSCP: Advanced → Connection → Proxy → SOCKS5.',
+    vpn_s4_n3: 'DBeaver / DB clients: Proxy tab (or SSH → Proxy) → SOCKS5 127.0.0.1:1080. The second line is for Git Bash (connect.exe ships with Git).',
+    vpn_s4_n4: 'Ping from Windows does not use the proxy (SOCKS is TCP only). Check the network with the third command.',
+    vpn_trouble: 'Common problems', vpn_th_sym: 'Symptom', vpn_th_fix: 'Cause / fix',
+    vpn_t1_a: 'Couldn\'t set tty to PPP discipline', vpn_t1_b: 'The container needs SYS_MODULE to load the ppp_async module. The script in the zip already uses it.',
+    vpn_t2_a: 'Browser shows "localhost refused to connect" after the SAML login', vpn_t2_b: 'Port 8020 is used by another app or the container stopped. Check -Logs.',
+    vpn_t3_a: 'Login rejected', vpn_t3_b: 'Wrong username/password: run -Reset. Do not retry over and over or the account may get locked.',
+    vpn_t4_a: 'Login succeeds but drops right away', vpn_t4_b: 'The FortiGate requires the real FortiClient (EMS/compliance); this method cannot be used for that profile.',
+    vpn_t5_a: 'ports are not available', vpn_t5_b: 'Port 1080/8020 is taken or inside a range reserved by Windows. Use another -SocksPort and set the same port in the extension; port 8020 is fixed by the FortiGate for SAML.',
+    vpn_policy: 'Make sure this kind of split access is allowed by your office IT policy.'
+  }
+};
+Object.keys(VPN_I18N).forEach(l => { I18N[l] = Object.assign({}, VPN_I18N[l], I18N[l] || {}); });
