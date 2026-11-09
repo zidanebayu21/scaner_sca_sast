@@ -163,6 +163,7 @@ const API_GROUPS = [
   { key: 'color', title: 'Color Picker', desc: 'Tidak memakai API: gambar dan warna diproses lokal di browser.', none: true },
   { key: 'img', title: 'Studio Gambar', desc: 'Lokal di browser. Opsional: runtime + model Real-ESRGAN dari jsDelivr/Hugging Face, dan API AI pilihan Anda (OpenAI, Gemini, OpenRouter, Stability) dengan key Anda.', none: true },
   { key: 'sheet', title: 'Sheet Viewer', desc: 'Tidak memakai API: file dibaca lokal di browser (Web Worker).', none: true },
+  { key: 'skip', title: 'Skip Link', desc: 'Tidak memanggil API apa pun dari sini: bookmarklet berjalan di halaman shortlink yang Anda buka sendiri.', none: true },
   { key: 'shop', title: 'Shopee Hook', desc: 'Tidak memanggil API Shopee: data dari halaman Shopee yang Anda buka sendiri.', none: true },
   { key: 'wa', title: 'WA Hook', desc: 'Tidak memakai API: membaca pesan yang tampil saat Anda scroll di tab WhatsApp Web Anda sendiri, lalu menyimpannya di IndexedDB browser ini.', none: true },
   { key: 'git', title: 'Git Lens', desc: 'Tidak memakai API: folder .git / teks git log dibaca lokal di browser.', none: true },

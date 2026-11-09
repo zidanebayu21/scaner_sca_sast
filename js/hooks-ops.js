@@ -6107,3 +6107,235 @@ Object.assign(TEXT_EN, {
   'Source map inline di bundle produksi': 'Inline source map in production bundle', 'Source map terekspos': 'Exposed source map', 'berisi kode asli': 'with original code',
   'Matikan source map di build produksi (mis. productionSourceMap:false / devtool:false / sourcemap:false) atau blokir akses *.map dari publik.': 'Turn off source maps in production builds (e.g. productionSourceMap:false / devtool:false / sourcemap:false) or block public access to *.map.'
 });
+
+// ============================================================
+//  Skip Link: bookmarklet di halaman shortlink/safelink. Halaman dikosongkan (iklan tidak tampil,
+//  window.open dimatikan agar popunder tidak muncul), lalu langkah-langkah dijalankan lewat API
+//  milik situs itu sendiri di latar belakang. Waktu tunggu yang dihitung server tetap dijalani.
+//  Captcha aktif tidak dilewati: user diminta mengisinya sendiri.
+// ============================================================
+function skipLinkMain(cfg) {
+  var T = cfg.L || {};
+  var HOSTS = /(?:^|\.)(?:gofile\.io|drive\.google\.com|docs\.google\.com|mediafire\.com|pixeldrain\.com|mega\.nz|terabox\.com|1fichier\.com|dropbox\.com|sfile\.mobi|krakenfiles\.com|buzzheavier\.com|qiwi\.gg|send\.cm|workupload\.com|github\.com|onedrive\.live\.com|1drv\.ms)$/i;
+  if (window.__skipLink && window.__skipLink.running) return;
+  var S = window.__skipLink = { running: true };
+  var panel = document.createElement('div');
+  Object.assign(panel.style, { position: 'fixed', inset: '0', background: '#14100d', color: '#f3ece4', font: '14px/1.5 system-ui,Segoe UI,sans-serif', zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center' });
+  var box = document.createElement('div');
+  Object.assign(box.style, { width: 'min(560px, 92vw)', background: '#211914', border: '1px solid #453429', borderRadius: '12px', padding: '18px 20px', boxShadow: '0 12px 30px rgba(0,0,0,.55)' });
+  var title = document.createElement('div'); title.textContent = '⏩ Skip Link'; Object.assign(title.style, { fontWeight: '700', fontSize: '18px', marginBottom: '6px' });
+  var status = document.createElement('div'); status.style.margin = '6px 0';
+  var log = document.createElement('div'); Object.assign(log.style, { font: '12px/1.45 Consolas,monospace', color: '#b8a89a', maxHeight: '40vh', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' });
+  var out = document.createElement('div'); out.style.marginTop = '10px';
+  box.appendChild(title); box.appendChild(status); box.appendChild(out); box.appendChild(log);
+  panel.appendChild(box);
+  function say(t) { status.textContent = t; }
+  function note(t) { var d = document.createElement('div'); d.textContent = t; log.appendChild(d); log.scrollTop = log.scrollHeight; }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function mkBtn(label, fn) {
+    var b = document.createElement('button'); b.textContent = label;
+    Object.assign(b.style, { background: '#b56833', color: '#fff', border: '0', borderRadius: '6px', padding: '7px 14px', cursor: 'pointer', marginRight: '8px', fontSize: '13px' });
+    b.onclick = fn; return b;
+  }
+  // Kosongkan halaman (iklan, iframe, video) dan jaga agar tetap kosong.
+  function wipe() {
+    try { window.open = function () { return null; }; } catch (e) { /* abaikan */ }
+    document.documentElement.appendChild(panel);
+    if (document.body) Array.prototype.slice.call(document.body.children).forEach(function (c) { c.remove(); });
+    Array.prototype.slice.call(document.querySelectorAll('iframe,video,audio,embed,object')).forEach(function (e) { if (!panel.contains(e)) e.remove(); });
+    var mo = new MutationObserver(function () {
+      if (document.body) Array.prototype.slice.call(document.body.children).forEach(function (c) { c.remove(); });
+      Array.prototype.slice.call(document.querySelectorAll('iframe,video,audio,embed,object')).forEach(function (e) { if (!panel.contains(e)) e.remove(); });
+      if (panel.parentNode !== document.documentElement) document.documentElement.appendChild(panel);
+    });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+    S.mo = mo;
+  }
+  function finish(url) {
+    S.running = false;
+    var isFile = false;
+    try { isFile = HOSTS.test(new URL(url).hostname); } catch (e) { /* abaikan */ }
+    say((isFile ? (T.done || 'Done:') : (T.final || 'Last link:')) + ' ' + url);
+    out.textContent = '';
+    out.appendChild(mkBtn(T.open || 'Open', function () { location.href = url; }));
+    out.appendChild(mkBtn(T.copy || 'Copy', function () { try { navigator.clipboard.writeText(url); } catch (e) { /* abaikan */ } }));
+    if (isFile && cfg.auto) setTimeout(function () { location.href = url; }, 1200);
+  }
+  // Halaman berikutnya beda origin: harus dibuka (fetch lintas origin diblokir CORS), lalu bookmarklet diklik lagi.
+  function hop(url) {
+    S.running = false;
+    var host = '';
+    try { host = new URL(url).hostname; } catch (e) { /* abaikan */ }
+    if (HOSTS.test(host)) { finish(url); return; }
+    say((T.hop || 'Next page is on another site. After it opens, click the bookmarklet again:') + ' ' + host);
+    out.textContent = '';
+    out.appendChild(mkBtn(T.open || 'Open', function () { location.href = url; }));
+    setTimeout(function () { location.href = url; }, 1500);
+  }
+  function fail(t) { S.running = false; say('⚠ ' + t); }
+  function flowData(html) {
+    var m = html.match(/<script id="flow-data" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    try { return JSON.parse(m[1]); } catch (e) { return null; }
+  }
+  function postJson(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }).then(function (r) { return r.json(); });
+  }
+  // Keluarga SafelinkEarn: flow-data + POST act_url {action, nonce}. Server menegakkan urutan & jeda.
+  function runFlow(D, page) {
+    var nonce = D.nonce, guard = 0, origin = location.origin;
+    function step() {
+      if (++guard > 60) { fail(T.too_many || 'Too many steps.'); return; }
+      var s = D.steps[D.click - (D.offset || 0)] || D.steps[D.click];
+      if (!s) { fail((T.no_step || 'Unknown step') + ' #' + D.click); return; }
+      if (D.captcha && D.turnstile_site_key && D.click === 0) { fail(T.captcha || 'Captcha is active: solve it on the page, then click the bookmarklet again.'); return; }
+      var wait = s.gap_ms || 0;
+      var until = Date.now() + wait;
+      (function tick() {
+        var left = Math.ceil((until - Date.now()) / 1000);
+        say((T.waiting || 'Waiting for server') + (left > 0 ? ' ' + left + 's' : '') + ' · ' + (T.step || 'step') + ' ' + (D.click + (D.offset || 0) + 1) + (D.total ? '/' + D.total : '') + ' (' + s.action + ')');
+        if (left > 0) setTimeout(tick, 500);
+      })();
+      sleep(wait + 400).then(function () { return send(s.action, 0); }).then(function (j) {
+        note('#' + (D.click + 1) + ' ' + s.action + ' -> ' + JSON.stringify(j).slice(0, 160));
+        if (j.redirect) {
+          var u = new URL(j.redirect, page);
+          if (u.origin !== origin) { hop(u.href); return; }
+          return fetch(u.href, { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (html) {
+            var d2 = flowData(html);
+            if (!d2) { hop(u.href); return; }
+            D = d2; nonce = D.nonce; page = u.href; step();
+          });
+        }
+        if (j.ok) { nonce = j.nonce; D.click = j.click; var n = D.steps[D.click - (D.offset || 0)]; if (n) n.gap_ms = j.wait_ms || n.gap_ms || 0; step(); return; }
+        if (j.error === 'out_of_order') { nonce = j.nonce; D.click = j.click; var n2 = D.steps[D.click - (D.offset || 0)]; if (n2) n2.gap_ms = j.wait_ms || 0; step(); return; }
+        if (j.error === 'expired') { fail(T.expired || 'Session expired: open the link again from the start.'); return; }
+        if (j.error === 'captcha') { fail(T.captcha || 'Captcha required.'); return; }
+        if (j.error === 'adblock') { fail(T.adblock || 'The site detected an ad blocker: turn it off for this site, reload, and click the bookmarklet again.'); return; }
+        fail(JSON.stringify(j).slice(0, 200));
+      }).catch(function (e) { fail(String((e && e.message) || e)); });
+    }
+    function send(action, tries) {
+      return postJson(new URL(D.act_url, page).href, { action: action, nonce: nonce, token: null }).then(function (j) {
+        if (j.error === 'too_early' && tries < 10) return sleep((j.retry_ms || 500) + 100).then(function () { return send(action, tries + 1); });
+        return j;
+      });
+    }
+    step();
+  }
+  // Halaman akhir SafelinkEarn: /go/<id> -> POST /go/<id>/reveal -> {url}
+  function reveal(tries) {
+    say(T.revealing || 'Getting the destination link...');
+    postJson(location.pathname.replace(/\/$/, '') + '/reveal').then(function (j) {
+      if (j.url) { finish(j.url); return; }
+      if (j.error === 'too_early' && tries < 10) { sleep((j.retry_ms || 1000) + 100).then(function () { reveal(tries + 1); }); return; }
+      fail(JSON.stringify(j).slice(0, 200));
+    }).catch(function (e) { fail(String((e && e.message) || e)); });
+  }
+  // Link tujuan yang sudah ada di URL (base64 / encode) atau di halaman.
+  function fromUrl() {
+    var found = null;
+    new URLSearchParams(location.search + '&' + location.hash.replace(/^#/, '')).forEach(function (v) {
+      if (found || !v) return;
+      var c = [v];
+      try { c.push(atob(v.replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { /* bukan base64 */ }
+      try { c.push(decodeURIComponent(v)); } catch (e) { /* abaikan */ }
+      c.forEach(function (x) { if (!found && /^https?:\/\/[^\s]+$/i.test(x) && x.indexOf(location.host) < 0) found = x; });
+    });
+    return found;
+  }
+  function fromPage() {
+    var list = [];
+    Array.prototype.forEach.call(document.querySelectorAll('a[href]'), function (a) {
+      try { if (HOSTS.test(new URL(a.href).hostname) && list.indexOf(a.href) < 0) list.push(a.href); } catch (e) { /* abaikan */ }
+    });
+    return list;
+  }
+
+  // ---- pilih mode
+  var fd = document.getElementById('flow-data');
+  var D = fd ? flowData('<script id="flow-data" type="application/json">' + fd.textContent + '</script>') : null;
+  if (D && D.captcha && D.turnstile_site_key && D.click === 0) { alert(T.captcha || 'Captcha is active: solve it on the page, then click the bookmarklet again.'); S.running = false; return; }
+  var inline = Array.prototype.map.call(document.scripts, function (s) { return s.src ? '' : s.textContent; }).join('\n');
+  var urlHit = fromUrl(), pageHits = fromPage();
+  // ambil form gerbang SEBELUM halaman dikosongkan
+  var form = Array.prototype.filter.call(document.forms, function (f) { return /\/v\/go\b/.test(f.action); })[0];
+  wipe();
+  if (D) { note(T.mode_flow || 'Mode: step API (SafelinkEarn)'); runFlow(D, location.href); return; }
+  if (/^\/go\/[^/]+\/?$/.test(location.pathname) && inline.indexOf('/reveal') >= 0) { note(T.mode_reveal || 'Mode: final page'); reveal(0); return; }
+  if (form) {
+    note(T.mode_gate || 'Mode: gate page (Continue)');
+    say(T.gate || 'Passing the gate page...');
+    fetch(form.action, { method: 'POST', credentials: 'include', body: new URLSearchParams(new FormData(form)) }).then(function (r) {
+      return r.text().then(function (html) { return { url: r.url, html: html }; });
+    }).then(function (x) {
+      var d = flowData(x.html);
+      if (d) { runFlow(d, x.url); return; }
+      hop(x.url);
+    }).catch(function () {
+      // redirect lintas origin: biarkan browser yang pindah halaman
+      S.running = false; form.style.display = 'none'; document.documentElement.appendChild(form); HTMLFormElement.prototype.submit.call(form);
+    });
+    return;
+  }
+  if (urlHit) { note(T.mode_param || 'Mode: link inside the URL'); finish(urlHit); return; }
+  if (pageHits.length) { note(T.mode_page || 'Mode: download link on the page'); pageHits.slice(1).forEach(function (h) { note(h); }); finish(pageHits[0]); return; }
+  fail(T.unsupported || 'This site is not supported yet.');
+}
+// Dekode link tujuan dari URL shortlink (parameter base64/encode) - dipakai di tab, tanpa membuka situsnya.
+function skipDecodeUrl(raw) {
+  let u;
+  try { u = new URL(String(raw).trim()); } catch (e) { return []; }
+  const out = [];
+  const take = v => {
+    const c = [v];
+    try { c.push(atob(v.replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { /* bukan base64 */ }
+    try { c.push(decodeURIComponent(v)); } catch (e) { /* abaikan */ }
+    c.forEach(x => { if (/^https?:\/\/\S+$/i.test(x) && out.indexOf(x) < 0 && x.indexOf(u.host) < 0) out.push(x); });
+  };
+  new URLSearchParams(u.search).forEach(v => { if (v) take(v); });
+  if (u.hash.length > 1) new URLSearchParams(u.hash.slice(1)).forEach((v, k) => { take(v || k); });
+  u.pathname.split('/').filter(p => p.length > 12).forEach(take);
+  return out;
+}
+const SKIP_I18N = {
+  id: {
+    tab_skip: 'Skip Link', grp_skip_title: 'Skip Link', grp_skip_desc: 'Tidak memanggil API apa pun dari sini: bookmarklet berjalan di halaman shortlink yang Anda buka sendiri.',
+    skip_title: 'Skip Link — lewati halaman shortlink sampai link download',
+    skip_intro: 'Bookmarklet ini dijalankan di halaman shortlink/safelink. Halamannya langsung dikosongkan (iklan tidak tampil, popup/popunder dimatikan), lalu langkah "Click to Verify / Please Wait / Next / Get Link" dijalankan di latar belakang lewat API situs itu sendiri. Hasil akhirnya link download (Gofile, Drive, Mediafire, dll.).',
+    skip_step1: 'Seret tombol ⏩ Skip Link ke bookmark bar.',
+    skip_step2: 'Buka link shortlink seperti biasa (mis. sfe.ad/...), lalu klik bookmark itu di halaman pertama yang muncul.',
+    skip_step3: 'Tunggu ±1 menit. Kalau pindah ke situs lain (mis. safelinkearn.com/go/...), klik bookmark sekali lagi di halaman itu. Selesai: link download tampil dan dibuka otomatis.',
+    skip_auto: 'Buka link download otomatis setelah ketemu',
+    skip_support: 'Didukung: keluarga SafelinkEarn (sfe.ad, halaman "Click to Verify" + /v/act), halaman akhir /go/<id>, link tujuan yang disimpan di URL (base64/encode), dan link download yang sudah ada di halaman.',
+    skip_limits: 'Batasan: waktu tunggu yang dihitung server (±30 detik) tetap harus dijalani; captcha aktif harus diisi sendiri; situs shortlink lain mungkin belum didukung. Situs seperti ini sering membawa iklan berbahaya — jangan jalankan file .exe/.apk dari sana.',
+    skip_decode_head: 'Dekode link dari URL', skip_decode_desc: 'Banyak safelink menyimpan link tujuan di URL dalam bentuk base64. Tempel URL-nya di sini, tidak perlu membuka situsnya.',
+    skip_decode_ph: 'https://safelink.contoh/?url=aHR0cHM6Ly9nb2ZpbGUuaW8vZC94eHg=', skip_decode_none: 'Tidak ada link tujuan di URL ini. Pakai bookmarklet di halamannya.',
+    skip_bm_done: 'Selesai:', skip_bm_final: 'Link terakhir:', skip_bm_open: 'Buka', skip_bm_copy: 'Salin', skip_bm_hop: 'Halaman berikutnya ada di situs lain. Setelah terbuka, klik bookmarklet lagi:',
+    skip_bm_waiting: 'Menunggu server', skip_bm_step: 'langkah', skip_bm_too_many: 'Langkah terlalu banyak, dihentikan.', skip_bm_no_step: 'Langkah tidak dikenal',
+    skip_bm_captcha: 'Captcha aktif: isi captcha di halaman, klik Verify, lalu klik bookmarklet lagi.', skip_bm_expired: 'Sesi kedaluwarsa: buka link dari awal lagi.',
+    skip_bm_adblock: 'Situs mendeteksi ad blocker: matikan untuk situs ini, muat ulang, lalu klik bookmarklet lagi.', skip_bm_revealing: 'Mengambil link tujuan...',
+    skip_bm_gate: 'Melewati halaman gerbang...', skip_bm_unsupported: 'Situs ini belum didukung.',
+    skip_bm_mode_flow: 'Mode: API langkah (SafelinkEarn)', skip_bm_mode_reveal: 'Mode: halaman akhir', skip_bm_mode_gate: 'Mode: halaman gerbang (Continue)', skip_bm_mode_param: 'Mode: link di dalam URL', skip_bm_mode_page: 'Mode: link download di halaman'
+  },
+  en: {
+    tab_skip: 'Skip Link', grp_skip_title: 'Skip Link', grp_skip_desc: 'Calls no API from here: the bookmarklet runs on the shortlink page you open yourself.',
+    skip_title: 'Skip Link — get past shortlink pages to the download link',
+    skip_intro: 'Run this bookmarklet on a shortlink/safelink page. The page is blanked right away (no ads shown, popups/popunders disabled), then the "Click to Verify / Please Wait / Next / Get Link" steps run in the background through the site\'s own API. The result is the download link (Gofile, Drive, Mediafire, etc.).',
+    skip_step1: 'Drag the ⏩ Skip Link button to your bookmarks bar.',
+    skip_step2: 'Open the shortlink as usual (e.g. sfe.ad/...), then click the bookmark on the first page that shows up.',
+    skip_step3: 'Wait about 1 minute. If it moves to another site (e.g. safelinkearn.com/go/...), click the bookmark once more there. Done: the download link is shown and opened automatically.',
+    skip_auto: 'Open the download link automatically when found',
+    skip_support: 'Supported: the SafelinkEarn family (sfe.ad, "Click to Verify" pages + /v/act), the final /go/<id> page, destination links stored in the URL (base64/encoded), and download links already on the page.',
+    skip_limits: 'Limits: waits counted by the server (about 30 seconds) still apply; an active captcha must be solved by you; other shortlink sites may not be supported yet. These sites often carry malicious ads — never run .exe/.apk files from them.',
+    skip_decode_head: 'Decode a link from the URL', skip_decode_desc: 'Many safelinks keep the destination in the URL as base64. Paste the URL here; no need to open the site.',
+    skip_decode_ph: 'https://safelink.example/?url=aHR0cHM6Ly9nb2ZpbGUuaW8vZC94eHg=', skip_decode_none: 'No destination link in this URL. Use the bookmarklet on its page.',
+    skip_bm_done: 'Done:', skip_bm_final: 'Last link:', skip_bm_open: 'Open', skip_bm_copy: 'Copy', skip_bm_hop: 'The next page is on another site. Once it opens, click the bookmarklet again:',
+    skip_bm_waiting: 'Waiting for server', skip_bm_step: 'step', skip_bm_too_many: 'Too many steps, stopped.', skip_bm_no_step: 'Unknown step',
+    skip_bm_captcha: 'Captcha is active: solve it on the page, click Verify, then click the bookmarklet again.', skip_bm_expired: 'Session expired: open the link again from the start.',
+    skip_bm_adblock: 'The site detected an ad blocker: turn it off for this site, reload, and click the bookmarklet again.', skip_bm_revealing: 'Getting the destination link...',
+    skip_bm_gate: 'Passing the gate page...', skip_bm_unsupported: 'This site is not supported yet.',
+    skip_bm_mode_flow: 'Mode: step API (SafelinkEarn)', skip_bm_mode_reveal: 'Mode: final page', skip_bm_mode_gate: 'Mode: gate page (Continue)', skip_bm_mode_param: 'Mode: link inside the URL', skip_bm_mode_page: 'Mode: download link on the page'
+  }
+};
+Object.keys(SKIP_I18N).forEach(l => { I18N[l] = Object.assign({}, SKIP_I18N[l], I18N[l] || {}); });

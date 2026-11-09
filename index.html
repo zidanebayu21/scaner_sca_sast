@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.4';
+    window.APP_VERSION = '2.5';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1223,6 +1223,33 @@
           </template>
         </template>
         <div class="muted mt-3 text-xs">{{ t('gl_note') }}</div>
+      </section>
+
+      <!-- Skip Link -->
+      <section v-else-if="tab === 'skip'">
+        <h2 class="mt-0">{{ t('skip_title') }}</h2>
+        <p class="muted">{{ t('skip_intro') }}</p>
+        <ol class="muted list-tight p-0">
+          <li>{{ t('skip_step1') }}</li>
+          <li>{{ t('skip_step2') }}</li>
+          <li>{{ t('skip_step3') }}</li>
+        </ol>
+        <div class="actions">
+          <a class="btn blue" :href="skipBookmarklet" @click.prevent="skip.msg = t('bookmark_msg')">⏩ Skip Link</a>
+          <label><input type="checkbox" v-model="skip.auto" @change="skipSaveAuto" /> {{ t('skip_auto') }}</label>
+        </div>
+        <div class="muted c-warn mt-15" v-if="skip.msg">{{ skip.msg }}</div>
+        <p class="muted">{{ t('skip_support') }}</p>
+        <p class="muted c-warn">{{ t('skip_limits') }}</p>
+        <div class="dx-box">
+          <h3 class="mt-0">{{ t('skip_decode_head') }}</h3>
+          <p class="muted">{{ t('skip_decode_desc') }}</p>
+          <input type="text" v-model="skip.url" :placeholder="t('skip_decode_ph')" />
+          <template v-if="skipDecoded">
+            <p class="muted" v-if="!skipDecoded.length">{{ t('skip_decode_none') }}</p>
+            <div v-for="u in skipDecoded" :key="u" class="mt-15 dx-break"><a :href="u" target="_blank" rel="noopener noreferrer">{{ u }}</a></div>
+          </template>
+        </div>
       </section>
 
       <!-- Shopee Hook -->

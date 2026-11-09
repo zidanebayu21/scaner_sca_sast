@@ -27,6 +27,7 @@ const TAB_LIST = [
   { key: 'git', label: 'Git Lens' },
   { key: 'shop', label: 'Shopee Hook' },
   { key: 'wa', label: 'WA Hook' },
+  { key: 'skip', label: 'Skip Link' },
   { key: 'sheet', label: 'Sheet Viewer' },
   { key: 'img', label: 'Studio Gambar' },
   { key: 'pup', label: 'Puppeteer Record' }
@@ -117,7 +118,7 @@ createApp({
         maskIn: '',
         rules: { env: true, jwt: true, apikey: true, conn: true, pem: true, email: true, phone: true, ip: false }
       },
-      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', dastLast: null, cj: { url: '', shown: '', op: 0.5, marks: {}, err: '' }, jsr: { res: null, msg: '', err: '', full: false, q: '', hot: false }, apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
+      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', skip: { auto: localStorage.getItem('scaSkipAuto') !== '0', url: '', msg: '' }, dastLast: null, cj: { url: '', shown: '', op: 0.5, marks: {}, err: '' }, jsr: { res: null, msg: '', err: '', full: false, q: '', hot: false }, apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
       hookCopied: false, hookMsg: '',
       im: { src: {}, cur: {}, meta: null, hist: 0, tool: 'compress', busy: '', prog: 0, err: '', msg: '', over: false, fmt: 'image/webp', q: 82, outScale: 1, outSize: 0, outW: 0, outH: 0, outMeta: null, encBusy: false, avif: false, table: [], tableBusy: false, target: 500, cmp: 0, actual: false, aiGen: false,
         rs: { pct: 100, w: 0, h: 0, lock: true, alg: 'lanczos3' },
@@ -536,6 +537,12 @@ createApp({
       const txt = this.swagOut(this.swag.fmt).text;
       return txt.length > 200000 ? txt.slice(0, 200000) + '\n...' : txt;
     },
+    skipBookmarklet() {
+      const L2 = {};
+      ['done', 'final', 'open', 'copy', 'hop', 'waiting', 'step', 'too_many', 'no_step', 'captcha', 'expired', 'adblock', 'revealing', 'gate', 'unsupported', 'mode_flow', 'mode_reveal', 'mode_gate', 'mode_param', 'mode_page'].forEach(k => { L2[k] = this.t('skip_bm_' + k); });
+      return 'javascript:' + encodeURIComponent('(' + skipLinkMain.toString() + ')(' + JSON.stringify({ auto: this.skip.auto, L: L2 }) + ');');
+    },
+    skipDecoded() { return this.skip.url.trim() ? skipDecodeUrl(this.skip.url) : null; },
     jsrBookmarklet() {
       const L2 = {};
       ['collecting', 'send', 'download', 'fetching', 'files', 'maps', 'hint', 'local', 'popup', 'sent'].forEach(k => { L2[k] = this.t('jsr_bm_' + k); });
@@ -3696,6 +3703,7 @@ createApp({
         if (w) w.close();
       } finally { this.dastBusy = false; }
     },
+    skipSaveAuto() { try { localStorage.setItem('scaSkipAuto', this.skip.auto ? '1' : '0'); } catch (e) { /* abaikan */ } },
     // ---- DAST: Clickjacking PoC + JS Bundle Recon
     dastExtra() { return { cj: Object.assign({}, this.cj.marks), jsr: this.jsr.res }; },
     jsrReportOpen() {
