@@ -6356,7 +6356,14 @@ const SKIP_I18N = {
     skip_bm_captcha: 'Captcha aktif: isi captcha di halaman, klik Verify, lalu klik bookmarklet lagi.', skip_bm_expired: 'Sesi kedaluwarsa: buka link dari awal lagi.',
     skip_bm_adblock: 'Situs mendeteksi ad blocker: matikan untuk situs ini, muat ulang, lalu klik bookmarklet lagi.', skip_bm_revealing: 'Mengambil link tujuan...',
     skip_bm_gate: 'Melewati halaman gerbang...', skip_bm_unsupported: 'Situs ini belum didukung.',
-    skip_bm_mode_flow: 'Mode: API langkah (SafelinkEarn)', skip_bm_mode_reveal: 'Mode: halaman akhir', skip_bm_mode_gate: 'Mode: halaman gerbang (Continue)', skip_bm_mode_param: 'Mode: link di dalam URL', skip_bm_mode_page: 'Mode: link download di halaman'
+    skip_bm_mode_flow: 'Mode: API langkah (SafelinkEarn)', skip_bm_mode_reveal: 'Mode: halaman akhir', skip_bm_mode_gate: 'Mode: halaman gerbang (Continue)', skip_bm_mode_param: 'Mode: link di dalam URL', skip_bm_mode_page: 'Mode: link download di halaman',
+    skip_ext_head: 'Ekstensi Firefox (HP Android)', skip_ext_desc: 'Bookmarklet susah dipakai di HP. Ekstensi ini isinya sama (kode Skip Link yang sama), tapi cukup tap tombol ekstensi; di sfe.ad / safelinkearn.com berjalan sendiri tanpa tap, termasuk saat pindah situs.',
+    skip_ext_download: 'Unduh skip-link-firefox.xpi', skip_ext_source: 'Kode sumber',
+    skip_ext_s1: 'Firefox Android rilis hanya menerima ekstensi bertanda tangan Mozilla. Pakai Firefox Nightly: Pengaturan > Tentang Firefox Nightly, tap logo 5x untuk mengaktifkan menu debug; buka about:config, set xpinstall.signatures.required = false.',
+    skip_ext_s2: 'Unduh file .xpi di atas, lalu Pengaturan > Add-ons > Install extension from file, pilih skip-link-firefox.xpi.',
+    skip_ext_s3: 'Buka link shortlink. Di sfe.ad / safelinkearn.com langsung jalan sendiri; di situs lain tap menu ⋮ > Ekstensi > Skip Link.',
+    skip_ext_s4: 'Pengaturan (otomatis jalan, buka link download otomatis): Add-ons > Skip Link > Pengaturan.',
+    skip_ext_sign: 'Agar bisa dipasang di Firefox rilis biasa: unggah .xpi ke addons.mozilla.org sebagai "On your own" (unlisted), file bertanda tangan bisa diunduh dalam beberapa menit lalu dipasang dari file.'
   },
   en: {
     tab_skip: 'Skip Link', grp_skip_title: 'Skip Link', grp_skip_desc: 'Calls no API from here: the bookmarklet runs on the shortlink page you open yourself.',
@@ -6375,7 +6382,14 @@ const SKIP_I18N = {
     skip_bm_captcha: 'Captcha is active: solve it on the page, click Verify, then click the bookmarklet again.', skip_bm_expired: 'Session expired: open the link again from the start.',
     skip_bm_adblock: 'The site detected an ad blocker: turn it off for this site, reload, and click the bookmarklet again.', skip_bm_revealing: 'Getting the destination link...',
     skip_bm_gate: 'Passing the gate page...', skip_bm_unsupported: 'This site is not supported yet.',
-    skip_bm_mode_flow: 'Mode: step API (SafelinkEarn)', skip_bm_mode_reveal: 'Mode: final page', skip_bm_mode_gate: 'Mode: gate page (Continue)', skip_bm_mode_param: 'Mode: link inside the URL', skip_bm_mode_page: 'Mode: download link on the page'
+    skip_bm_mode_flow: 'Mode: step API (SafelinkEarn)', skip_bm_mode_reveal: 'Mode: final page', skip_bm_mode_gate: 'Mode: gate page (Continue)', skip_bm_mode_param: 'Mode: link inside the URL', skip_bm_mode_page: 'Mode: download link on the page',
+    skip_ext_head: 'Firefox extension (Android phone)', skip_ext_desc: 'Bookmarklets are awkward on a phone. This extension runs the same Skip Link code, but you just tap the extension button; on sfe.ad / safelinkearn.com it runs by itself without a tap, including after hopping to another site.',
+    skip_ext_download: 'Download skip-link-firefox.xpi', skip_ext_source: 'Source code',
+    skip_ext_s1: 'Release Firefox for Android only accepts extensions signed by Mozilla. Use Firefox Nightly: Settings > About Firefox Nightly, tap the logo 5 times to enable the debug menu; open about:config and set xpinstall.signatures.required = false.',
+    skip_ext_s2: 'Download the .xpi above, then Settings > Add-ons > Install extension from file and pick skip-link-firefox.xpi.',
+    skip_ext_s3: 'Open the shortlink. On sfe.ad / safelinkearn.com it starts by itself; on other sites tap menu ⋮ > Extensions > Skip Link.',
+    skip_ext_s4: 'Settings (auto-run, open the download link automatically): Add-ons > Skip Link > Settings.',
+    skip_ext_sign: 'To install on regular release Firefox: upload the .xpi to addons.mozilla.org as "On your own" (unlisted); a signed file is ready to download within minutes and installs from file.'
   }
 };
 Object.keys(SKIP_I18N).forEach(l => { I18N[l] = Object.assign({}, SKIP_I18N[l], I18N[l] || {}); });

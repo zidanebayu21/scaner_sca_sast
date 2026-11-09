@@ -1,3 +1,4 @@
 zpic/
 vpn-docker/*.conf
 vpn_backup*.conf
+.claude/settings.local.json

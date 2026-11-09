@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.11';
+    window.APP_VERSION = '2.12';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1372,6 +1372,21 @@
         <div class="muted c-warn mt-15" v-if="skip.msg">{{ skip.msg }}</div>
         <p class="muted">{{ t('skip_support') }}</p>
         <p class="muted c-warn">{{ t('skip_limits') }}</p>
+        <div class="dx-box">
+          <h3 class="mt-0">🦊 {{ t('skip_ext_head') }}</h3>
+          <p class="muted">{{ t('skip_ext_desc') }}</p>
+          <div class="actions">
+            <a class="btn blue" href="skip-link-firefox.xpi" download="skip-link-firefox.xpi">⬇ {{ t('skip_ext_download') }}</a>
+            <a href="https://github.com/zidanebayu21/scaner_sca_sast/tree/main/skip-link-firefox" target="_blank" rel="noopener noreferrer">{{ t('skip_ext_source') }}</a>
+          </div>
+          <ol class="muted list-tight p-0">
+            <li>{{ t('skip_ext_s1') }}</li>
+            <li>{{ t('skip_ext_s2') }}</li>
+            <li>{{ t('skip_ext_s3') }}</li>
+            <li>{{ t('skip_ext_s4') }}</li>
+          </ol>
+          <p class="muted c-warn">{{ t('skip_ext_sign') }}</p>
+        </div>
         <div class="dx-box">
           <h3 class="mt-0">{{ t('skip_decode_head') }}</h3>
           <p class="muted">{{ t('skip_decode_desc') }}</p>
