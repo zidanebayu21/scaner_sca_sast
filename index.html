@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.9';
+    window.APP_VERSION = '3.0';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1277,8 +1277,7 @@
             </svg>
             <figcaption>{{ t('vpn_d_caption') }}</figcaption>
           </figure>
-        </div>
-        <div class="dx-box" v-for="st in vpnSteps" :key="st.k">
+        <div class="dx-box" :class="{ 'vpn-full': st.k > 1 }" v-for="st in vpnSteps" :key="st.k">
           <h3 class="mt-0">{{ t('vpn_s' + st.k + '_title') }}</h3>
           <p class="muted">{{ t('vpn_s' + st.k + '_desc') }}</p>
           <div class="vpn-code">
@@ -1290,6 +1289,7 @@
           <ul class="muted list-tight">
             <li v-for="n in st.notes" :key="n">{{ t(n) }}</li>
           </ul>
+        </div>
         </div>
         <h3 class="mt-5">{{ t('vpn_trouble') }}</h3>
         <div class="overflow-x">
