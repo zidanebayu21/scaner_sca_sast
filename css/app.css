@@ -643,6 +643,8 @@ input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, in
 
 .ocr-prev { margin-top: 10px; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); text-align: center; }
 .ocr-prev img { max-width: 100%; display: inline-block; }
+.ocr-auto { gap: 14px; }
+.ocr-auto label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .ocr-opt { flex: 1; min-width: 200px; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; cursor: pointer; background: var(--panel-bg); }
 .ocr-opt.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 

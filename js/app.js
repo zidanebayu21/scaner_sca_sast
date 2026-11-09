@@ -149,7 +149,7 @@ createApp({
       editFields: ['project', 'name'], edit: { id: null, field: '', value: '' }, reupId: null,
       // Smart Decode: key/IV di form hanya di memori (tidak pernah ke localStorage)
       fi: { results: [], busy: false, over: false, copied: '' },
-      ocr: { engine: 'tess', lang: 'ind+eng', imgUrl: '', imgInfo: '', busy: false, progress: '', text: '', done: false, used: '', error: '', copied: false, over: false, spaceKey: '', spaceEngine: '', ai: { preset: 'openrouter', baseUrl: OCR_PRESETS[0].baseUrl, model: OCR_PRESETS[0].model, token: '', mode: 'detail', prompt: '' } },
+      ocr: { engine: 'tess', lang: 'ind+eng', auto: true, tr: { on: true, to: 'auto', text: '', src: '', dst: '', busy: false, err: '', copied: false }, imgUrl: '', imgInfo: '', busy: false, progress: '', text: '', done: false, used: '', error: '', copied: false, over: false, spaceKey: '', spaceEngine: '', ai: { preset: 'openrouter', baseUrl: OCR_PRESETS[0].baseUrl, model: OCR_PRESETS[0].model, token: '', mode: 'detail', prompt: '' } },
       ocrEngines: ['tess', 'space', 'ai'], ocrPresets: OCR_PRESETS,
       col: { imgUrl: '', imgId: '', imgName: '', imgW: 0, imgH: 0, avg: 1, over: false, msg: '', err: '', hover: null, dominant: [], cur: null, alphaPct: 100, manual: '', copied: '', coll: [], hist: [], thumbs: {}, exp: 'ai', histLimit: 50 },
       colSampleList: ['ui', 'spectrum', 'sunset'], colTw: COL_TW, colRoles: COL_ROLES,
@@ -688,6 +688,7 @@ createApp({
     imAlgs() { return ['lanczos3', 'lanczos2', 'catmull', 'mitchell', 'bilinear', 'area', 'nearest'].map(k => ({ k, label: this.t('im_a_' + k), tip: this.t('im_a_' + k + '_tip') })); },
     imModels() { return IMG_MODELS; },
     imProviders() { return IMG_AI_PROVIDERS; },
+    ocrTrLangs() { return OCR_TR_LANGS; },
     svSheet() { const c = this.sv.cur; if (!c) return null; const b = this.svBook(c.book); return b && b.sheets[c.sheet] ? Object.assign({ bookName: b.name }, b.sheets[c.sheet]) : null; },
     svCols() {
       const sh = this.svSheet; if (!sh) return [];
@@ -2667,12 +2668,15 @@ createApp({
         if (typeof p.baseUrl === 'string') this.ocr.ai.baseUrl = p.baseUrl;
         if (typeof p.model === 'string') this.ocr.ai.model = p.model;
         if (p.mode === 'text' || p.mode === 'detail') this.ocr.ai.mode = p.mode;
+        if (typeof p.auto === 'boolean') this.ocr.auto = p.auto;
+        if (typeof p.trOn === 'boolean') this.ocr.tr.on = p.trOn;
+        if (OCR_TR_LANGS.includes(p.trTo)) this.ocr.tr.to = p.trTo;
       } catch (e) { /* abaikan */ }
     },
     // Token & API key sengaja tidak ikut disimpan.
     ocrSavePrefs() {
       const a = this.ocr.ai;
-      try { localStorage.setItem(OCR_PREFS_KEY, JSON.stringify({ engine: this.ocr.engine, lang: this.ocr.lang, preset: a.preset, baseUrl: a.baseUrl, model: a.model, mode: a.mode })); } catch (e) { /* abaikan */ }
+      try { localStorage.setItem(OCR_PREFS_KEY, JSON.stringify({ engine: this.ocr.engine, lang: this.ocr.lang, preset: a.preset, baseUrl: a.baseUrl, model: a.model, mode: a.mode, auto: this.ocr.auto, trOn: this.ocr.tr.on, trTo: this.ocr.tr.to })); } catch (e) { /* abaikan */ }
     },
     ocrPreset() {
       const p = OCR_PRESETS.find(x => x.key === this.ocr.ai.preset);
@@ -2688,11 +2692,33 @@ createApp({
       this.ocr.imgUrl = URL.createObjectURL(blob);
       this.ocr.imgInfo = (name || 'clipboard') + ' · ' + pupFmtBytes(blob.size) + ' · ' + blob.type;
       this.ocr.text = ''; this.ocr.done = false; this.ocr.progress = '';
+      this.ocrTrReset();
+      // Langsung ambil teks (dan terjemahkan) begitu gambar masuk, tanpa klik lagi.
+      if (this.ocr.auto) this.$nextTick(() => this.runOcr());
+    },
+    ocrTrReset() { Object.assign(this.ocr.tr, { text: '', src: '', dst: '', err: '', busy: false }); },
+    // Terjemahan teks hasil OCR. 'auto' = ke bahasa UI; bila teks sudah berbahasa itu, dibalik (ID <-> EN).
+    async ocrTranslate() {
+      const o = this.ocr, t = o.tr, text = (o.text || '').trim();
+      if (!text || t.busy) return;
+      t.busy = true; t.err = ''; t.text = '';
+      const ui = LANG === 'en' ? 'en' : 'id';
+      let to = t.to === 'auto' ? ui : t.to;
+      try {
+        let r = await ocrTranslateText(text, to);
+        if (t.to === 'auto' && r.src === to) { to = to === 'id' ? 'en' : 'id'; r = await ocrTranslateText(text, to); }
+        t.text = r.text; t.src = r.src; t.dst = to;
+      } catch (e) { t.err = tr('ocr_tr_fail') + ' (' + ((e && e.message) || e) + ')'; } finally { t.busy = false; }
+    },
+    ocrTrCopy() {
+      const p = navigator.clipboard ? navigator.clipboard.writeText(this.ocr.tr.text) : Promise.reject(new Error('clipboard'));
+      p.then(() => { this.ocr.tr.copied = true; setTimeout(() => { this.ocr.tr.copied = false; }, 1500); }).catch(() => { /* abaikan */ });
     },
     ocrClear() {
       if (this.ocr.imgUrl) URL.revokeObjectURL(this.ocr.imgUrl);
       this.ocrBlob = null;
       Object.assign(this.ocr, { imgUrl: '', imgInfo: '', text: '', done: false, error: '', progress: '' });
+      this.ocrTrReset();
     },
     onOcrPick(e) { const f = e.target.files && e.target.files[0]; if (f) this.ocrSetImage(f, f.name); e.target.value = ''; },
     onOcrDrop(e) {
@@ -2729,6 +2755,7 @@ createApp({
       if (!this.ocrBlob || this.ocr.busy) return;
       const o = this.ocr;
       o.busy = true; o.error = ''; o.text = ''; o.done = false; o.progress = ''; o.used = '';
+      this.ocrTrReset();
       const t0 = performance.now();
       try {
         if (o.engine === 'tess') o.text = await this.ocrTesseract();
@@ -2740,6 +2767,7 @@ createApp({
       } catch (e) {
         o.error = (e && e.message) || String(e); o.progress = '';
       } finally { o.busy = false; }
+      if (o.done && o.text && o.tr.on) this.ocrTranslate();
     },
     async ocrTesseract() {
       const s = apiStats.tess;

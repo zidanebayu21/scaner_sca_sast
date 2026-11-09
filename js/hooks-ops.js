@@ -1597,6 +1597,9 @@ const OCR_I18N = {
     ocr_ai_note: 'Endpoint dipanggil langsung dari browser: POST {Base URL}/chat/completions. Provider harus mengizinkan CORS (OpenRouter, OpenAI, Gemini bisa; Ollama perlu OLLAMA_ORIGINS=*). Token tidak pernah disimpan.',
     ocr_ai_prompt: 'Prompt (opsional, kosong = bawaan)',
     ocr_run: 'Ambil teks', ocr_result: 'Hasil', ocr_empty: 'Tidak ada teks yang terbaca.', ocr_copy: 'Copy',
+    ocr_auto: 'Langsung ambil teks saat gambar di-paste/drop', ocr_tr_on: 'Terjemahkan otomatis ke', ocr_tr_auto: 'Otomatis (Indonesia ↔ English)',
+    ocr_tr_title: 'Terjemahan', ocr_tr_run: 'Terjemahkan', ocr_tr_busy: 'Menerjemahkan…', ocr_tr_fail: 'Gagal menerjemahkan', ocr_tr_note: 'Teks dikirim ke Google Translate (cadangan MyMemory). Matikan centang untuk teks rahasia.',
+    ocr_tr_l_id: 'Indonesia', ocr_tr_l_en: 'English', ocr_tr_l_ja: 'Jepang', 'ocr_tr_l_zh-CN': 'Mandarin', ocr_tr_l_ko: 'Korea', ocr_tr_l_ar: 'Arab',
     ocr_e_noimg: 'Clipboard tidak berisi gambar.', ocr_e_clip: 'Browser menolak baca clipboard. Pakai Ctrl+V langsung di tab ini.',
     ocr_e_type: 'File bukan gambar.', ocr_e_big: 'Gambar terlalu besar (maks 20 MB).', ocr_e_cfg: 'Isi Base URL, Model, dan Token dulu.',
     ocr_e_url: 'Base URL harus http(s)://', ocr_e_tess: 'Gagal memuat Tesseract.js dari CDN (cek koneksi).',
@@ -1621,6 +1624,9 @@ const OCR_I18N = {
     ocr_ai_note: 'The endpoint is called straight from the browser: POST {Base URL}/chat/completions. The provider must allow CORS (OpenRouter, OpenAI, Gemini do; Ollama needs OLLAMA_ORIGINS=*). The token is never stored.',
     ocr_ai_prompt: 'Prompt (optional, empty = default)',
     ocr_run: 'Extract text', ocr_result: 'Result', ocr_empty: 'No text found.', ocr_copy: 'Copy',
+    ocr_auto: 'Extract text as soon as an image is pasted/dropped', ocr_tr_on: 'Auto-translate to', ocr_tr_auto: 'Auto (Indonesian ↔ English)',
+    ocr_tr_title: 'Translation', ocr_tr_run: 'Translate', ocr_tr_busy: 'Translating…', ocr_tr_fail: 'Translation failed', ocr_tr_note: 'Text is sent to Google Translate (MyMemory as fallback). Untick for confidential text.',
+    ocr_tr_l_id: 'Indonesian', ocr_tr_l_en: 'English', ocr_tr_l_ja: 'Japanese', 'ocr_tr_l_zh-CN': 'Chinese', ocr_tr_l_ko: 'Korean', ocr_tr_l_ar: 'Arabic',
     ocr_e_noimg: 'Clipboard does not contain an image.', ocr_e_clip: 'Browser denied clipboard access. Press Ctrl+V directly on this tab.',
     ocr_e_type: 'Selected file is not an image.', ocr_e_big: 'Image too large (max 20 MB).', ocr_e_cfg: 'Fill in Base URL, Model, and Token first.',
     ocr_e_url: 'Base URL must start with http(s)://', ocr_e_tess: 'Could not load Tesseract.js from the CDN (check your connection).',
@@ -1657,6 +1663,40 @@ function blobToDataUrl(blob) {
   });
 }
 // Perkecil gambar (sisi terpanjang <= maxSide, lalu turunkan kualitas JPEG) sampai <= maxBytes.
+// Terjemahan teks OCR: Google Translate (endpoint gtx publik), cadangan MyMemory. Teks dipotong per baris supaya URL tidak kepanjangan.
+const OCR_TR_LANGS = ['auto', 'id', 'en', 'ja', 'zh-CN', 'ko', 'ar'];
+function ocrTrChunks(text, max) {
+  const out = []; let cur = '';
+  text.split('\n').forEach(line => {
+    while (line.length > max) { if (cur) { out.push(cur); cur = ''; } out.push(line.slice(0, max)); line = line.slice(max); }
+    if (cur.length + line.length + 1 > max) { out.push(cur); cur = ''; }
+    cur += (cur ? '\n' : '') + line;
+  });
+  if (cur) out.push(cur);
+  return out;
+}
+async function ocrTranslateText(text, to) {
+  try {
+    let src = '', res = '';
+    for (const part of ocrTrChunks(text, 1800)) {
+      const r = await apiFetch('gtx', 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=' + encodeURIComponent(to) + '&dt=t&q=' + encodeURIComponent(part));
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      res += (res ? '\n' : '') + (d[0] || []).map(x => x[0] || '').join('');
+      if (!src && typeof d[2] === 'string') src = d[2];
+    }
+    return { text: res, src };
+  } catch (e) {
+    let res = '';
+    for (const part of ocrTrChunks(text, 450)) {
+      const r = await apiFetch('mymemory', 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(part) + '&langpair=' + encodeURIComponent('Autodetect|' + to));
+      const d = await r.json().catch(() => null);
+      if (!r.ok || !d || !d.responseData) throw new Error((e && e.message) || 'translate');
+      res += (res ? '\n' : '') + (d.responseData.translatedText || '');
+    }
+    return { text: res, src: '' };
+  }
+}
 async function ocrShrink(blob, maxBytes, maxSide) {
   if (blob.size <= maxBytes && !maxSide) return blob;
   const bmp = await createImageBitmap(blob);

@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '3.0';
+    window.APP_VERSION = '3.1';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -2150,6 +2150,11 @@
           <button class="btn gray" v-if="ocr.imgUrl" @click="ocrClear">{{ t('ocr_clear') }}</button>
           <span class="muted" v-if="ocr.imgInfo">{{ ocr.imgInfo }}</span>
         </div>
+        <div class="row ocr-auto">
+          <label><input type="checkbox" v-model="ocr.auto" @change="ocrSavePrefs" /> ⚡ {{ t('ocr_auto') }}</label>
+          <label><input type="checkbox" v-model="ocr.tr.on" @change="ocrSavePrefs" /> 🌐 {{ t('ocr_tr_on') }}</label>
+          <select v-model="ocr.tr.to" @change="ocrSavePrefs(); if (ocr.text) ocrTranslate()"><option v-for="l in ocrTrLangs" :key="l" :value="l">{{ l === 'auto' ? t('ocr_tr_auto') : t('ocr_tr_l_' + l) }}</option></select>
+        </div>
         <div v-if="ocr.imgUrl" class="ocr-prev"><img :src="ocr.imgUrl" :alt="t('ocr_preview')" /></div>
 
         <h3>{{ t('ocr_mode') }}</h3>
@@ -2199,6 +2204,17 @@
             <button class="btn gray" @click="ocrDownload">⬇ .txt</button>
             <button class="btn gray" @click="ocrSendTo('decode')">→ {{ t('tab_decode') }}</button>
             <button class="btn gray" @click="ocrSendTo('sast')">→ {{ t('tab_sast') }}</button>
+            <button class="btn gray" v-if="!ocr.tr.on && !ocr.tr.text" :disabled="ocr.tr.busy" @click="ocrTranslate">🌐 {{ t('ocr_tr_run') }}</button>
+          </div>
+          <div v-if="ocr.text && (ocr.tr.busy || ocr.tr.text || ocr.tr.err)">
+            <h3>🌐 {{ t('ocr_tr_title') }} <span class="muted" style="font-weight:normal" v-if="ocr.tr.dst">— {{ (ocr.tr.src || '?').toUpperCase() }} → {{ ocr.tr.dst.toUpperCase() }}</span></h3>
+            <div class="muted" v-if="ocr.tr.busy">⏳ {{ t('ocr_tr_busy') }}</div>
+            <div class="bad" v-if="ocr.tr.err">{{ ocr.tr.err }}</div>
+            <textarea v-if="ocr.tr.text" v-model="ocr.tr.text" spellcheck="false" style="min-height:180px"></textarea>
+            <div class="actions" v-if="ocr.tr.text">
+              <button class="btn gray" @click="ocrTrCopy">{{ ocr.tr.copied ? t('copied') : t('ocr_copy') }}</button>
+              <span class="muted">{{ t('ocr_tr_note') }}</span>
+            </div>
           </div>
         </div>
       </section>
