@@ -5691,3 +5691,419 @@ Object.assign(TEXT_EN, {
   'Buka halaman web.whatsapp.com terlebih dahulu.': 'Open web.whatsapp.com first.'
 });
 
+// ============================================================
+//  DAST tambahan: Clickjacking PoC + JS Bundle Recon
+// ============================================================
+// Status perlindungan framing dari header respons (hasil HackerTarget di dastCheck).
+// frame-ancestors (CSP) mengalahkan X-Frame-Options di browser modern; ALLOW-FROM sudah diabaikan browser.
+function cjVerdict(headers) {
+  if (!headers || !headers.hdr) return { state: 'unknown', detail: '' };
+  const H = headers.hdr;
+  const xfo = String(H['x-frame-options'] || '').trim();
+  let fa = null;
+  String(H['content-security-policy'] || '').split(';').forEach(d => {
+    const t = d.trim().split(/\s+/);
+    if (t[0] && t[0].toLowerCase() === 'frame-ancestors') fa = t.slice(1).join(' ');
+  });
+  const parts = [];
+  if (xfo) parts.push('X-Frame-Options: ' + xfo);
+  if (fa !== null) parts.push('frame-ancestors ' + fa);
+  const detail = parts.join(' · ');
+  if (fa !== null) {
+    const weak = fa.split(/\s+/).some(s => s === '*' || s === 'https:' || s === 'http:' || s === 'data:');
+    return { state: weak ? 'weak' : 'safe', detail };
+  }
+  const x = xfo.toLowerCase();
+  if (x === 'deny' || x === 'sameorigin') return { state: 'safe', detail };
+  if (x) return { state: 'weak', detail };
+  return { state: 'vuln', detail };
+}
+// Halaman PoC mandiri (file .html) untuk lampiran laporan pentest: target di iframe transparan di atas tombol umpan.
+function cjPocHtml(url, L2) {
+  const u = esc(url);
+  return '<!DOCTYPE html>\n<html><head><meta charset="UTF-8"><title>Clickjacking PoC - ' + u + '</title>\n<style>\n' +
+    'body{font-family:system-ui,sans-serif;margin:20px;background:#f8fafc;color:#0f172a}\n' +
+    '.stage{position:relative;width:100%;max-width:1000px;height:600px;border:2px dashed #dc2626;background:#fff}\n' +
+    '.bait{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:0;background:#dc2626;color:#fff;padding:14px 28px;border-radius:8px;font-size:18px;font-weight:700}\n' +
+    'iframe{position:absolute;inset:0;width:100%;height:100%;border:0;z-index:1;opacity:.5}\n' +
+    '</style></head><body>\n<h2>Clickjacking PoC</h2>\n<p>Target: <code>' + u + '</code></p>\n<p>' + esc(L2.howto) + '</p>\n' +
+    '<label>Opacity <input id="op" type="range" min="0" max="1" step="0.05" value="0.5"></label>\n' +
+    '<div class="stage"><div class="bait">' + esc(L2.bait) + '</div><iframe id="f" src="' + u + '"></iframe></div>\n' +
+    '<script>document.getElementById("op").addEventListener("input",function(e){document.getElementById("f").style.opacity=e.target.value;});<\/script>\n' +
+    '</body></html>\n';
+}
+const CJ_STATE_SEV = { vuln: 'MEDIUM', weak: 'LOW', safe: '', unknown: '' };
+// Bagian laporan "Clickjacking PoC": verdict header + konfirmasi visual + PoC hidup (iframe) + kode PoC.
+function cjReportHtml(results, marks) {
+  const byUrl = {};
+  results.forEach(r => { if (r.url) byUrl[r.url] = r; });
+  const urls = Object.keys(byUrl).concat(Object.keys(marks || {}).filter(u => !byUrl[u]));
+  if (!urls.length) return '';
+  let h = '<h2>' + tr('cj_rep_h') + '</h2><p class="cap">' + tr('cj_rep_note') + '</p>';
+  h += '<table><thead><tr>' + ['rep_th_no', 'cj_th_url', 'cj_th_header', 'cj_th_visual', 'rep_th_suggestion'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
+  urls.forEach((u, i) => {
+    const r = byUrl[u], v = cjVerdict(r && r.headers), m = (marks || {})[u] || '';
+    const sev = m === 'shown' ? 'MEDIUM' : CJ_STATE_SEV[v.state];
+    const hv = tr('cj_state_' + v.state) + (v.detail ? ' (' + esc(v.detail) + ')' : '');
+    const vis = m ? tr('cj_vis_' + m) : tr('cj_vis_none');
+    const fix = sev ? L("Tambahkan CSP frame-ancestors 'none' (atau 'self') dan X-Frame-Options: DENY untuk browser lama.") : '-';
+    h += '<tr><td>' + (i + 1) + '</td><td class="mono">' + esc(u) + '</td><td>' + (sev ? badge(sev) + ' ' : '') + hv + '</td><td>' + vis + '</td><td>' + esc(fix) + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  urls.forEach(u => {
+    const poc = cjPocHtml(u, { howto: tr('cj_poc_howto'), bait: tr('cj_bait') });
+    h += '<details style="margin-top:10px"><summary>' + tr('cj_rep_live') + ' <span class="mono">' + esc(u) + '</span></summary>' +
+      '<div style="position:relative;height:420px;border:2px dashed #dc2626;margin:8px 0;background:#fff">' +
+      '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;font-weight:700">' + esc(tr('cj_bait')) + '</div>' +
+      '<iframe loading="lazy" src="' + esc(u) + '" sandbox="allow-scripts allow-forms allow-same-origin" style="position:absolute;inset:0;width:100%;height:100%;border:0;opacity:.5"></iframe></div>' +
+      '<div class="cap">' + tr('cj_rep_code') + '</div><pre>' + esc(poc) + '</pre></details>';
+  });
+  return h;
+}
+
+// ---- JS Bundle Recon: bookmarklet di tab target (ES5, mandiri, aman untuk CSP halaman).
+// Mengambil file JS yang dimuat halaman (origin & site yang sama), source map (komentar sourceMappingURL,
+// header SourceMap, atau tebakan <file>.map), lalu mengirim teksnya ke tab scanner untuk dianalisis.
+function jsrHookMain(cfg) {
+  var T = cfg.L || {};
+  if (window.__jsrHook && window.__jsrHook.panel) { try { window.__jsrHook.panel.remove(); } catch (e) { /* abaikan */ } }
+  var S = window.__jsrHook = { w: null, ack: false, data: null, panel: null };
+  var target = cfg.origin && cfg.origin !== 'null' ? cfg.origin : '*';
+  var MAX_FILES = 80, MAX_BYTES = 4000000;
+  var panel = document.createElement('div');
+  S.panel = panel;
+  Object.assign(panel.style, { position: 'fixed', right: '12px', bottom: '12px', width: '340px', background: '#1c1612', color: '#f3ece4', font: '12px/1.45 Consolas,monospace', border: '1px solid #453429', borderRadius: '10px', boxShadow: '0 12px 30px rgba(0,0,0,.55)', zIndex: 2147483647, padding: '10px' });
+  var title = document.createElement('b'); title.textContent = 'JS Bundle Recon';
+  var info = document.createElement('div'); info.style.margin = '6px 0'; info.textContent = T.collecting || 'Collecting JS files...';
+  var bar = document.createElement('div'); bar.style.display = 'flex'; bar.style.gap = '6px'; bar.style.flexWrap = 'wrap';
+  function mkBtn(label, fn) {
+    var b = document.createElement('button'); b.textContent = label;
+    Object.assign(b.style, { background: '#2c211b', color: '#f3ece4', border: '1px solid #453429', borderRadius: '5px', padding: '3px 8px', cursor: 'pointer', fontSize: '11px' });
+    b.onclick = fn; return b;
+  }
+  var sendBtn = mkBtn(T.send || 'Send to scanner', function () { openApp(); send(); });
+  var dlBtn = mkBtn(T.download || 'Download JSON', function () {
+    if (!S.data) return;
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(S.data)], { type: 'application/json' }));
+    a.download = 'js-recon-' + location.hostname + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  var closeBtn = mkBtn('×', function () { panel.remove(); });
+  bar.appendChild(sendBtn); bar.appendChild(dlBtn); bar.appendChild(closeBtn);
+  panel.appendChild(title); panel.appendChild(info); panel.appendChild(bar);
+  document.body.appendChild(panel);
+
+  function site(h) { var p = String(h).split('.'); return p.length > 2 ? p.slice(-2).join('.') : h; }
+  var mySite = site(location.hostname);
+  function urls() {
+    var seen = {}, out = [], skipped = [];
+    function add(u) {
+      try { u = new URL(u, location.href).href.split('#')[0]; } catch (e) { return; }
+      if (!/^https?:/i.test(u) || seen[u]) return;
+      seen[u] = 1;
+      var h = new URL(u).hostname;
+      if (site(h) === mySite) out.push(u); else skipped.push(u);
+    }
+    Array.prototype.forEach.call(document.scripts, function (s) { if (s.src) add(s.src); });
+    try { performance.getEntriesByType('resource').forEach(function (r) { if (r.initiatorType === 'script' || /\.m?js(\?|$)/i.test(r.name)) add(r.name); }); } catch (e) { /* abaikan */ }
+    return { list: out.slice(0, MAX_FILES), skipped: skipped.slice(0, 200), more: Math.max(0, out.length - MAX_FILES) };
+  }
+  function getText(u) {
+    return fetch(u, { credentials: 'same-origin' }).then(function (r) {
+      return r.text().then(function (t) { return { status: r.status, text: t, sm: r.headers.get('sourcemap') || r.headers.get('x-sourcemap') || '', ct: r.headers.get('content-type') || '' }; });
+    }).catch(function (e) { return { status: 0, text: '', err: String((e && e.message) || e) }; });
+  }
+  function cut(t) { return t.length > MAX_BYTES ? t.slice(0, MAX_BYTES) : t; }
+  function readMap(txt) {
+    var j = null;
+    try { j = JSON.parse(txt); } catch (e) { return null; }
+    if (!j || typeof j !== 'object' || (!j.mappings && !j.sections) || !Array.isArray(j.sources || [])) return null;
+    var src = j.sources || [], sc = j.sourcesContent || [], parts = [], n = 0;
+    for (var i = 0; i < src.length; i++) {
+      if (typeof sc[i] === 'string') { n++; parts.push('/* ==== ' + src[i] + ' ==== */\n' + sc[i]); }
+    }
+    return { sources: src.slice(0, 400).map(String), nSources: src.length, withContent: n, content: cut(parts.join('\n')) };
+  }
+  function mapFor(f, u) {
+    var ref = f.sm, m = f.text.slice(-4000).match(/[#@]\s*sourceMappingURL\s*=\s*(\S+)\s*(?:\*\/)?\s*$/);
+    if (!ref && m) ref = m[1];
+    if (ref && ref.indexOf('data:') === 0) {
+      var b = ref.indexOf('base64,'), txt = '';
+      try { txt = b >= 0 ? atob(ref.slice(b + 7)) : decodeURIComponent(ref.slice(ref.indexOf(',') + 1)); } catch (e) { txt = ''; }
+      var inl = readMap(txt);
+      return Promise.resolve({ url: '(inline data:)', inline: true, status: 200, exposed: !!inl, guessed: false, info: inl });
+    }
+    var mu, guessed = !ref;
+    try { mu = new URL(ref || (u.split('?')[0] + '.map'), u).href; } catch (e) { return Promise.resolve(null); }
+    return getText(mu).then(function (r) {
+      var inf = r.status === 200 ? readMap(r.text) : null;
+      return { url: mu, inline: false, status: r.status, exposed: !!inf, guessed: guessed, info: inf, err: r.err || '' };
+    });
+  }
+  function run() {
+    var u = urls(), files = [], i = 0;
+    var inline = [];
+    Array.prototype.forEach.call(document.scripts, function (s) { if (!s.src && s.textContent) inline.push(s.textContent); });
+    if (inline.length) files.push({ url: location.href.split('#')[0] + ' (inline <script> x' + inline.length + ')', status: 200, size: inline.join('\n').length, text: cut(inline.join('\n;\n')), inline: true, map: null });
+    function next() {
+      if (i >= u.list.length) return Promise.resolve();
+      var batch = u.list.slice(i, i + 6); i += 6;
+      info.textContent = (T.fetching || 'Fetching') + ' ' + Math.min(i, u.list.length) + '/' + u.list.length + '...';
+      return Promise.all(batch.map(function (url) {
+        return getText(url).then(function (f) {
+          var rec = { url: url, status: f.status, size: f.text.length, text: cut(f.text), err: f.err || '', map: null };
+          files.push(rec);
+          if (f.status !== 200 || !f.text) return null;
+          return mapFor(f, url).then(function (m) { rec.map = m; });
+        });
+      })).then(next);
+    }
+    return next().then(function () {
+      S.data = { kind: 'js-recon', page: location.href, origin: location.origin, at: Date.now(), files: files, skipped: u.skipped, more: u.more };
+      var maps = files.filter(function (f) { return f.map && f.map.exposed; }).length;
+      info.textContent = files.length + ' ' + (T.files || 'JS files') + ', ' + maps + ' ' + (T.maps || 'source maps exposed') + '. ' + (S.ack ? '' : (T.hint || ''));
+      send();
+    });
+  }
+  var pings = 0;
+  function openApp() {
+    if (S.w && !S.w.closed) return;
+    if (!cfg.app) { info.textContent = T.local || 'Scanner is a local file: use Download JSON, then Import.'; return; }
+    try { S.w = window.open(cfg.app.split('#')[0] + '#jsr-hook', 'scaJsRecon'); } catch (e) { S.w = null; }
+    if (!S.w) { info.textContent = T.popup || 'Popup blocked: allow popups, then click Send.'; return; }
+    S.ack = false; pings = 0;
+    (function p() {
+      if (S.ack || !S.w || S.w.closed || ++pings > 40) return;
+      try { S.w.postMessage({ type: 'jsr-hello' }, target); } catch (e) { /* belum siap */ }
+      setTimeout(p, 400);
+    })();
+  }
+  function send() {
+    if (!S.data || !S.w || S.w.closed || !S.ack) return;
+    try { S.w.postMessage({ type: 'jsr-data', data: S.data }, target); info.textContent = T.sent || 'Sent to the scanner tab.'; } catch (e) { info.textContent = 'Error: ' + e.message; }
+  }
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.source !== S.w || (target !== '*' && e.origin !== target)) return;
+    if (e.data.type === 'jsr-ack') { if (!S.ack) { S.ack = true; send(); } }
+  });
+  openApp();
+  run();
+}
+
+// ---- Analisis JS Recon (di tab scanner). Semua regex dipakai lewat matchAll (bukan exec).
+const JSR_SECRET_RULES = [
+  { re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----/g, sev: 'HIGH', rule: 'Private key di file JS', fix: 'Keluarkan private key dari bundle, ganti (rotate) kuncinya, simpan hanya di server.' },
+  { re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, sev: 'HIGH', rule: 'AWS access key di file JS', fix: 'Cabut key ini di AWS IAM; akses AWS dari frontend lewat backend atau kredensial sementara (Cognito/STS).' },
+  { re: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\w{40,})/g, sev: 'HIGH', rule: 'GitHub token di file JS', fix: 'Cabut token di GitHub, pindahkan pemanggilan ke backend.' },
+  { re: /\bxox[abposr]-[A-Za-z0-9-]{10,}|https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/g, sev: 'HIGH', rule: 'Slack token/webhook di file JS', fix: 'Cabut token/webhook di Slack dan kirim notifikasi dari backend.' },
+  { re: /\b(?:sk|rk)_live_[0-9A-Za-z]{16,}/g, sev: 'HIGH', rule: 'Stripe secret key di file JS', fix: 'Cabut key di dashboard Stripe; frontend hanya boleh memakai publishable key (pk_).' },
+  { re: /\bhttps?:\/\/[^\s:@/"'`]+:[^\s:@/"'`]+@[^\s"'`/]+/g, sev: 'HIGH', rule: 'Username:password di URL', fix: 'Hapus kredensial dari URL, ganti password-nya, pakai autentikasi di backend.' },
+  { re: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, sev: 'MEDIUM', rule: 'JWT ter-hardcode di file JS', fix: 'Cek isinya di tab JWT; bila token aktif, cabut dan jangan simpan token di bundle.' },
+  { re: /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/g, sev: 'MEDIUM', rule: 'Bearer token ter-hardcode', fix: 'Ambil token saat login (runtime), bukan ditulis di kode.' },
+  { re: /\bAIza[0-9A-Za-z_-]{35}\b/g, sev: 'LOW', rule: 'Google API key di file JS', fix: 'Key Google di frontend memang publik: batasi per HTTP referrer dan per API di Google Cloud Console.' },
+  { re: /\b(?:api[_-]?key|apikey|secret|client[_-]?secret|access[_-]?token|auth[_-]?token|password|passwd)\b["']?\s*[:=]\s*["'`]([^"'`\s]{8,200})["'`]/gi, sev: 'MEDIUM', rule: 'Secret/password ter-hardcode', fix: 'Jangan taruh secret di frontend; pindahkan ke backend atau secret manager lalu ganti nilainya.', group: 1 }
+];
+const JSR_INTERNAL_RULES = [
+  { re: /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?::\d{2,5})?\b/g, sev: 'LOW', rule: 'IP internal di file JS', fix: 'Hapus alamat internal dari bundle produksi (pakai konfigurasi per environment).' },
+  { re: /\bhttps?:\/\/(?:localhost|127\.0\.0\.1|[a-z0-9.-]+\.(?:local|internal|intranet|corp|lan)|(?:[a-z0-9-]+\.)*[a-z0-9-]*(?:dev|staging|stg|uat|sit|qa|internal)[a-z0-9-]*\.[a-z0-9.-]+)(?::\d+)?(?:\/[^\s"'`<>\\]*)?/gi, sev: 'LOW', rule: 'URL dev/staging/internal di file JS', fix: 'Pastikan build produksi tidak membawa URL environment lain; cek apakah host itu terbuka ke publik.' }
+];
+const JSR_NOISE_HOST = /(?:^|\.)(?:w3\.org|reactjs\.org|react\.dev|fb\.me|vuejs\.org|angular\.io|mozilla\.org|schema\.org|json-schema\.org|example\.com|jquery\.com|lodash\.com|momentjs\.com|feross\.org|npmjs\.org|nodejs\.org|tc39\.es|whatwg\.org|ecma-international\.org)$/i;
+const JSR_STATIC = /\.(?:png|jpe?g|gif|svg|webp|avif|ico|bmp|css|scss|less|woff2?|ttf|eot|otf|mp4|mp3|webm|wav|ogg|pdf)(?:[?#]|$)/i;
+const JSR_HOT = /admin|internal|debug|test|upload|token|auth|login|logout|register|user|account|config|setting|graphql|swagger|openapi|actuator|backup|export|import|password|secret|private|key|payment|report/i;
+const JSR_EP_RE = /["'`]((?:https?:)?\/\/[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/[^"'`\s<>\\]*)?|\/(?!\/)[A-Za-z0-9_.~%$@!+,;=-]+(?:\/[A-Za-z0-9_.~%$@!+,;={}:-]*)*(?:\?[^"'`\s<>\\]*)?|(?:api|rest|graphql|v\d+)\/[A-Za-z0-9_.~%/{}:-]*(?:\?[^"'`\s<>\\]*)?)["'`]/g;
+function jsrMask(v) { v = String(v); return v.length <= 10 ? v.slice(0, 2) + '***' : v.slice(0, 4) + '…' + v.slice(-4); }
+function jsrSecretOk(v) {
+  if (/\$\{|^\s*$|^(?:true|false|null|undefined)$/i.test(v)) return false;
+  if (/^(.)\1+$/.test(v) || /^[A-Z_]+$/.test(v)) return false;
+  if (/^(?:AIza|AKIA|ASIA|sk_live_|rk_live_|eyJ|gh[pousr]_|github_pat_|xox)/.test(v)) return false;
+  return /\d/.test(v) && /[A-Za-z]/.test(v);
+}
+function jsrScanText(text, file, add, eps) {
+  if (!text) return;
+  JSR_SECRET_RULES.concat(JSR_INTERNAL_RULES).forEach(r => {
+    let n = 0;
+    for (const m of text.matchAll(r.re)) {
+      const v = r.group ? m[r.group] : m[0];
+      if (r.group && !jsrSecretOk(v)) continue;
+      if (r.rule.indexOf('IP internal') === 0 && v.split(':')[0].split('.').some(o => +o > 255)) continue;
+      add({ sev: r.sev, kind: r.rule.indexOf('IP internal') === 0 || r.rule.indexOf('URL dev') === 0 ? 'internal' : 'secret', rule: r.rule, value: v.slice(0, 300), file, fix: r.fix });
+      if (++n > 200) break;
+    }
+  });
+  let n = 0;
+  for (const m of text.matchAll(JSR_EP_RE)) {
+    let p = m[1];
+    if (p.length < 3 || p.length > 300 || JSR_STATIC.test(p) || /\s/.test(p)) continue;
+    if (/^(?:https?:)?\/\//i.test(p)) {
+      let h = '';
+      try { h = new URL(p, 'https://x.invalid/').hostname; } catch (e) { continue; }
+      if (JSR_NOISE_HOST.test(h)) continue;
+    } else if (/^\/[a-z]{1,3}$/i.test(p) || /^\/[-+*=.]+$/.test(p)) continue;
+    eps(p, file);
+    if (++n > 3000) break;
+  }
+}
+// data = {page, origin, at, files:[{url,status,size,text,err,inline,map:{url,status,exposed,guessed,inline,info:{sources,nSources,withContent,content}}}], skipped, more}
+function jsrAnalyze(data) {
+  const findings = [], fKey = {}, epMap = {};
+  const add = f => {
+    const k = f.rule + '\u0001' + f.value;
+    if (fKey[k]) { if (fKey[k].files.indexOf(f.file) < 0 && fKey[k].files.length < 5) fKey[k].files.push(f.file); return; }
+    f.files = [f.file]; fKey[k] = f; findings.push(f);
+  };
+  const eps = (p, file) => {
+    const e = epMap[p] || (epMap[p] = { path: p, files: [], hot: JSR_HOT.test(p), abs: /^(?:https?:)?\/\//i.test(p) });
+    if (e.files.indexOf(file) < 0 && e.files.length < 5) e.files.push(file);
+  };
+  const files = (data.files || []).map(f => {
+    jsrScanText(f.text || '', f.url, add, eps);
+    const m = f.map;
+    if (m && m.exposed) {
+      add({ sev: m.inline ? 'LOW' : 'MEDIUM', kind: 'map', rule: m.inline ? 'Source map inline di bundle produksi' : 'Source map terekspos', value: (m.inline ? f.url : m.url) + ' (' + m.info.nSources + ' source, ' + m.info.withContent + ' ' + L('berisi kode asli') + ')', file: f.url, fix: 'Matikan source map di build produksi (mis. productionSourceMap:false / devtool:false / sourcemap:false) atau blokir akses *.map dari publik.' });
+      jsrScanText(m.info.content || '', m.inline ? f.url + ' (map)' : m.url, add, eps);
+    }
+    return { url: f.url, status: f.status, size: f.size || 0, err: f.err || '', inline: !!f.inline, map: m ? { url: m.url, status: m.status, exposed: !!m.exposed, guessed: !!m.guessed, inline: !!m.inline, nSources: m.info ? m.info.nSources : 0, withContent: m.info ? m.info.withContent : 0, sources: m.info ? m.info.sources.slice(0, 400) : [] } : null };
+  });
+  findings.forEach(f => { f.rule = L(f.rule); f.fix = L(f.fix); });
+  findings.sort((a, b) => SEV_ORDER[b.sev] - SEV_ORDER[a.sev]);
+  const endpoints = Object.keys(epMap).map(k => epMap[k]).sort((a, b) => (b.hot - a.hot) || a.path.localeCompare(b.path));
+  return { page: data.page || '', origin: data.origin || '', at: data.at || Date.now(), files, skipped: data.skipped || [], more: data.more || 0, findings, endpoints };
+}
+// Bersihkan data kiriman bookmarklet/import (asal bisa origin mana pun): batasi jumlah & tipe.
+function jsrClean(d) {
+  if (!d || typeof d !== 'object' || !Array.isArray(d.files)) return null;
+  const s = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const files = d.files.slice(0, 200).map(f => {
+    if (!f || typeof f !== 'object') return null;
+    const m = f.map && typeof f.map === 'object' ? f.map : null;
+    const inf = m && m.info && typeof m.info === 'object' ? m.info : null;
+    return {
+      url: s(f.url, 2000), status: +f.status || 0, size: +f.size || 0, text: s(f.text, 6000000), err: s(f.err, 300), inline: !!f.inline,
+      map: m ? { url: s(m.url, 2000), status: +m.status || 0, exposed: !!(m.exposed && inf), guessed: !!m.guessed, inline: !!m.inline,
+        info: inf ? { sources: (Array.isArray(inf.sources) ? inf.sources : []).slice(0, 400).map(x => s(x, 500)), nSources: +inf.nSources || 0, withContent: +inf.withContent || 0, content: s(inf.content, 6000000) } : null } : null
+    };
+  }).filter(Boolean);
+  return { page: s(d.page, 2000), origin: s(d.origin, 300), at: +d.at || Date.now(), files, skipped: (Array.isArray(d.skipped) ? d.skipped : []).slice(0, 200).map(x => s(x, 2000)), more: +d.more || 0 };
+}
+// OpenAPI minimal dari endpoint relatif (untuk tab Swag): GET per path, query dibuang, ${...} jadi {param}.
+function jsrOpenApi(res) {
+  const paths = {};
+  let base = res.origin || '';
+  res.endpoints.forEach(e => {
+    let p = e.path;
+    if (e.abs) {
+      try { const u = new URL(p, base || 'https://x.invalid/'); if (u.origin !== base) return; p = u.pathname; } catch (err) { return; }
+    }
+    p = p.split('?')[0].replace(/\$\{[^}]*\}/g, '{param}');
+    if (p[0] !== '/') p = '/' + p;
+    if (p.length < 2 || paths[p]) return;
+    const params = [];
+    for (const m of p.matchAll(/\{([^}/]+)\}/g)) params.push({ name: m[1], in: 'path', required: true, schema: { type: 'string' } });
+    paths[p] = { get: { summary: e.files[0] || '', tags: [e.hot ? 'js-recon-hot' : 'js-recon'], parameters: params, responses: { 200: { description: 'OK' } } } };
+  });
+  return { openapi: '3.0.0', info: { title: 'JS Recon ' + (base || res.page), version: '1' }, servers: base ? [{ url: base }] : [], paths };
+}
+// Bagian laporan DAST "JS Bundle Recon".
+function jsrReportHtml(res) {
+  if (!res) return '';
+  const c = { HIGH: 0, MEDIUM: 0, LOW: 0 };
+  res.findings.forEach(f => { c[f.sev] = (c[f.sev] || 0) + 1; });
+  const maps = res.files.filter(f => f.map && f.map.exposed).length;
+  let h = '<h2>' + tr('jsr_rep_h') + '</h2><p class="cap">' + tr('jsr_rep_page') + ' <span class="mono">' + esc(res.page) + '</span> · ' + esc(new Date(res.at).toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID')) + '</p>';
+  h += '<div class="cards"><div class="card"><b>' + res.files.length + '</b><span>' + tr('jsr_c_files') + '</span></div><div class="card ' + (maps ? 'm' : '') + '"><b>' + maps + '</b><span>' + tr('jsr_c_maps') + '</span></div>' +
+    '<div class="card h"><b>' + c.HIGH + '</b><span>' + sevL('HIGH') + '</span></div><div class="card m"><b>' + c.MEDIUM + '</b><span>' + sevL('MEDIUM') + '</span></div><div class="card l"><b>' + c.LOW + '</b><span>' + sevL('LOW') + '</span></div>' +
+    '<div class="card"><b>' + res.endpoints.length + '</b><span>' + tr('jsr_c_eps') + '</span></div></div>';
+  h += '<h3>' + tr('jsr_rep_find') + '</h3>';
+  if (!res.findings.length) h += '<p class="cap">' + tr('jsr_none') + '</p>';
+  else {
+    h += '<p class="cap">' + tr('jsr_rep_mask') + '</p><table><thead><tr>' + ['rep_th_no', 'rep_th_sev', 'rep_th_finding', 'jsr_th_value', 'jsr_th_file', 'rep_th_suggestion'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
+    res.findings.forEach((f, i) => { h += '<tr><td>' + (i + 1) + '</td><td>' + badge(f.sev) + '</td><td>' + esc(f.rule) + '</td><td class="mono">' + esc(f.kind === 'secret' ? jsrMask(f.value) : f.value) + '</td><td class="mono">' + f.files.map(esc).join('<br>') + '</td><td>' + esc(f.fix) + '</td></tr>'; });
+    h += '</tbody></table>';
+  }
+  h += '<h3>' + tr('jsr_rep_files') + '</h3><table><thead><tr>' + ['rep_th_no', 'jsr_th_file', 'jsr_th_status', 'jsr_th_size', 'jsr_th_map'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
+  res.files.forEach((f, i) => {
+    const m = f.map;
+    const ms = !m ? '-' : m.exposed ? '⚠ ' + esc(m.url) + ' (' + m.nSources + ' source)' : esc(tr('jsr_map_no')) + ' (HTTP ' + m.status + (m.guessed ? ', ' + tr('jsr_map_guess') : '') + ')';
+    h += '<tr><td>' + (i + 1) + '</td><td class="mono">' + esc(f.url) + '</td><td>' + (f.status || esc(f.err || 'ERR')) + '</td><td>' + Math.round(f.size / 1024) + ' KB</td><td class="mono">' + ms + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  if (res.skipped.length) h += '<details><summary>' + tr('jsr_rep_skipped') + ' (' + res.skipped.length + ')</summary><pre>' + esc(res.skipped.join('\n')) + '</pre></details>';
+  const sm = res.files.filter(f => f.map && f.map.exposed && f.map.sources.length);
+  if (sm.length) h += '<details><summary>' + tr('jsr_rep_sources') + '</summary><pre>' + esc(sm.map(f => '# ' + f.map.url + '\n' + f.map.sources.join('\n')).join('\n\n')) + '</pre></details>';
+  if (res.endpoints.length) {
+    h += '<h3>' + tr('jsr_rep_eps') + ' (' + res.endpoints.length + ')</h3><table><thead><tr>' + ['rep_th_no', 'jsr_th_ep', 'jsr_th_hot', 'jsr_th_file'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>';
+    res.endpoints.slice(0, 1500).forEach((e, i) => { h += '<tr><td>' + (i + 1) + '</td><td class="mono">' + esc(e.path) + '</td><td>' + (e.hot ? '★' : '') + '</td><td class="mono">' + e.files.map(esc).join('<br>') + '</td></tr>'; });
+    h += '</tbody></table>';
+  }
+  return h;
+}
+const JSR_I18N = {
+  id: {
+    cj_head: '🎯 Clickjacking PoC', cj_desc: 'Muat URL di iframe dengan tombol umpan di bawahnya. Kalau halaman tampil, berarti bisa di-frame (X-Frame-Options / frame-ancestors bolong). Tandai hasilnya supaya masuk laporan, atau unduh file PoC untuk lampiran pentest.',
+    cj_url_ph: 'https://situs-target.go.id/login', cj_load: 'Muat di iframe', cj_dl: '⬇ Unduh PoC HTML', cj_bait: 'KLAIM HADIAH', cj_opacity: 'Opacity iframe',
+    cj_ask: 'Halaman target tampil di iframe?', cj_mark_shown: 'Tampil (rentan)', cj_mark_blocked: 'Kosong / diblokir', cj_marked: 'Tercatat:',
+    cj_mixed: 'Target http dari halaman https akan diblokir browser (mixed content), jadi hasilnya kosong walau situsnya rentan. Buka scanner lewat file lokal atau http://localhost untuk target http.',
+    cj_bad_url: 'URL tidak valid (harus http/https).',
+    cj_rep_h: 'Clickjacking PoC', cj_rep_note: 'Header dibaca dari hasil cek header di atas; kolom visual diisi dari tanda yang dipilih di tab DAST. Buka "PoC hidup" untuk melihat target di iframe transparan di atas tombol umpan.',
+    cj_th_url: 'URL', cj_th_header: 'Dari header', cj_th_visual: 'Uji iframe (visual)', cj_rep_live: 'PoC hidup:', cj_rep_code: 'Kode PoC (simpan sebagai .html):',
+    cj_state_vuln: 'Tanpa perlindungan', cj_state_weak: 'Perlindungan lemah', cj_state_safe: 'Terlindungi', cj_state_unknown: 'Header tidak terbaca',
+    cj_vis_shown: '⚠ Tampil di iframe (rentan)', cj_vis_blocked: '✓ Diblokir', cj_vis_none: 'Belum diuji',
+    cj_poc_howto: 'Geser opacity ke 0: target jadi tak terlihat tapi tetap menerima klik di atas tombol umpan. Kalau target tampil di sini, situs bisa di-clickjacking.',
+    jsr_head: '🧩 JS Bundle Recon', jsr_desc: 'Bookmarklet ini dijalankan di tab situs target. Isinya: ambil semua file JS dari situs yang sama (plus source map), lalu kirim ke sini. Scanner mencari API key/secret, IP & URL internal, daftar endpoint API, dan file .map yang terekspos.',
+    jsr_bm: '🧩 JS Recon', jsr_import: 'Import JSON / file .js / .map', jsr_report: '📄 Buat laporan DAST (+ temuan ini)',
+    jsr_got: 'Diterima dari {p}: {n} file JS.', jsr_bad: 'File/JSON tidak dikenali.', jsr_show_full: 'Tampilkan nilai penuh',
+    jsr_c_files: 'file JS', jsr_c_maps: 'source map terekspos', jsr_c_eps: 'endpoint', jsr_none: 'Tidak ada secret/URL internal yang terdeteksi.',
+    jsr_th_value: 'Nilai', jsr_th_file: 'File', jsr_th_status: 'HTTP', jsr_th_size: 'Ukuran', jsr_th_map: 'Source map', jsr_th_ep: 'Endpoint', jsr_th_hot: 'Menarik',
+    jsr_map_no: 'tidak ada', jsr_map_guess: 'tebakan .map', jsr_ep_filter: 'Filter endpoint...', jsr_only_hot: 'Hanya yang menarik (★)',
+    jsr_copy_eps: '📋 Salin endpoint', jsr_to_swag: '➡ Kirim ke Swag', jsr_copied: 'Disalin.', jsr_clear: '🗑 Hapus hasil',
+    jsr_rep_h: 'JS Bundle Recon', jsr_rep_page: 'Halaman:', jsr_rep_find: 'Secret & alamat internal', jsr_rep_mask: 'Nilai secret disamarkan di laporan.',
+    jsr_rep_files: 'File JS yang diperiksa', jsr_rep_skipped: 'Script pihak ketiga (tidak diambil)', jsr_rep_sources: 'Daftar file asli dari source map', jsr_rep_eps: 'Endpoint dari kode JS',
+    jsr_steps: 'Cara pakai: seret tombol ke bookmark bar → buka situs target (login dulu bila perlu) → klik bookmark → tab scanner terbuka dan hasil masuk otomatis. Kalau tab tidak terbuka (scanner dari file lokal / popup diblokir), pakai Unduh JSON di panel lalu Import di sini.',
+    jsr_bm_collecting: 'Mengumpulkan file JS...', jsr_bm_send: 'Kirim ke scanner', jsr_bm_download: 'Unduh JSON', jsr_bm_fetching: 'Mengambil', jsr_bm_files: 'file JS', jsr_bm_maps: 'source map terekspos',
+    jsr_bm_hint: 'Menunggu tab scanner...', jsr_bm_local: 'Scanner dibuka dari file lokal: pakai Unduh JSON lalu Import di tab DAST.', jsr_bm_popup: 'Popup diblokir: izinkan popup, lalu klik Kirim ke scanner.', jsr_bm_sent: 'Terkirim ke tab scanner.'
+  },
+  en: {
+    cj_head: '🎯 Clickjacking PoC', cj_desc: 'Loads the URL in an iframe with a bait button underneath. If the page shows up, it can be framed (X-Frame-Options / frame-ancestors missing). Mark the result so it lands in the report, or download the PoC file for your pentest evidence.',
+    cj_url_ph: 'https://target-site.example.com/login', cj_load: 'Load in iframe', cj_dl: '⬇ Download PoC HTML', cj_bait: 'CLAIM PRIZE', cj_opacity: 'Iframe opacity',
+    cj_ask: 'Does the target page show up in the iframe?', cj_mark_shown: 'Shows (vulnerable)', cj_mark_blocked: 'Empty / blocked', cj_marked: 'Recorded:',
+    cj_mixed: 'An http target from an https page is blocked by the browser (mixed content), so it stays empty even if the site is vulnerable. Open the scanner from a local file or http://localhost for http targets.',
+    cj_bad_url: 'Invalid URL (must be http/https).',
+    cj_rep_h: 'Clickjacking PoC', cj_rep_note: 'Headers come from the header check above; the visual column comes from the mark chosen in the DAST tab. Open "Live PoC" to see the target in a transparent iframe over the bait button.',
+    cj_th_url: 'URL', cj_th_header: 'From headers', cj_th_visual: 'Iframe test (visual)', cj_rep_live: 'Live PoC:', cj_rep_code: 'PoC code (save as .html):',
+    cj_state_vuln: 'No protection', cj_state_weak: 'Weak protection', cj_state_safe: 'Protected', cj_state_unknown: 'Headers not available',
+    cj_vis_shown: '⚠ Shows in iframe (vulnerable)', cj_vis_blocked: '✓ Blocked', cj_vis_none: 'Not tested',
+    cj_poc_howto: 'Slide opacity to 0: the target becomes invisible but still receives the click on top of the bait button. If the target shows here, the site can be clickjacked.',
+    jsr_head: '🧩 JS Bundle Recon', jsr_desc: 'Run this bookmarklet on the target site tab. It grabs every JS file from the same site (plus source maps) and sends them here. The scanner looks for API keys/secrets, internal IPs & URLs, API endpoints and exposed .map files.',
+    jsr_bm: '🧩 JS Recon', jsr_import: 'Import JSON / .js / .map files', jsr_report: '📄 Build DAST report (+ these findings)',
+    jsr_got: 'Received from {p}: {n} JS files.', jsr_bad: 'File/JSON not recognized.', jsr_show_full: 'Show full values',
+    jsr_c_files: 'JS files', jsr_c_maps: 'exposed source maps', jsr_c_eps: 'endpoints', jsr_none: 'No secrets/internal URLs detected.',
+    jsr_th_value: 'Value', jsr_th_file: 'File', jsr_th_status: 'HTTP', jsr_th_size: 'Size', jsr_th_map: 'Source map', jsr_th_ep: 'Endpoint', jsr_th_hot: 'Interesting',
+    jsr_map_no: 'none', jsr_map_guess: 'guessed .map', jsr_ep_filter: 'Filter endpoints...', jsr_only_hot: 'Interesting only (★)',
+    jsr_copy_eps: '📋 Copy endpoints', jsr_to_swag: '➡ Send to Swag', jsr_copied: 'Copied.', jsr_clear: '🗑 Clear results',
+    jsr_rep_h: 'JS Bundle Recon', jsr_rep_page: 'Page:', jsr_rep_find: 'Secrets & internal addresses', jsr_rep_mask: 'Secret values are masked in the report.',
+    jsr_rep_files: 'JS files checked', jsr_rep_skipped: 'Third-party scripts (not fetched)', jsr_rep_sources: 'Original files listed in source maps', jsr_rep_eps: 'Endpoints from JS code',
+    jsr_steps: 'How to use: drag the button to the bookmarks bar → open the target site (log in first if needed) → click the bookmark → the scanner tab opens and results arrive automatically. If no tab opens (scanner from a local file / popup blocked), use Download JSON in the panel and Import it here.',
+    jsr_bm_collecting: 'Collecting JS files...', jsr_bm_send: 'Send to scanner', jsr_bm_download: 'Download JSON', jsr_bm_fetching: 'Fetching', jsr_bm_files: 'JS files', jsr_bm_maps: 'exposed source maps',
+    jsr_bm_hint: 'Waiting for the scanner tab...', jsr_bm_local: 'Scanner opened from a local file: use Download JSON, then Import in the DAST tab.', jsr_bm_popup: 'Popup blocked: allow popups, then click Send to scanner.', jsr_bm_sent: 'Sent to the scanner tab.'
+  }
+};
+Object.keys(JSR_I18N).forEach(l => { I18N[l] = Object.assign({}, JSR_I18N[l], I18N[l] || {}); });
+// Padanan Inggris untuk teks aturan/saran yang lewat L().
+Object.assign(TEXT_EN, {
+  "Tambahkan CSP frame-ancestors 'none' (atau 'self') dan X-Frame-Options: DENY untuk browser lama.": "Add CSP frame-ancestors 'none' (or 'self') plus X-Frame-Options: DENY for older browsers.",
+  'Private key di file JS': 'Private key in JS file', 'Keluarkan private key dari bundle, ganti (rotate) kuncinya, simpan hanya di server.': 'Remove the private key from the bundle, rotate it, keep it on the server only.',
+  'AWS access key di file JS': 'AWS access key in JS file', 'Cabut key ini di AWS IAM; akses AWS dari frontend lewat backend atau kredensial sementara (Cognito/STS).': 'Revoke this key in AWS IAM; reach AWS from the frontend through a backend or temporary credentials (Cognito/STS).',
+  'GitHub token di file JS': 'GitHub token in JS file', 'Cabut token di GitHub, pindahkan pemanggilan ke backend.': 'Revoke the token on GitHub and move the call to the backend.',
+  'Slack token/webhook di file JS': 'Slack token/webhook in JS file', 'Cabut token/webhook di Slack dan kirim notifikasi dari backend.': 'Revoke the token/webhook in Slack and send notifications from the backend.',
+  'Stripe secret key di file JS': 'Stripe secret key in JS file', 'Cabut key di dashboard Stripe; frontend hanya boleh memakai publishable key (pk_).': 'Revoke the key in the Stripe dashboard; the frontend may only use the publishable key (pk_).',
+  'Username:password di URL': 'Username:password in URL', 'Hapus kredensial dari URL, ganti password-nya, pakai autentikasi di backend.': 'Remove the credentials from the URL, change the password, authenticate on the backend.',
+  'JWT ter-hardcode di file JS': 'Hardcoded JWT in JS file', 'Cek isinya di tab JWT; bila token aktif, cabut dan jangan simpan token di bundle.': 'Inspect it in the JWT tab; if the token is live, revoke it and never ship tokens in the bundle.',
+  'Bearer token ter-hardcode': 'Hardcoded Bearer token', 'Ambil token saat login (runtime), bukan ditulis di kode.': 'Obtain the token at login (runtime) instead of writing it in code.',
+  'Google API key di file JS': 'Google API key in JS file', 'Key Google di frontend memang publik: batasi per HTTP referrer dan per API di Google Cloud Console.': 'Google keys in a frontend are public by design: restrict them by HTTP referrer and API in Google Cloud Console.',
+  'Secret/password ter-hardcode': 'Hardcoded secret/password', 'Jangan taruh secret di frontend; pindahkan ke backend atau secret manager lalu ganti nilainya.': 'Never put secrets in the frontend; move them to the backend or a secret manager and rotate the value.',
+  'IP internal di file JS': 'Internal IP in JS file', 'Hapus alamat internal dari bundle produksi (pakai konfigurasi per environment).': 'Remove internal addresses from the production bundle (use per-environment config).',
+  'URL dev/staging/internal di file JS': 'Dev/staging/internal URL in JS file', 'Pastikan build produksi tidak membawa URL environment lain; cek apakah host itu terbuka ke publik.': "Make sure the production build does not carry other environments' URLs; check whether that host is publicly reachable.",
+  'Source map inline di bundle produksi': 'Inline source map in production bundle', 'Source map terekspos': 'Exposed source map', 'berisi kode asli': 'with original code',
+  'Matikan source map di build produksi (mis. productionSourceMap:false / devtool:false / sourcemap:false) atau blokir akses *.map dari publik.': 'Turn off source maps in production builds (e.g. productionSourceMap:false / devtool:false / sourcemap:false) or block public access to *.map.'
+});

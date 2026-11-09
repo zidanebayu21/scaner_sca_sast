@@ -1887,7 +1887,8 @@ function dastNetHtml(r) {
   }
   return h;
 }
-function buildDastReport(results) {
+function buildDastReport(results, extra) {
+  extra = extra || {};
   const now = new Date().toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID');
   const srcNet = results.some(r => r.net) ? ', Google DoH, Shodan InternetDB' : '';
   let body = '<h1>' + tr('drep_h1') + '</h1><div class="sub">' + tr('rep_created') + ' ' + esc(now) + ' · ' + results.length + ' URL · ' + tr('rep_source') + ': MDN HTTP Observatory, HackerTarget httpheaders' + srcNet + '</div>';
@@ -1921,6 +1922,8 @@ function buildDastReport(results) {
     } else body += '<div class="note">' + tr('drep_header_fail') + esc(r.hdrErr) + '</div>';
     body += dastNetHtml(r);
   });
+  body += cjReportHtml(results, extra.cj || {});
+  body += jsrReportHtml(extra.jsr);
   const used = API_LIST.filter(a => a.group === 'dast' && apiStats[a.key].calls);
   body += '<h2>' + tr('rep_api_title') + '</h2><table><thead><tr>' + ['rep_th_api', 'rep_th_endpoint', 'rep_th_datasent', 'rep_th_calls'].map(k => '<th>' + tr(k) + '</th>').join('') + '</tr></thead><tbody>' +
     used.map(a => '<tr><td>' + esc(a.name) + '</td><td class="mono">' + esc(a.url) + '</td><td>' + esc(trData('api_' + a.key + '_sends', a.sends)) + '</td><td>' + apiStats[a.key].calls + '× (' + apiStats[a.key].ok + ' ok' + (apiStats[a.key].fail ? ', ' + apiStats[a.key].fail + ' ' + tr('failed').toLowerCase() : '') + ')</td></tr>').join('') + '</tbody></table>';

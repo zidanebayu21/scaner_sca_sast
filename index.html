@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.3';
+    window.APP_VERSION = '2.4';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -473,6 +473,100 @@
         </div>
         <div class="log" v-if="dastLogs.length"><div v-for="(l, i) in dastLogs" :key="i">{{ l }}</div></div>
         <p class="muted" v-html="t('dast_note')"></p>
+        <div class="dx-box">
+          <h3 class="mt-0">{{ t('cj_head') }}</h3>
+          <p class="muted">{{ t('cj_desc') }}</p>
+          <div class="row">
+            <input type="text" v-model="cj.url" :placeholder="cjTarget || t('cj_url_ph')" @keyup.enter="cjLoad" />
+            <button class="btn" :disabled="!cjTarget" @click="cjLoad">{{ t('cj_load') }}</button>
+            <button class="btn gray" :disabled="!cjTarget" @click="cjDownload">{{ t('cj_dl') }}</button>
+          </div>
+          <div class="bad" v-if="cj.err">{{ cj.err }}</div>
+          <template v-if="cj.shown">
+            <div class="muted c-warn" v-if="cjMixed">{{ t('cj_mixed') }}</div>
+            <div class="cj-stage">
+              <div class="cj-bait">{{ t('cj_bait') }}</div>
+              <iframe :key="cj.shown" :src="cj.shown" sandbox="allow-scripts allow-forms allow-same-origin" referrerpolicy="no-referrer" :style="{ opacity: cj.op }" title="clickjacking"></iframe>
+            </div>
+            <div class="actions">
+              <label>{{ t('cj_opacity') }} <input type="range" min="0" max="1" step="0.05" v-model.number="cj.op" /> {{ cj.op }}</label>
+            </div>
+            <div class="actions">
+              <span>{{ t('cj_ask') }}</span>
+              <button class="btn danger" @click="cjMark('shown')">{{ t('cj_mark_shown') }}</button>
+              <button class="btn gray" @click="cjMark('blocked')">{{ t('cj_mark_blocked') }}</button>
+            </div>
+          </template>
+          <div class="muted dx-small" v-if="Object.keys(cj.marks).length">{{ t('cj_marked') }} <span v-for="(m, u) in cj.marks" :key="u"><code>{{ u }}</code> = {{ t('cj_vis_' + m) }}; </span></div>
+        </div>
+
+        <div class="dx-box">
+          <h3 class="mt-0">{{ t('jsr_head') }}</h3>
+          <p class="muted">{{ t('jsr_desc') }}</p>
+          <p class="muted dx-small">{{ t('jsr_steps') }}</p>
+          <div class="actions">
+            <a class="btn blue" :href="jsrBookmarklet" @click.prevent="jsr.msg = t('bookmark_msg')">{{ t('jsr_bm') }}</a>
+            <label class="btn gray pointer">📥 {{ t('jsr_import') }}<input type="file" multiple accept=".json,.js,.mjs,.cjs,.map,.txt" class="hidden" @change="jsrPick" /></label>
+            <button class="btn" :disabled="!jsr.res && !dastLast && !Object.keys(cj.marks).length" @click="jsrReportOpen">{{ t('jsr_report') }}</button>
+            <button class="btn gray" v-if="jsr.res" @click="jsr.res = null">{{ t('jsr_clear') }}</button>
+          </div>
+          <div class="muted c-warn" v-if="jsr.msg">{{ jsr.msg }}</div>
+          <div class="bad" v-if="jsr.err">{{ jsr.err }}</div>
+          <template v-if="jsr.res">
+            <div class="muted dx-small">{{ jsr.res.page }} · {{ jsr.res.files.length }} {{ t('jsr_c_files') }} · {{ jsrMaps }} {{ t('jsr_c_maps') }} · {{ jsr.res.findings.length }} {{ t('jsr_rep_find') }} · {{ jsr.res.endpoints.length }} {{ t('jsr_c_eps') }}</div>
+            <h4>{{ t('jsr_rep_find') }}</h4>
+            <label v-if="jsr.res.findings.length"><input type="checkbox" v-model="jsr.full" /> {{ t('jsr_show_full') }}</label>
+            <div class="overflow-x" v-if="jsr.res.findings.length">
+              <table>
+                <thead><tr><th>{{ t('th_sev') }}</th><th>{{ t('th_rule') }}</th><th>{{ t('jsr_th_value') }}</th><th>{{ t('jsr_th_file') }}</th><th>{{ t('th_fix') }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="(f, i) in jsr.res.findings" :key="i">
+                    <td :class="'sev-' + f.sev">{{ f.sev }}</td>
+                    <td>{{ f.rule }}</td>
+                    <td class="dx-break"><code>{{ jsrShow(f) }}</code></td>
+                    <td class="dx-break"><div v-for="x in f.files" :key="x">{{ x }}</div></td>
+                    <td>{{ f.fix }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="muted" v-else>{{ t('jsr_none') }}</p>
+            <details class="mt-15"><summary class="muted">{{ t('jsr_rep_files') }} ({{ jsr.res.files.length }})</summary>
+              <div class="overflow-x">
+                <table>
+                  <thead><tr><th>{{ t('jsr_th_file') }}</th><th>{{ t('jsr_th_status') }}</th><th>{{ t('jsr_th_size') }}</th><th>{{ t('jsr_th_map') }}</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(f, i) in jsr.res.files" :key="i">
+                      <td class="dx-break">{{ f.url }}</td>
+                      <td>{{ f.status || f.err || 'ERR' }}</td>
+                      <td>{{ Math.round(f.size / 1024) }} KB</td>
+                      <td class="dx-break"><span v-if="!f.map">-</span><span v-else-if="f.map.exposed" class="sev-MEDIUM">⚠ {{ f.map.url }} ({{ f.map.nSources }} source)</span><span v-else>{{ t('jsr_map_no') }} (HTTP {{ f.map.status }}<template v-if="f.map.guessed">, {{ t('jsr_map_guess') }}</template>)</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+            <h4>{{ t('jsr_rep_eps') }} ({{ jsrEps.length }}/{{ jsr.res.endpoints.length }})</h4>
+            <div class="actions">
+              <input type="search" v-model="jsr.q" :placeholder="t('jsr_ep_filter')" style="flex:1 1 220px" />
+              <label><input type="checkbox" v-model="jsr.hot" /> {{ t('jsr_only_hot') }}</label>
+              <button class="btn gray" :disabled="!jsrEps.length" @click="jsrCopyEps">{{ t('jsr_copy_eps') }}</button>
+              <button class="btn gray" :disabled="!jsrEps.length" @click="jsrToSwag">{{ t('jsr_to_swag') }}</button>
+            </div>
+            <div class="overflow-x" v-if="jsrEps.length">
+              <table>
+                <thead><tr><th>{{ t('jsr_th_ep') }}</th><th>{{ t('jsr_th_hot') }}</th><th>{{ t('jsr_th_file') }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="e in jsrEps.slice(0, 400)" :key="e.path">
+                    <td class="dx-break"><code>{{ e.path }}</code></td>
+                    <td>{{ e.hot ? '★' : '' }}</td>
+                    <td class="dx-break"><div v-for="x in e.files" :key="x">{{ x }}</div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
       </section>
 
       <!-- SAST -->

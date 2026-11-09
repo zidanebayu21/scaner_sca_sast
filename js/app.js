@@ -117,7 +117,7 @@ createApp({
         maskIn: '',
         rules: { env: true, jwt: true, apikey: true, conn: true, pem: true, email: true, phone: true, ip: false }
       },
-      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
+      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', dastLast: null, cj: { url: '', shown: '', op: 0.5, marks: {}, err: '' }, jsr: { res: null, msg: '', err: '', full: false, q: '', hot: false }, apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
       hookCopied: false, hookMsg: '',
       im: { src: {}, cur: {}, meta: null, hist: 0, tool: 'compress', busy: '', prog: 0, err: '', msg: '', over: false, fmt: 'image/webp', q: 82, outScale: 1, outSize: 0, outW: 0, outH: 0, outMeta: null, encBusy: false, avif: false, table: [], tableBusy: false, target: 500, cmp: 0, actual: false, aiGen: false,
         rs: { pct: 100, w: 0, h: 0, lock: true, alg: 'lanczos3' },
@@ -536,6 +536,24 @@ createApp({
       const txt = this.swagOut(this.swag.fmt).text;
       return txt.length > 200000 ? txt.slice(0, 200000) + '\n...' : txt;
     },
+    jsrBookmarklet() {
+      const L2 = {};
+      ['collecting', 'send', 'download', 'fetching', 'files', 'maps', 'hint', 'local', 'popup', 'sent'].forEach(k => { L2[k] = this.t('jsr_bm_' + k); });
+      return 'javascript:' + encodeURIComponent('(' + jsrHookMain.toString() + ')(' + JSON.stringify(Object.assign(pupAppCfg(), { L: L2 })) + ');');
+    },
+    jsrEps() {
+      const r = this.jsr.res;
+      if (!r) return [];
+      const q = this.jsr.q.trim().toLowerCase();
+      return r.endpoints.filter(e => (!this.jsr.hot || e.hot) && (!q || e.path.toLowerCase().indexOf(q) >= 0));
+    },
+    jsrMaps() { const r = this.jsr.res; return r ? r.files.filter(f => f.map && f.map.exposed).length : 0; },
+    cjTarget() {
+      const raw = String(this.cj.url || this.dastText.split(/[\s,]+/).filter(Boolean)[0] || '').trim();
+      if (!raw) return '';
+      try { const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : ''; } catch (e) { return ''; }
+    },
+    cjMixed() { return location.protocol === 'https:' && this.cj.shown.indexOf('http:') === 0; },
     shpBookmarklet() { return 'javascript:' + encodeURIComponent(localizeScript('(' + hookGuardInstall.toString() + ')();\n(' + shpHookMain.toString() + ')(' + JSON.stringify(pupAppCfg()) + ');')); },
     shpKeywords() { const set = new Set(); this.shp.list.forEach(r => String(r.q || '').split(', ').forEach(k => { if (k) set.add(k); })); return [...set].sort(); },
     shpFilterOn() { const f = this.shp; return !!(f.q.trim() || f.kw || f.level || f.mall || f.star || f.noAd || f.minSold || f.minRate || f.pMin || f.pMax); },
@@ -822,6 +840,7 @@ createApp({
     } catch (e) { /* data rusak / localStorage tidak tersedia: mulai kosong */ }
     this.pupInit();
     this.shpInit();
+    this.jsrInit();
     this.waInit();
     this.svInit();
     this.imInit();
@@ -3664,7 +3683,8 @@ createApp({
       try {
         const results = [];
         for (const l of links) results.push(await dastCheck(l, log, { net: this.dastNet }));
-        const html = buildDastReport(results);
+        this.dastLast = Vue.markRaw(results);
+        const html = buildDastReport(results, this.dastExtra());
         if (this.dastUrl) URL.revokeObjectURL(this.dastUrl);
         this.dastUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
         const d = new Date(), p2 = n => String(n).padStart(2, '0');
@@ -3675,6 +3695,78 @@ createApp({
         this.dastError = Lf('Pemeriksaan gagal: {x}', { x: e.message });
         if (w) w.close();
       } finally { this.dastBusy = false; }
+    },
+    // ---- DAST: Clickjacking PoC + JS Bundle Recon
+    dastExtra() { return { cj: Object.assign({}, this.cj.marks), jsr: this.jsr.res }; },
+    jsrReportOpen() {
+      const w = window.open('', '_blank');
+      const html = buildDastReport(this.dastLast || [], this.dastExtra());
+      if (this.dastUrl) URL.revokeObjectURL(this.dastUrl);
+      this.dastUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      const d = new Date(), p2 = n => String(n).padStart(2, '0');
+      this.dastName = d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '_laporan_dast.html';
+      if (w) w.location.href = this.dastUrl; else this.dastLogs.push(tr('log_popup_blocked'));
+    },
+    cjLoad() {
+      this.cj.err = '';
+      if (!this.cjTarget) { this.cj.err = this.t('cj_bad_url'); return; }
+      this.cj.shown = this.cjTarget;
+    },
+    cjMark(m) { if (this.cj.shown) this.cj.marks = Object.assign({}, this.cj.marks, { [this.cj.shown]: m }); },
+    cjDownload() {
+      const u = this.cjTarget;
+      if (!u) return;
+      pupDownload('clickjacking-poc-' + new URL(u).hostname + '.html', cjPocHtml(u, { howto: this.t('cj_poc_howto'), bait: this.t('cj_bait') }), 'text/html');
+    },
+    jsrInit() {
+      window.addEventListener('message', e => { this.jsrOnMessage(e); });
+      if (location.hash === '#jsr-hook') { this.visibleTabs.dast = true; this.tab = 'dast'; try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { /* abaikan */ } }
+    },
+    // Target bisa situs mana pun, jadi origin tidak di-allow-list; data hanya teks yang disanitasi (jsrClean) dan ditampilkan ter-escape.
+    jsrOnMessage(e) {
+      const d = e.data;
+      if (!d || typeof d !== 'object' || !e.source || !/^https?:\/\//.test(e.origin || '')) return;
+      if (d.type === 'jsr-hello') {
+        try { e.source.postMessage({ type: 'jsr-ack' }, e.origin); if (window.AppPipe) window.AppPipe.recordPostOut(e.origin, { type: 'jsr-ack' }, 'JS Recon'); } catch (err) { /* tab ditutup */ }
+        if (this.tab !== 'dast') { this.visibleTabs.dast = true; this.tab = 'dast'; }
+        return;
+      }
+      if (d.type === 'jsr-data') this.jsrSet(d.data, e.origin);
+    },
+    jsrSet(raw, from) {
+      const c = jsrClean(raw);
+      if (!c || !c.files.length) { this.jsr.err = this.t('jsr_bad'); return; }
+      if (from) c.origin = from;
+      this.jsr.err = '';
+      this.jsr.res = Vue.markRaw(jsrAnalyze(c));
+      this.jsr.msg = this.t('jsr_got').replace('{p}', c.page || from || '-').replace('{n}', c.files.length);
+    },
+    async jsrPick(ev) {
+      const fs = Array.from(ev.target.files || []);
+      ev.target.value = '';
+      if (!fs.length) return;
+      const files = [];
+      for (const f of fs) {
+        const t = await f.text();
+        let j = null;
+        if (/\.(json|map)$/i.test(f.name)) { try { j = JSON.parse(t); } catch (e) { j = null; } }
+        if (j && Array.isArray(j.files)) { this.jsrSet(j, ''); return; }
+        if (j && (j.mappings !== undefined || j.sections)) {
+          const src = Array.isArray(j.sources) ? j.sources : [], sc = Array.isArray(j.sourcesContent) ? j.sourcesContent : [], parts = [];
+          src.forEach((x, i) => { if (typeof sc[i] === 'string') parts.push('/* ==== ' + x + ' ==== */\n' + sc[i]); });
+          files.push({ url: f.name, status: 200, size: t.length, text: '', map: { url: f.name, status: 200, exposed: true, info: { sources: src, nSources: src.length, withContent: parts.length, content: parts.join('\n') } } });
+        } else files.push({ url: f.name, status: 200, size: t.length, text: t, map: null });
+      }
+      this.jsrSet({ page: fs.map(f => f.name).join(', ').slice(0, 300), origin: '', at: Date.now(), files }, '');
+    },
+    jsrShow(f) { return f.kind === 'secret' && !this.jsr.full ? jsrMask(f.value) : f.value; },
+    jsrCopyEps() { if (navigator.clipboard) navigator.clipboard.writeText(this.jsrEps.map(e => e.path).join('\n')).catch(() => { /* abaikan */ }); },
+    jsrToSwag() {
+      const r = this.jsr.res;
+      if (!r) return;
+      this.swagLoad(JSON.stringify(jsrOpenApi(Object.assign({}, r, { endpoints: this.jsrEps }))), '', 'js-recon.json');
+      this.visibleTabs.swag = true;
+      this.tab = 'swag';
     },
     groupApis(g) { return this.apis.filter(a => a.group === g.key); },
     toggleAllDetail() {
