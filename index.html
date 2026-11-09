@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '3.1';
+    window.APP_VERSION = '3.2';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1223,6 +1223,59 @@
           </template>
         </template>
         <div class="muted mt-3 text-xs">{{ t('gl_note') }}</div>
+      </section>
+
+      <!-- Text to Speech -->
+      <section v-else-if="tab === 'tts'">
+        <h2 class="mt-0">🔊 {{ t('tts_title') }}</h2>
+        <p class="muted">{{ t('tts_intro') }}</p>
+        <div class="bad" v-if="!tts.ok">{{ t('tts_no_api') }}</div>
+        <template v-else>
+          <div class="actions mt-0">
+            <button class="btn blue" @click="ttsPasteRead">📋 {{ t('tts_paste_play') }}</button>
+            <button class="btn" v-if="!tts.playing && !tts.paused" :disabled="!tts.text.trim()" @click="ttsPlay(0)">▶ {{ t('tts_play') }}</button>
+            <button class="btn" v-if="tts.playing" @click="ttsPause">⏸ {{ t('tts_pause') }}</button>
+            <button class="btn" v-if="tts.paused" @click="ttsResume">▶ {{ t('tts_resume') }}</button>
+            <button class="btn gray" :disabled="tts.idx <= 0" :title="t('tts_prev')" @click="ttsStep(-1)">⏮</button>
+            <button class="btn gray" :disabled="tts.idx < 0 || tts.idx >= tts.sents.length - 1" :title="t('tts_next')" @click="ttsStep(1)">⏭</button>
+            <button class="btn gray" :disabled="!tts.playing && !tts.paused" @click="ttsStop">⏹ {{ t('tts_stop') }}</button>
+            <button class="btn gray" v-if="tts.text" @click="ttsClear">{{ t('tts_clear') }}</button>
+            <span class="muted" v-if="tts.idx >= 0">{{ t('tts_reading').replace('{i}', tts.idx + 1).replace('{n}', tts.sents.length) }}</span>
+          </div>
+          <div class="bad" v-if="tts.err">{{ tts.err }}</div>
+
+          <div class="row tts-set">
+            <label>{{ t('tts_lang') }}
+              <select v-model="tts.langF" @change="ttsSavePrefs"><option value="all">{{ t('tts_lang_all') }}</option><option v-for="l in ttsLangs" :key="l" :value="l">{{ l.toUpperCase() }}</option></select>
+            </label>
+            <label class="tts-voice">{{ t('tts_voice') }}
+              <select v-model="tts.voice" @change="ttsOnSettings">
+                <option value="auto">{{ t('tts_voice_auto') }}</option>
+                <option v-for="v in ttsVoiceList" :key="v.uri" :value="v.uri">{{ v.name }} ({{ v.lang }}) {{ v.local ? '🔒' : '☁' }}</option>
+              </select>
+            </label>
+            <label>{{ t('tts_rate') }} {{ tts.rate.toFixed(1) }}×<input type="range" min="0.5" max="2" step="0.1" v-model.number="tts.rate" @change="ttsOnSettings" /></label>
+            <label>{{ t('tts_pitch') }} {{ tts.pitch.toFixed(1) }}<input type="range" min="0.5" max="1.5" step="0.1" v-model.number="tts.pitch" @change="ttsOnSettings" /></label>
+            <label>{{ t('tts_volume') }} {{ Math.round(tts.volume * 100) }}%<input type="range" min="0" max="1" step="0.05" v-model.number="tts.volume" @change="ttsOnSettings" /></label>
+          </div>
+          <div class="muted" v-if="!tts.voices.length">{{ t('tts_no_voice') }}</div>
+          <div class="muted" v-if="ttsCurVoice">
+            🗣 {{ ttsCurVoice.name }} ({{ ttsCurVoice.lang }}) · {{ ttsCurVoice.local ? t('tts_local') : t('tts_online') }}<span v-if="tts.voice === 'auto' && ttsLang"> · {{ t('tts_detected').replace('{l}', ttsLang.toUpperCase()) }}</span>
+          </div>
+          <div class="c-warn" v-if="ttsCurVoice && !ttsCurVoice.local">⚠ {{ t('tts_online_warn') }}</div>
+
+          <label class="tts-auto"><input type="checkbox" v-model="tts.autoPaste" @change="ttsSavePrefs" /> ⚡ {{ t('tts_auto_paste') }}</label>
+          <textarea v-model="tts.text" class="tts-text" :placeholder="t('tts_ph')" @paste="onTtsPaste" @input="tts.playing || tts.paused ? null : (tts.sents = [])"></textarea>
+          <div class="muted" v-if="tts.text">{{ ttsStats }}</div>
+
+          <div v-if="tts.sents.length">
+            <h3>{{ t('tts_sentences') }}</h3>
+            <div class="tts-read">
+              <template v-for="(se, i) in tts.sents" :key="i"><br v-if="se.p && i > 0" /><span class="tts-sent" :class="{ on: i === tts.idx, done: tts.idx >= 0 && i < tts.idx }" @click="ttsJump(i)">{{ se.t }}</span>{{ ' ' }}</template>
+            </div>
+          </div>
+          <p class="muted">💡 {{ t('tts_tip') }}</p>
+        </template>
       </section>
 
       <!-- VPN Docker -->

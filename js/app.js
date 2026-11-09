@@ -29,6 +29,7 @@ const TAB_LIST = [
   { key: 'wa', label: 'WA Hook' },
   { key: 'skip', label: 'Skip Link' },
   { key: 'vpn', label: 'VPN Docker' },
+  { key: 'tts', label: 'Text to Speech' },
   { key: 'sheet', label: 'Sheet Viewer' },
   { key: 'img', label: 'Studio Gambar' },
   { key: 'pup', label: 'Puppeteer Record' }
@@ -119,7 +120,7 @@ createApp({
         maskIn: '',
         rules: { env: true, jwt: true, apikey: true, conn: true, pem: true, email: true, phone: true, ip: false }
       },
-      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', vpn: { copied: '' }, vpnSteps: VPN_STEPS, vpnTrouble: VPN_TROUBLE, skip: { auto: localStorage.getItem('scaSkipAuto') !== '0', url: '', msg: '' }, dastLast: null, cj: { url: '', shown: '', op: 0.5, marks: {}, err: '' }, jsr: { res: null, msg: '', err: '', full: false, q: '', hot: false }, apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
+      apis: API_LIST, groups: API_GROUPS, stats: apiStats, dastText: '', dastNet: true, dastBusy: false, dastLogs: [], dastUrl: '', dastName: 'laporan_dast.html', dastError: '', vpn: { copied: '' }, tts: { ok: true, text: '', voices: [], voice: 'auto', langF: 'all', rate: 1, pitch: 1, volume: 1, autoPaste: true, sents: [], idx: -1, playing: false, paused: false, err: '', msg: '' }, vpnSteps: VPN_STEPS, vpnTrouble: VPN_TROUBLE, skip: { auto: localStorage.getItem('scaSkipAuto') !== '0', url: '', msg: '' }, dastLast: null, cj: { url: '', shown: '', op: 0.5, marks: {}, err: '' }, jsr: { res: null, msg: '', err: '', full: false, q: '', hot: false }, apiOpen: false, menuOpen: false, sideOpen: true, openKeys: {}, urlText: '', token: '', urlBusy: false, urlLogs: [],
       hookCopied: false, hookMsg: '',
       im: { src: {}, cur: {}, meta: null, hist: 0, tool: 'compress', busy: '', prog: 0, err: '', msg: '', over: false, fmt: 'image/webp', q: 82, outScale: 1, outSize: 0, outW: 0, outH: 0, outMeta: null, encBusy: false, avif: false, table: [], tableBusy: false, target: 500, cmp: 0, actual: false, aiGen: false,
         rs: { pct: 100, w: 0, h: 0, lock: true, alg: 'lanczos3' },
@@ -689,6 +690,14 @@ createApp({
     imModels() { return IMG_MODELS; },
     imProviders() { return IMG_AI_PROVIDERS; },
     ocrTrLangs() { return OCR_TR_LANGS; },
+    ttsLang() { return ttsGuessLang(this.tts.text); },
+    ttsLangs() { return [...new Set(this.tts.voices.map(v => (v.lang || '').slice(0, 2).toLowerCase()).filter(Boolean))].sort(); },
+    ttsVoiceList() { const f = this.tts.langF; return this.tts.voices.filter(v => f === 'all' || (v.lang || '').toLowerCase().startsWith(f)); },
+    ttsCurVoice() { if (!this.tts.voices.length) return null; const v = this.ttsPickVoice(); return v ? { name: v.name, lang: v.lang, local: v.localService !== false } : null; },
+    ttsStats() {
+      const t = this.tts.text || '', words = (t.match(/\S+/g) || []).length;
+      return tr('tts_stats').replace('{c}', t.length).replace('{s}', ttsSplit(t).length).replace('{m}', Math.max(1, Math.round(words / (150 * (this.tts.rate || 1)))));
+    },
     svSheet() { const c = this.sv.cur; if (!c) return null; const b = this.svBook(c.book); return b && b.sheets[c.sheet] ? Object.assign({ bookName: b.name }, b.sheets[c.sheet]) : null; },
     svCols() {
       const sh = this.svSheet; if (!sh) return [];
@@ -854,6 +863,7 @@ createApp({
     this.svInit();
     this.imInit();
     this.ocrLoadPrefs();
+    this.ttsInit();
     document.addEventListener('paste', e => { this.onOcrPaste(e); });
     this.colLoad();
     document.addEventListener('paste', e => { this.onColPaste(e); });
@@ -933,6 +943,7 @@ createApp({
     tab(v) {
       window.__scaActiveTab = v;
       if (v === 'img') this.$nextTick(() => this.imDraw());
+      if (v !== 'tts' && this.tts.playing) this.ttsStop();
       try { const u = new URL(location.href); if (u.searchParams.get('tab') !== v) { u.searchParams.set('tab', v); history.replaceState(history.state, '', u.href); } } catch (e) { /* abaikan */ }
     },
     items: { deep: true, handler() { this.saveItems(); } },
@@ -3732,6 +3743,88 @@ createApp({
         if (w) w.close();
       } finally { this.dastBusy = false; }
     },
+    // ---- Text to Speech (Web Speech API)
+    ttsInit() {
+      const t = this.tts;
+      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') { t.ok = false; return; }
+      try {
+        const p = JSON.parse(localStorage.getItem(TTS_PREFS_KEY) || 'null');
+        if (p) {
+          if (typeof p.voice === 'string') t.voice = p.voice;
+          if (typeof p.langF === 'string') t.langF = p.langF;
+          ['rate', 'pitch', 'volume'].forEach(k => { if (typeof p[k] === 'number') t[k] = p[k]; });
+          if (typeof p.autoPaste === 'boolean') t.autoPaste = p.autoPaste;
+        }
+      } catch (e) { /* abaikan */ }
+      const load = () => {
+        const vs = speechSynthesis.getVoices();
+        this.ttsVoiceObjs = vs;
+        t.voices = vs.map(v => ({ uri: v.voiceURI, name: v.name, lang: v.lang, local: v.localService !== false }));
+      };
+      load();
+      speechSynthesis.addEventListener('voiceschanged', load);
+      window.addEventListener('beforeunload', () => { try { speechSynthesis.cancel(); } catch (e) { /* abaikan */ } });
+    },
+    ttsSavePrefs() {
+      const t = this.tts;
+      try { localStorage.setItem(TTS_PREFS_KEY, JSON.stringify({ voice: t.voice, langF: t.langF, rate: t.rate, pitch: t.pitch, volume: t.volume, autoPaste: t.autoPaste })); } catch (e) { /* abaikan */ }
+    },
+    // Suara yang dipakai: pilihan manual, atau (Otomatis) suara pertama yang cocok dengan bahasa teks, utamakan yang lokal.
+    ttsPickVoice() {
+      const vs = this.ttsVoiceObjs || [];
+      if (this.tts.voice !== 'auto') return vs.find(v => v.voiceURI === this.tts.voice) || null;
+      const lang = this.ttsLang || (LANG === 'en' ? 'en' : 'id');
+      const m = vs.filter(v => (v.lang || '').toLowerCase().startsWith(lang));
+      return m.find(v => v.localService !== false && /natural/i.test(v.name)) || m.find(v => /natural/i.test(v.name)) || m.find(v => v.localService !== false) || m[0] || null;
+    },
+    ttsPrepare() {
+      this.tts.sents = ttsSplit(this.tts.text);
+      return this.tts.sents.length;
+    },
+    ttsPlay(from) {
+      const t = this.tts;
+      t.err = '';
+      if (!t.ok) return;
+      if (!this.ttsPrepare()) { t.err = tr('tts_e_empty'); return; }
+      this.ttsSpeak(typeof from === 'number' ? from : 0);
+    },
+    ttsSpeak(i) {
+      const t = this.tts;
+      const tok = (this.ttsTok = (this.ttsTok || 0) + 1);
+      speechSynthesis.cancel();
+      if (i < 0 || i >= t.sents.length) { t.playing = false; t.paused = false; t.idx = -1; return; }
+      t.idx = i; t.playing = true; t.paused = false;
+      const u = new SpeechSynthesisUtterance(t.sents[i].t);
+      const v = this.ttsPickVoice();
+      if (v) { u.voice = v; u.lang = v.lang; } else u.lang = (this.ttsLang || (LANG === 'en' ? 'en' : 'id')) === 'en' ? 'en-US' : 'id-ID';
+      u.rate = t.rate; u.pitch = t.pitch; u.volume = t.volume;
+      u.onend = () => { if (tok === this.ttsTok && t.playing) this.ttsSpeak(i + 1); };
+      u.onerror = e => {
+        if (tok !== this.ttsTok || !e || e.error === 'interrupted' || e.error === 'canceled') return;
+        t.err = tr('tts_e_speak') + ' (' + e.error + ')'; t.playing = false;
+      };
+      this.$nextTick(() => { const el = document.querySelector('.tts-sent.on'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); });
+      speechSynthesis.speak(u);
+    },
+    // Jeda = hentikan dan ingat posisi kalimat (pause bawaan Chrome tidak andal untuk suara online).
+    ttsPause() { this.ttsTok = (this.ttsTok || 0) + 1; speechSynthesis.cancel(); this.tts.playing = false; this.tts.paused = true; },
+    ttsResume() { this.ttsSpeak(Math.max(this.tts.idx, 0)); },
+    ttsStop() { this.ttsTok = (this.ttsTok || 0) + 1; try { speechSynthesis.cancel(); } catch (e) { /* abaikan */ } Object.assign(this.tts, { playing: false, paused: false, idx: -1 }); },
+    ttsJump(i) { if (!this.tts.sents.length) this.ttsPrepare(); this.ttsSpeak(i); },
+    ttsStep(d) { const n = Math.min(Math.max(this.tts.idx + d, 0), this.tts.sents.length - 1); this.ttsSpeak(n); },
+    async ttsPasteRead() {
+      this.tts.err = '';
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error('no api');
+        const txt = await navigator.clipboard.readText();
+        if (!txt || !txt.trim()) { this.tts.err = tr('tts_e_empty'); return; }
+        this.tts.text = txt;
+        this.ttsPlay(0);
+      } catch (e) { this.tts.err = tr('tts_e_clip'); }
+    },
+    onTtsPaste() { if (this.tts.autoPaste) setTimeout(() => this.ttsPlay(0), 0); },
+    ttsClear() { this.ttsStop(); this.tts.text = ''; this.tts.sents = []; this.tts.err = ''; },
+    ttsOnSettings() { this.ttsSavePrefs(); if (this.tts.playing) this.ttsSpeak(this.tts.idx); },
     vpnCopy(text, id) {
       if (!navigator.clipboard) return;
       navigator.clipboard.writeText(text).then(() => { this.vpn.copied = id; setTimeout(() => { if (this.vpn.copied === id) this.vpn.copied = ''; }, 1500); }).catch(() => { /* abaikan */ });

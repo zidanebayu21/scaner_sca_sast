@@ -6478,3 +6478,66 @@ const VPN_I18N = {
   }
 };
 Object.keys(VPN_I18N).forEach(l => { I18N[l] = Object.assign({}, VPN_I18N[l], I18N[l] || {}); });
+
+// ============================================================
+//  Tab Text to Speech: Web Speech API (speechSynthesis) bawaan browser, tanpa unduhan model.
+// ============================================================
+const TTS_PREFS_KEY = 'scaTtsPrefs';
+const TTS_MAX_CHUNK = 200;
+// Pecah teks per kalimat (dan potong kalimat yang terlalu panjang) supaya Chrome tidak berhenti di tengah teks panjang.
+function ttsSplit(text) {
+  const out = [];
+  String(text || '').replace(/\r\n?/g, '\n').split(/\n+/).forEach(par => {
+    const p = par.trim();
+    if (!p) return;
+    let first = true;
+    p.split(/(?<=[.!?…。！？])\s+/).forEach(sen => {
+      let s = sen.trim();
+      while (s.length > TTS_MAX_CHUNK) {
+        let cut = s.lastIndexOf(', ', TTS_MAX_CHUNK);
+        if (cut < 60) cut = s.lastIndexOf(' ', TTS_MAX_CHUNK);
+        if (cut < 60) cut = TTS_MAX_CHUNK;
+        out.push({ t: s.slice(0, cut + 1).trim(), p: first }); first = false;
+        s = s.slice(cut + 1).trim();
+      }
+      if (s) { out.push({ t: s, p: first }); first = false; }
+    });
+  });
+  return out;
+}
+// Tebakan bahasa sederhana (Indonesia vs Inggris) dari kata-kata umum.
+const TTS_ID_WORDS = new Set(['yang', 'dan', 'di', 'ke', 'dari', 'untuk', 'dengan', 'tidak', 'ini', 'itu', 'adalah', 'akan', 'bisa', 'pada', 'juga', 'saya', 'kami', 'anda', 'atau', 'sudah', 'karena', 'dalam', 'ada', 'oleh', 'seperti']);
+const TTS_EN_WORDS = new Set(['the', 'and', 'of', 'to', 'is', 'in', 'that', 'for', 'with', 'this', 'are', 'was', 'be', 'it', 'on', 'not', 'you', 'have', 'from', 'or', 'by', 'will', 'can', 'your', 'an']);
+function ttsGuessLang(text) {
+  let id = 0, en = 0;
+  String(text || '').toLowerCase().split(/[^a-z]+/).slice(0, 400).forEach(w => { if (TTS_ID_WORDS.has(w)) id++; else if (TTS_EN_WORDS.has(w)) en++; });
+  if (!id && !en) return '';
+  return id >= en ? 'id' : 'en';
+}
+const TTS_I18N = {
+  id: {
+    tab_tts: 'Text to Speech', grp_tts_title: 'Text to Speech', grp_tts_desc: 'Memakai suara bawaan browser/OS. Suara bertanda ☁ online diproses di server Google/Microsoft (teks ikut terkirim); suara 🔒 lokal tidak.',
+    tts_title: 'Text to Speech — bacakan teks panjang', tts_intro: 'Tempel teks (Ctrl+V) atau klik "Tempel & bacakan" untuk langsung membacakan isi clipboard. Teks dipotong per kalimat, kalimat yang sedang dibaca disorot, dan Anda bisa klik kalimat mana saja untuk lompat. Tanpa unduhan model: memakai suara bawaan browser/Windows.',
+    tts_paste_play: 'Tempel & bacakan', tts_play: 'Bacakan', tts_pause: 'Jeda', tts_resume: 'Lanjut', tts_stop: 'Stop', tts_prev: 'Kalimat sebelumnya', tts_next: 'Kalimat berikutnya', tts_clear: 'Kosongkan',
+    tts_ph: 'Tempel atau ketik teks di sini…', tts_auto_paste: 'Bacakan otomatis saat teks di-paste ke kotak ini',
+    tts_voice: 'Suara', tts_voice_auto: 'Otomatis (ikuti bahasa teks)', tts_lang: 'Bahasa', tts_lang_all: 'Semua bahasa', tts_rate: 'Kecepatan', tts_pitch: 'Nada', tts_volume: 'Volume',
+    tts_local: '🔒 lokal', tts_online: '☁ online', tts_online_warn: 'Suara ini online: teks yang dibacakan dikirim ke server penyedia suara. Pilih suara 🔒 lokal untuk teks rahasia.',
+    tts_stats: '{c} karakter · {s} kalimat · ±{m} menit', tts_reading: 'Membaca kalimat {i} dari {n}', tts_detected: 'bahasa teks: {l}',
+    tts_no_api: 'Browser ini tidak mendukung Web Speech API (speechSynthesis).', tts_no_voice: 'Belum ada suara yang tersedia. Di Windows: Settings → Time & language → Speech → Add voices (mis. Indonesian).',
+    tts_e_clip: 'Browser menolak baca clipboard. Tempel dengan Ctrl+V di kotak teks.', tts_e_empty: 'Clipboard / teks kosong.', tts_e_speak: 'Gagal membacakan',
+    tts_sentences: 'Teks per kalimat (klik untuk lompat)', tts_tip: 'Tips: suara "Natural" di Microsoft Edge terdengar paling manusiawi. Suara yang tersedia berbeda per browser dan per PC.'
+  },
+  en: {
+    tab_tts: 'Text to Speech', grp_tts_title: 'Text to Speech', grp_tts_desc: 'Uses the browser/OS built-in voices. Voices marked ☁ online are processed on Google/Microsoft servers (the text is sent); 🔒 local voices are not.',
+    tts_title: 'Text to Speech — read long text aloud', tts_intro: 'Paste text (Ctrl+V) or click "Paste & read" to read the clipboard right away. Text is split into sentences, the sentence being read is highlighted, and you can click any sentence to jump to it. No model download: it uses the browser/Windows built-in voices.',
+    tts_paste_play: 'Paste & read', tts_play: 'Read', tts_pause: 'Pause', tts_resume: 'Resume', tts_stop: 'Stop', tts_prev: 'Previous sentence', tts_next: 'Next sentence', tts_clear: 'Clear',
+    tts_ph: 'Paste or type text here…', tts_auto_paste: 'Read automatically when text is pasted into this box',
+    tts_voice: 'Voice', tts_voice_auto: 'Auto (follow the text language)', tts_lang: 'Language', tts_lang_all: 'All languages', tts_rate: 'Speed', tts_pitch: 'Pitch', tts_volume: 'Volume',
+    tts_local: '🔒 local', tts_online: '☁ online', tts_online_warn: 'This voice is online: the text being read is sent to the voice provider. Pick a 🔒 local voice for confidential text.',
+    tts_stats: '{c} characters · {s} sentences · ~{m} min', tts_reading: 'Reading sentence {i} of {n}', tts_detected: 'text language: {l}',
+    tts_no_api: 'This browser does not support the Web Speech API (speechSynthesis).', tts_no_voice: 'No voices available yet. On Windows: Settings → Time & language → Speech → Add voices (e.g. Indonesian).',
+    tts_e_clip: 'The browser blocked clipboard access. Paste with Ctrl+V in the text box.', tts_e_empty: 'Clipboard / text is empty.', tts_e_speak: 'Failed to read aloud',
+    tts_sentences: 'Text by sentence (click to jump)', tts_tip: 'Tip: the "Natural" voices in Microsoft Edge sound the most human. Available voices differ per browser and per PC.'
+  }
+};
+Object.keys(TTS_I18N).forEach(l => { I18N[l] = Object.assign({}, TTS_I18N[l], I18N[l] || {}); });

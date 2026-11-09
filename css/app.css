@@ -858,3 +858,15 @@ details.ping-box[open] > summary::after { transform: rotate(90deg); }
 .vpn-line code { flex: 1; min-width: 0; white-space: pre; overflow-x: auto; color: #e2e8f0; background: none; border: 0; padding: 0; font: inherit; }
 .vpn-copy { flex-shrink: 0; background: none; border: 1px solid #475569; color: #cbd5e1; border-radius: 5px; padding: 0 7px; font-size: 13px; line-height: 20px; cursor: pointer; opacity: .65; }
 .vpn-copy:hover { opacity: 1; }
+/* Text to Speech */
+.tts-set { gap: 14px; align-items: flex-end; }
+.tts-set label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.tts-set .tts-voice { flex: 1; min-width: 240px; }
+.tts-set .tts-voice select { width: 100%; }
+.tts-auto { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 6px; cursor: pointer; }
+.tts-text { min-height: 180px; }
+.tts-read { max-height: 380px; overflow-y: auto; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); line-height: 1.8; font-size: 15px; }
+.tts-sent { cursor: pointer; border-radius: 4px; padding: 1px 2px; transition: background .15s; }
+.tts-sent:hover { background: rgba(127,127,127,.18); }
+.tts-sent.done { opacity: .55; }
+.tts-sent.on { background: #fde68a; color: #111827; box-shadow: 0 0 0 2px #fde68a; }
