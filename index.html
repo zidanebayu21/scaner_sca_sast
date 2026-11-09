@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.8';
+    window.APP_VERSION = '2.9';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1227,20 +1227,65 @@
 
       <!-- VPN Docker -->
       <section v-else-if="tab === 'vpn'">
-        <h2 class="mt-0">{{ t('vpn_title') }}</h2>
-        <p class="muted">{{ t('vpn_intro') }}</p>
-        <pre class="vpn-flow">Chrome / SSH ──► SOCKS5 127.0.0.1:1080 ──► Docker: openfortivpn (ppp0) ──► FortiGate ──► 10.x
-{{ t('vpn_flow_direct') }} ──────────────────────────────────────────────────────────► internet</pre>
-        <div class="actions">
-          <a class="btn blue" href="vpn-docker.zip" download="vpn-docker.zip">⬇ {{ t('vpn_download') }}</a>
+        <div class="vpn-hero">
+          <div class="vpn-hero-text">
+            <h2 class="mt-0">{{ t('vpn_title') }}</h2>
+            <p class="muted">{{ t('vpn_intro') }}</p>
+            <div class="actions">
+              <a class="btn blue" href="vpn-docker.zip" download="vpn-docker.zip">⬇ {{ t('vpn_download') }}</a>
+            </div>
+            <p class="muted">{{ t('vpn_need') }}</p>
+          </div>
+          <figure class="vpn-diagram">
+            <svg viewBox="0 0 460 318" role="img" :aria-label="t('vpn_d_caption')" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="vpnArr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4b5563" /></marker>
+                <marker id="vpnArrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9ca3af" /></marker>
+              </defs>
+              <rect x="6" y="6" width="448" height="222" rx="10" fill="#f0f7ff" stroke="#6c8ebf" stroke-dasharray="5 4" />
+              <text x="16" y="222" class="vd-tag" fill="#6c8ebf">{{ t('vpn_d_lane') }}</text>
+              <rect x="20" y="18" width="190" height="46" rx="8" fill="#d5e8d4" stroke="#82b366" stroke-width="1.5" />
+              <text x="115" y="38" class="vd-t">{{ t('vpn_d_chrome') }}</text>
+              <text x="115" y="54" class="vd-s">{{ t('vpn_d_chrome2') }}</text>
+              <rect x="250" y="18" width="190" height="46" rx="8" fill="#d5e8d4" stroke="#82b366" stroke-width="1.5" />
+              <text x="345" y="38" class="vd-t">{{ t('vpn_d_ssh') }}</text>
+              <text x="345" y="54" class="vd-s">{{ t('vpn_d_ssh2') }}</text>
+              <path d="M115 64 V80 H200 V92" fill="none" stroke="#4b5563" stroke-width="1.6" marker-end="url(#vpnArr)" />
+              <path d="M345 64 V80 H260 V92" fill="none" stroke="#4b5563" stroke-width="1.6" marker-end="url(#vpnArr)" />
+              <rect x="130" y="94" width="200" height="38" rx="19" fill="#fff2cc" stroke="#d6b656" stroke-width="1.5" />
+              <text x="230" y="118" class="vd-t">SOCKS5 127.0.0.1:1080</text>
+              <path d="M230 132 V148 H95 V162" fill="none" stroke="#4b5563" stroke-width="1.6" marker-end="url(#vpnArr)" />
+              <rect x="20" y="164" width="150" height="50" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5" />
+              <text x="95" y="185" class="vd-t">{{ t('vpn_d_docker') }}</text>
+              <text x="95" y="202" class="vd-s">{{ t('vpn_d_docker2') }}</text>
+              <path d="M170 189 H196" fill="none" stroke="#4b5563" stroke-width="1.6" marker-end="url(#vpnArr)" />
+              <rect x="198" y="164" width="116" height="50" rx="8" fill="#e1d5e7" stroke="#9673a6" stroke-width="1.5" />
+              <text x="256" y="185" class="vd-t">{{ t('vpn_d_forti') }}</text>
+              <text x="256" y="202" class="vd-s">{{ t('vpn_d_forti2') }}</text>
+              <path d="M314 189 H338" fill="none" stroke="#4b5563" stroke-width="1.6" marker-end="url(#vpnArr)" />
+              <rect x="340" y="164" width="100" height="50" rx="8" fill="#f8cecc" stroke="#b85450" stroke-width="1.5" />
+              <text x="390" y="185" class="vd-t">{{ t('vpn_d_int') }}</text>
+              <text x="390" y="202" class="vd-s">{{ t('vpn_d_int2') }}</text>
+              <text x="16" y="250" class="vd-tag" fill="#6b7280">{{ t('vpn_d_sep') }}</text>
+              <rect x="20" y="260" width="190" height="46" rx="8" fill="#f5f5f5" stroke="#9ca3af" stroke-width="1.5" />
+              <text x="115" y="280" class="vd-t">{{ t('vpn_d_other') }}</text>
+              <text x="115" y="296" class="vd-s">{{ t('vpn_d_other2') }}</text>
+              <path d="M210 283 H336" fill="none" stroke="#9ca3af" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#vpnArrG)" />
+              <text x="273" y="276" class="vd-s">{{ t('vpn_d_direct') }}</text>
+              <rect x="340" y="260" width="100" height="46" rx="23" fill="#f5f5f5" stroke="#9ca3af" stroke-width="1.5" />
+              <text x="390" y="288" class="vd-t">Internet</text>
+            </svg>
+            <figcaption>{{ t('vpn_d_caption') }}</figcaption>
+          </figure>
         </div>
-        <p class="muted">{{ t('vpn_need') }}</p>
         <div class="dx-box" v-for="st in vpnSteps" :key="st.k">
           <h3 class="mt-0">{{ t('vpn_s' + st.k + '_title') }}</h3>
           <p class="muted">{{ t('vpn_s' + st.k + '_desc') }}</p>
-          <div class="vpn-cmd" v-for="(c, i) in st.cmds" :key="i">
-            <pre>{{ c }}</pre>
-            <button class="btn gray" @click="vpnCopy(c, st.k + '-' + i)">{{ vpn.copied === st.k + '-' + i ? '✓ ' + t('vpn_copied') : '📋 ' + t('vpn_copy') }}</button>
+          <div class="vpn-code">
+            <div class="vpn-line" v-for="(c, i) in st.cmds" :key="i">
+              <code>{{ c }}</code>
+              <button class="vpn-copy" :title="t('vpn_copy')" @click="vpnCopy(c, st.k + '-' + i)">{{ vpn.copied === st.k + '-' + i ? '✓' : '⧉' }}</button>
+            </div>
           </div>
           <ul class="muted list-tight">
             <li v-for="n in st.notes" :key="n">{{ t(n) }}</li>
@@ -1685,7 +1730,7 @@
           <!-- AI lokal -->
           <div v-if="im.tool === 'ailocal'" class="ping-box">
             <div class="gl-filters">
-              <select v-model="im.ai.model" style="max-width:340px" @change="imAiModelChg"><option v-for="m in imModels" :key="m.key" :value="m.key">{{ m.label }}</option></select>
+              <select v-model="im.ai.model" style="max-width:340px" @change="imAiModelChg"><option v-for="m in imModels" :key="m.key" :value="m.key">{{ L(m.label) }}</option></select>
               <label>{{ t('im_ai_out') }} <select v-model.number="im.ai.out"><option v-if="im.ai.model.indexOf('w2x') === 0" :value="1">×1 ({{ t('im_noise_only') }})</option><option :value="2">×2</option><option :value="3">×3</option><option :value="4">×4</option></select></label>
               <label v-if="im.ai.model.indexOf('w2x') === 0" :title="t('im_noise_tip')">{{ t('im_noise') }} <select v-model.number="im.ai.noise"><option :value="-1">{{ t('im_none') }}</option><option :value="0">0</option><option :value="1">1</option><option :value="2">2</option><option :value="3">3</option></select></label>
               <label :title="t('im_tile_tip')">Tile <select v-model.number="im.ai.tile"><option :value="128">128</option><option :value="192">192</option><option :value="256">256</option><option :value="384">384</option></select></label>
@@ -1698,7 +1743,7 @@
           <!-- AI API -->
           <div v-if="im.tool === 'aiapi'" class="ping-box">
             <div class="gl-filters">
-              <select v-model="im.api.prov" @change="imSavePrefs"><option v-for="p in imProviders" :key="p.key" :value="p.key">{{ p.label }}</option></select>
+              <select v-model="im.api.prov" @change="imSavePrefs"><option v-for="p in imProviders" :key="p.key" :value="p.key">{{ L(p.label) }}</option></select>
               <label v-if="im.api.prov.indexOf('stab') !== 0">Model <input type="text" :value="imApiModel()" @input="im.api.models[im.api.prov] = $event.target.value" style="width:220px" /></label>
               <label>API key <input type="password" v-model="im.api.key" autocomplete="off" style="width:260px" :placeholder="t('im_api_key_ph')" /></label>
             </div>
@@ -1794,7 +1839,7 @@
             <thead><tr><th>{{ t('clk_ts_src') }}</th><th>{{ t('clk_mine') }}</th><th>UTC (ISO 8601)</th><th>Epoch</th><th>{{ t('clk_ts_rel') }}</th><th></th></tr></thead>
             <tbody>
               <tr v-for="(r, i) in sortBy('clkTs', clkTs.rows, ['label', 'ms', 'iso', 'sec', 'ms'])" :key="i" :class="{ 'ping-sel': clock.fixedMs === r.ms && !clock.live }">
-                <td><b>{{ r.label }}</b><div class="muted text-2xs" v-if="r.note">{{ r.note }}</div></td>
+                <td><b>{{ L(r.label) }}</b><div class="muted text-2xs" v-if="r.note">{{ r.note }}</div></td>
                 <td class="mono nowrap">{{ r.mine }}</td>
                 <td class="mono nowrap">{{ r.iso }}</td>
                 <td class="mono">{{ r.sec }}<div class="muted text-2xs">{{ r.msTxt }} ms</div></td>

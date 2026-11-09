@@ -680,6 +680,26 @@ window.APP_I18N = {
         'Vue 3.5.13 (Lokal Offline)': 'Vue 3.5.13 (Local Offline)',
         '🐞 Hook Debug (API)': '🐞 Hook Debug (API)',
         '🎬 Puppeteer Rec/Play': '🎬 Puppeteer Rec/Play',
-        '📜 Swag (OpenAPI)': '📜 Swag (OpenAPI)'
+        '📜 Swag (OpenAPI)': '📜 Swag (OpenAPI)',
+        // Git Lens secret rules
+        'Secret di file env/config': 'Secret in env/config file',
+        'Pindahkan ke secret manager / variabel environment server; jangan commit file .env (tambahkan ke .gitignore).': 'Move to a secret manager / server environment variables; do not commit .env files (add to .gitignore).',
+        'Connection string berisi password': 'Connection string contains password',
+        'Ganti password database itu, lalu ambil connection string dari environment/secret manager.': 'Change the database password, then load the connection string from environment/secret manager.',
+        'Token JWT ter-hardcode': 'Hardcoded JWT token',
+        'Cabut token/sesinya, ganti signing key bila token masih berlaku lama.': 'Revoke the token/session, rotate the signing key if the token is valid for a long time.',
+        'Webhook URL ter-hardcode': 'Hardcoded webhook URL',
+        'Buat ulang webhook (URL lama bisa dipakai siapa saja untuk kirim pesan).': 'Recreate the webhook (the old URL can be used by anyone to send messages).',
+        'Header Authorization ter-hardcode': 'Hardcoded Authorization header',
+        'Cabut token/kredensial itu dan ambil dari konfigurasi saat runtime.': 'Revoke the token/credentials and read them from configuration at runtime.',
+        // Studio Gambar
+        'waifu2x swin_unet — foto (±19 MB)': 'waifu2x swin_unet — photo (±19 MB)',
+        'waifu2x swin_unet — anime/ilustrasi (±17-19 MB)': 'waifu2x swin_unet — anime/illustration (±17-19 MB)',
+        'waifu2x swin_unet — hasil scan/foto ilustrasi (±19 MB)': 'waifu2x swin_unet — scans/illustration photos (±19 MB)',
+        'Real-ESRGAN general x4v3 (4,6 MB)': 'Real-ESRGAN general x4v3 (4.6 MB)',
+        'Real-ESRGAN x4plus (64 MB, lebih detail, lambat)': 'Real-ESRGAN x4plus (64 MB, more detail, slow)',
+        'OpenRouter (model gambar)': 'OpenRouter (image models)',
+        // Jam Dunia
+        'tanggal': 'date'
       }
 };

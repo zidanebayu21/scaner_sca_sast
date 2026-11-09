@@ -6347,7 +6347,8 @@ const VPN_STEPS = [
   { k: 1, cmds: ['cd C:\\path\\vpn-docker', '.\\run_vpn_docker.ps1 -Setup -Config "C:\\path\\vpn_backup.conf" -ChromeEmail "nama@gmail.com" -ProxyDomains "kantor.co.id"'], notes: ['vpn_s1_n1', 'vpn_s1_n2'] },
   { k: 2, cmds: ['.\\run_vpn_docker.ps1 -List', '.\\run_vpn_docker.ps1 -Name "Nama Profil"', '.\\run_vpn_docker.ps1 -Status', '.\\run_vpn_docker.ps1 -Stop'], notes: ['vpn_s2_n1', 'vpn_s2_n2', 'vpn_s2_n3', 'vpn_s2_n4'] },
   { k: 3, cmds: ['.\\run_vpn_docker.ps1 -Chrome'], notes: ['vpn_s3_n1', 'vpn_s3_n2', 'vpn_s3_n3', 'vpn_s3_n4'] },
-  { k: 4, cmds: ['Host 10.*\n    ProxyCommand "C:/Program Files/Git/mingw64/bin/connect.exe" -S 127.0.0.1:1080 %h %p', "ssh -o ProxyCommand='connect -S 127.0.0.1:1080 %h %p' user@10.x.x.x", 'docker exec vpn-forti ping -c 2 10.x.x.x'], notes: ['vpn_s4_n1', 'vpn_s4_n2', 'vpn_s4_n3', 'vpn_s4_n4'] }
+  { k: 4, cmds: ['Host 10.*\n    ProxyCommand "C:/Program Files/Git/mingw64/bin/connect.exe" -S 127.0.0.1:1080 %h %p', "ssh -o ProxyCommand='connect -S 127.0.0.1:1080 %h %p' user@10.x.x.x", 'docker exec vpn-forti ping -c 2 10.x.x.x'], notes: ['vpn_s4_n1', 'vpn_s4_n2', 'vpn_s4_n3', 'vpn_s4_n4'] },
+  { k: 5, cmds: ['git -c http.proxy=socks5h://127.0.0.1:1080 pull', 'git -c http.proxy=socks5h://127.0.0.1:1080 push', 'git config --global alias.vpn "!git -c http.proxy=socks5h://127.0.0.1:1080"', 'git vpn pull', 'git -c core.sshCommand="ssh -o ProxyCommand=\'connect -S 127.0.0.1:1080 %h %p\'" pull'], notes: ['vpn_s5_n1', 'vpn_s5_n2', 'vpn_s5_n3', 'vpn_s5_n4'] }
 ];
 const VPN_TROUBLE = [1, 2, 3, 4, 5];
 const VPN_I18N = {
@@ -6376,13 +6377,22 @@ const VPN_I18N = {
     vpn_s4_n2: 'PuTTY: Connection → Proxy → SOCKS 5, 127.0.0.1:1080, "Do DNS name lookup at proxy end" = Yes. WinSCP: Advanced → Connection → Proxy → SOCKS5.',
     vpn_s4_n3: 'DBeaver / klien DB: tab Proxy (atau SSH → Proxy) → SOCKS5 127.0.0.1:1080. Baris kedua untuk Git Bash (connect.exe bawaan Git).',
     vpn_s4_n4: 'Ping dari Windows tidak lewat proxy (SOCKS hanya TCP). Cek jaringan dengan perintah ketiga.',
+    vpn_s5_title: '5. Git pull/push ke server git kantor', vpn_s5_desc: 'Proxy dipasang per perintah dengan -c, jadi tidak ada setelan global yang perlu dikembalikan. git commit tidak butuh proxy (tidak pakai jaringan).',
+    vpn_s5_n1: 'Remote HTTPS: baris 1-2. socks5h (bukan socks5) supaya nama host kantor di-resolve DNS kantor di dalam container.',
+    vpn_s5_n2: 'Biar singkat: buat alias sekali (baris 3), lalu pakai git vpn pull / git vpn push (baris 4). git pull biasa tetap tanpa proxy, alias hanya aktif kalau mengetik git vpn.',
+    vpn_s5_n3: 'Remote SSH (git@server:...): baris 5, jalankan dari Git Bash (connect ada di Git). Atau pasang ProxyCommand di ~/.ssh/config seperti langkah 4, lalu git pull/push biasa.',
+    vpn_s5_n4: 'Kalau container VPN mati, pull/push ke server kantor gagal koneksi: nyalakan dulu run_vpn_docker.ps1. Server dengan sertifikat self-signed: tambahkan -c http.sslVerify=false di perintah yang sama.',
     vpn_trouble: 'Masalah yang sering muncul', vpn_th_sym: 'Gejala', vpn_th_fix: 'Penyebab / solusi',
     vpn_t1_a: 'Couldn\'t set tty to PPP discipline', vpn_t1_b: 'Container perlu izin SYS_MODULE untuk memuat modul ppp_async. Versi script di zip sudah memakainya.',
     vpn_t2_a: 'Browser "localhost refused to connect" setelah login SAML', vpn_t2_b: 'Port 8020 dipakai aplikasi lain atau container berhenti. Cek -Logs.',
     vpn_t3_a: 'Login ditolak', vpn_t3_b: 'Username/password salah: jalankan -Reset. Jangan diulang terus supaya akun tidak terkunci.',
     vpn_t4_a: 'Login sukses tapi langsung putus', vpn_t4_b: 'FortiGate mewajibkan FortiClient asli (EMS/compliance); cara ini tidak bisa untuk profil itu.',
     vpn_t5_a: 'ports are not available', vpn_t5_b: 'Port 1080/8020 bentrok atau masuk range yang direservasi Windows. Pakai -SocksPort lain dan samakan port di extension; port 8020 dipakai FortiGate untuk SAML.',
-    vpn_policy: 'Pastikan pemakaian split seperti ini sesuai kebijakan IT kantor.'
+    vpn_policy: 'Pastikan pemakaian split seperti ini sesuai kebijakan IT kantor.',
+    vpn_d_lane: 'Lewat VPN kantor', vpn_d_chrome: 'Chrome + extension', vpn_d_chrome2: 'hanya alamat kantor', vpn_d_ssh: 'SSH / MobaXterm / DB', vpn_d_ssh2: 'proxy SOCKS5',
+    vpn_d_docker: 'Docker: openfortivpn', vpn_d_docker2: 'tunnel ppp0 di container', vpn_d_forti: 'FortiGate kantor', vpn_d_forti2: 'password/OTP/SAML',
+    vpn_d_int: 'Server internal', vpn_d_int2: '10.x / intranet', vpn_d_sep: 'Di luar VPN', vpn_d_other: 'Tab & aplikasi lain', vpn_d_other2: 'Windows tidak ikut VPN',
+    vpn_d_direct: 'langsung, tanpa VPN', vpn_d_caption: 'VPN kantor hanya dipakai Chrome & SSH. PC tetap memakai internet biasa, tanpa FortiClient.'
   },
   en: {
     tab_vpn: 'VPN Docker', grp_vpn_title: 'VPN Docker', grp_vpn_desc: 'Calls no API: just a guide and a download to run on your PC.',
@@ -6409,13 +6419,22 @@ const VPN_I18N = {
     vpn_s4_n2: 'PuTTY: Connection → Proxy → SOCKS 5, 127.0.0.1:1080, "Do DNS name lookup at proxy end" = Yes. WinSCP: Advanced → Connection → Proxy → SOCKS5.',
     vpn_s4_n3: 'DBeaver / DB clients: Proxy tab (or SSH → Proxy) → SOCKS5 127.0.0.1:1080. The second line is for Git Bash (connect.exe ships with Git).',
     vpn_s4_n4: 'Ping from Windows does not use the proxy (SOCKS is TCP only). Check the network with the third command.',
+    vpn_s5_title: '5. Git pull/push to the office git server', vpn_s5_desc: 'The proxy is set per command with -c, so there is no global setting to undo. git commit needs no proxy (no network).',
+    vpn_s5_n1: 'HTTPS remote: lines 1-2. Use socks5h (not socks5) so office host names are resolved by the office DNS inside the container.',
+    vpn_s5_n2: 'Shortcut: create the alias once (line 3), then use git vpn pull / git vpn push (line 4). Plain git pull stays direct; the alias only applies when you type git vpn.',
+    vpn_s5_n3: 'SSH remote (git@server:...): line 5, run it from Git Bash (connect ships with Git). Or put the ProxyCommand in ~/.ssh/config as in step 4, then plain git pull/push.',
+    vpn_s5_n4: 'If the VPN container is down, pull/push to the office server fails to connect: start run_vpn_docker.ps1 first. Self-signed server: add -c http.sslVerify=false to the same command.',
     vpn_trouble: 'Common problems', vpn_th_sym: 'Symptom', vpn_th_fix: 'Cause / fix',
     vpn_t1_a: 'Couldn\'t set tty to PPP discipline', vpn_t1_b: 'The container needs SYS_MODULE to load the ppp_async module. The script in the zip already uses it.',
     vpn_t2_a: 'Browser shows "localhost refused to connect" after the SAML login', vpn_t2_b: 'Port 8020 is used by another app or the container stopped. Check -Logs.',
     vpn_t3_a: 'Login rejected', vpn_t3_b: 'Wrong username/password: run -Reset. Do not retry over and over or the account may get locked.',
     vpn_t4_a: 'Login succeeds but drops right away', vpn_t4_b: 'The FortiGate requires the real FortiClient (EMS/compliance); this method cannot be used for that profile.',
     vpn_t5_a: 'ports are not available', vpn_t5_b: 'Port 1080/8020 is taken or inside a range reserved by Windows. Use another -SocksPort and set the same port in the extension; port 8020 is fixed by the FortiGate for SAML.',
-    vpn_policy: 'Make sure this kind of split access is allowed by your office IT policy.'
+    vpn_policy: 'Make sure this kind of split access is allowed by your office IT policy.',
+    vpn_d_lane: 'Through the office VPN', vpn_d_chrome: 'Chrome + extension', vpn_d_chrome2: 'office addresses only', vpn_d_ssh: 'SSH / MobaXterm / DB', vpn_d_ssh2: 'SOCKS5 proxy',
+    vpn_d_docker: 'Docker: openfortivpn', vpn_d_docker2: 'ppp0 tunnel in a container', vpn_d_forti: 'Office FortiGate', vpn_d_forti2: 'password/OTP/SAML',
+    vpn_d_int: 'Internal servers', vpn_d_int2: '10.x / intranet', vpn_d_sep: 'Outside the VPN', vpn_d_other: 'Other tabs & apps', vpn_d_other2: 'Windows stays off the VPN',
+    vpn_d_direct: 'direct, no VPN', vpn_d_caption: 'The office VPN is used only by Chrome & SSH. The PC keeps its normal internet, no FortiClient needed.'
   }
 };
 Object.keys(VPN_I18N).forEach(l => { I18N[l] = Object.assign({}, VPN_I18N[l], I18N[l] || {}); });
