@@ -7,6 +7,7 @@
   'use strict';
   const LIM = { entry: 96 << 20, strings: 600000, nodes: 60000, depth: 64, files: 14, scanBytes: 24 << 20, budget: 320 << 20, splits: 6, show: 8 };
   const PLAY_TARGET_SDK = 35; // acuan batas targetSdk Play Store (Agustus 2025); perbarui tiap tahun
+  const REC_MIN_SDK = 26; // saran minSdk: Android 8.0 ke atas (batasan latar belakang, TLS modern, perbaikan keamanan)
   const dec8 = new TextDecoder('utf-8'), dec16 = new TextDecoder('utf-16le'), decL = new TextDecoder('latin1');
   const u16 = (b, o) => b[o] | (b[o + 1] << 8);
   const u32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
@@ -24,7 +25,7 @@
     ak_cleartext: ['usesCleartextTraffic=true: lalu lintas HTTP tanpa enkripsi diizinkan (CWE-319, MASVS-NETWORK-1).', 'usesCleartextTraffic=true: unencrypted HTTP traffic is allowed (CWE-319, MASVS-NETWORK-1).'],
     ak_cleartext_def: ['targetSdk {x} < 28: HTTP biasa diizinkan secara default (CWE-319).', 'targetSdk {x} < 28: plain HTTP is allowed by default (CWE-319).'],
     ak_legacystorage: ['requestLegacyExternalStorage=true: akses penyimpanan luas yang sudah dibatasi Android baru (MASVS-STORAGE-2).', 'requestLegacyExternalStorage=true: broad storage access that newer Android restricts (MASVS-STORAGE-2).'],
-    ak_minsdk: ['minSdk {x} (Android {y}) sudah lama: perangkat itu tidak lagi menerima perbaikan keamanan (MASVS-CODE-1).', 'minSdk {x} (Android {y}) is old: those devices no longer get security fixes (MASVS-CODE-1).'],
+    ak_minsdk: ['minSdk {x} (Android {y}) lebih lama dari saran (≥ {z}): perangkat lama tidak lagi menerima perbaikan keamanan (MASVS-CODE-1).', 'minSdk {x} (Android {y}) is older than recommended (≥ {z}): old devices no longer get security fixes (MASVS-CODE-1).'],
     ak_targetsdk: ['targetSdk {x} tertinggal dari acuan Play Store {y}: perlindungan platform baru tidak berlaku bagi aplikasi ini (MASVS-CODE-1).', 'targetSdk {x} is behind the Play Store reference {y}: newer platform protections do not apply to this app (MASVS-CODE-1).'],
     ak_perm_high: ['Izin berisiko tinggi: {x}', 'High-risk permissions: {x}'],
     ak_perm_med: ['Izin sensitif: {x}', 'Sensitive permissions: {x}'],
@@ -82,6 +83,7 @@
   };
   const LBL = {
     kind: ['Jenis paket', 'Package kind'], pkg: ['Paket / Bundle ID', 'Package / Bundle ID'], ver: ['Versi', 'Version'], sdk: ['SDK min / target', 'SDK min / target'],
+    sdkmin: ['SDK minimum (perangkat terlama yang didukung)', 'Minimum SDK (oldest supported device)'], sdktgt: ['SDK target (perilaku keamanan yang diterapkan)', 'Target SDK (security behavior applied)'],
     perms: ['Izin', 'Permissions'], comps: ['Komponen', 'Components'], links: ['Deep link', 'Deep links'], sig: ['Tanda tangan', 'Signature'], cert: ['Sertifikat', 'Certificate'],
     dex: ['Berkas DEX', 'DEX files'], abi: ['ABI native', 'Native ABIs'], fw: ['Framework', 'Framework'], obf: ['Obfuscation', 'Obfuscation'], app: ['Application', 'Application'],
     split: ['Split APK', 'Split APKs'], ats: ['ATS', 'ATS'], schemes: ['URL scheme', 'URL schemes'], exec: ['Executable', 'Executable'], strs: ['String dipindai', 'Strings scanned']
@@ -247,32 +249,74 @@
     }));
     return m;
   }
-  // Izin: [tingkat, deskripsi ID, deskripsi EN]; nama tanpa awalan android.permission.
+  // Izin: nama pendek -> [kategori, risiko (H/M/L/I), penjelasan ID, penjelasan EN]. Nama tanpa awalan android.permission.
   const PERM = {
-    BIND_ACCESSIBILITY_SERVICE: ['H', 'mengendalikan layar & membaca aplikasi lain', 'controls the screen and reads other apps'],
-    MANAGE_EXTERNAL_STORAGE: ['H', 'akses ke semua file', 'access to all files'],
-    READ_SMS: ['H', 'baca SMS/OTP', 'reads SMS/OTP'], RECEIVE_SMS: ['H', 'terima SMS/OTP', 'receives SMS/OTP'], SEND_SMS: ['H', 'kirim SMS', 'sends SMS'],
-    READ_CALL_LOG: ['H', 'baca riwayat panggilan', 'reads the call log'], WRITE_CALL_LOG: ['H', 'ubah riwayat panggilan', 'edits the call log'], PROCESS_OUTGOING_CALLS: ['H', 'pantau panggilan keluar', 'monitors outgoing calls'],
-    ACCESS_BACKGROUND_LOCATION: ['H', 'lokasi di latar belakang', 'background location'], READ_LOGS: ['H', 'baca log sistem', 'reads system logs'], BIND_DEVICE_ADMIN: ['H', 'admin perangkat', 'device admin'],
-    WRITE_SECURE_SETTINGS: ['H', 'ubah setelan aman', 'edits secure settings'], INSTALL_PACKAGES: ['H', 'pasang aplikasi diam-diam', 'installs apps silently'],
-    REQUEST_INSTALL_PACKAGES: ['M', 'memasang APK lain', 'installs other APKs'], SYSTEM_ALERT_WINDOW: ['M', 'overlay layar (tapjacking)', 'screen overlay (tapjacking)'],
-    READ_CONTACTS: ['M', 'baca kontak', 'reads contacts'], WRITE_CONTACTS: ['M', 'ubah kontak', 'edits contacts'], GET_ACCOUNTS: ['M', 'daftar akun', 'lists accounts'],
-    RECORD_AUDIO: ['M', 'merekam suara', 'records audio'], ACCESS_FINE_LOCATION: ['M', 'lokasi presisi', 'precise location'],
-    READ_PHONE_STATE: ['M', 'identitas telepon', 'phone identity'], READ_PHONE_NUMBERS: ['M', 'nomor telepon', 'phone numbers'], CALL_PHONE: ['M', 'menelepon', 'places calls'],
-    WRITE_EXTERNAL_STORAGE: ['M', 'tulis penyimpanan bersama', 'writes shared storage'], QUERY_ALL_PACKAGES: ['M', 'daftar semua aplikasi terpasang', 'lists all installed apps'],
-    READ_CALENDAR: ['M', 'baca kalender', 'reads the calendar'], WRITE_CALENDAR: ['M', 'ubah kalender', 'edits the calendar'], BODY_SENSORS: ['M', 'sensor tubuh', 'body sensors'], DISABLE_KEYGUARD: ['M', 'matikan kunci layar', 'disables the keyguard'],
-    CAMERA: ['L', 'kamera', 'camera'], ACCESS_COARSE_LOCATION: ['L', 'lokasi kasar', 'coarse location'], READ_EXTERNAL_STORAGE: ['L', 'baca penyimpanan bersama', 'reads shared storage'],
-    READ_MEDIA_IMAGES: ['L', 'baca foto', 'reads photos'], READ_MEDIA_VIDEO: ['L', 'baca video', 'reads videos'], READ_MEDIA_AUDIO: ['L', 'baca audio', 'reads audio'],
-    RECEIVE_BOOT_COMPLETED: ['L', 'jalan otomatis saat boot', 'autostarts on boot'], ACTIVITY_RECOGNITION: ['L', 'aktivitas fisik', 'physical activity'], USE_FULL_SCREEN_INTENT: ['L', 'layar penuh otomatis', 'full-screen intents'],
-    BLUETOOTH_CONNECT: ['L', 'koneksi Bluetooth', 'Bluetooth connect'], BLUETOOTH_SCAN: ['L', 'pindai Bluetooth', 'Bluetooth scan'], CHANGE_WIFI_STATE: ['L', 'ubah Wi-Fi', 'changes Wi-Fi']
+    READ_EXTERNAL_STORAGE: ['f', 'L', 'baca file di penyimpanan bersama', 'reads files in shared storage'],
+    WRITE_EXTERNAL_STORAGE: ['f', 'M', 'tulis/ubah file di penyimpanan bersama', 'writes files in shared storage'],
+    MANAGE_EXTERNAL_STORAGE: ['f', 'H', 'akses ke SEMUA file di perangkat', 'access to ALL files on the device'],
+    READ_MEDIA_IMAGES: ['f', 'L', 'baca foto', 'reads photos'], READ_MEDIA_VIDEO: ['f', 'L', 'baca video', 'reads videos'], READ_MEDIA_AUDIO: ['f', 'L', 'baca audio/musik', 'reads audio/music'],
+    READ_MEDIA_VISUAL_USER_SELECTED: ['f', 'L', 'baca foto/video yang dipilih pengguna', 'reads photos/videos the user picked'], ACCESS_MEDIA_LOCATION: ['f', 'M', 'baca lokasi GPS di metadata foto', 'reads GPS location in photo metadata'],
+    ACCESS_FINE_LOCATION: ['l', 'M', 'lokasi presisi (GPS)', 'precise location (GPS)'], ACCESS_COARSE_LOCATION: ['l', 'L', 'lokasi perkiraan', 'approximate location'],
+    ACCESS_BACKGROUND_LOCATION: ['l', 'H', 'lokasi saat aplikasi di latar belakang', 'location while the app is in the background'],
+    CAMERA: ['c', 'M', 'memakai kamera', 'uses the camera'], RECORD_AUDIO: ['c', 'M', 'merekam suara (mikrofon)', 'records audio (microphone)'],
+    READ_CONTACTS: ['p', 'M', 'baca kontak', 'reads contacts'], WRITE_CONTACTS: ['p', 'M', 'ubah kontak', 'edits contacts'], GET_ACCOUNTS: ['p', 'M', 'daftar akun di perangkat', 'lists accounts on the device'],
+    READ_CALL_LOG: ['p', 'H', 'baca riwayat panggilan', 'reads the call log'], WRITE_CALL_LOG: ['p', 'H', 'ubah riwayat panggilan', 'edits the call log'], PROCESS_OUTGOING_CALLS: ['p', 'H', 'memantau panggilan keluar', 'monitors outgoing calls'],
+    READ_SMS: ['p', 'H', 'baca SMS (termasuk OTP)', 'reads SMS (including OTP)'], RECEIVE_SMS: ['p', 'H', 'menerima SMS (termasuk OTP)', 'receives SMS (including OTP)'], SEND_SMS: ['p', 'H', 'mengirim SMS', 'sends SMS'],
+    READ_PHONE_STATE: ['p', 'M', 'identitas dan status telepon', 'phone identity and status'], READ_PHONE_NUMBERS: ['p', 'M', 'nomor telepon sendiri', 'own phone number'], CALL_PHONE: ['p', 'M', 'melakukan panggilan telepon', 'places phone calls'],
+    ANSWER_PHONE_CALLS: ['p', 'M', 'menjawab panggilan', 'answers phone calls'], READ_CALENDAR: ['p', 'M', 'baca kalender', 'reads the calendar'], WRITE_CALENDAR: ['p', 'M', 'ubah kalender', 'edits the calendar'],
+    BODY_SENSORS: ['p', 'M', 'sensor tubuh (detak jantung)', 'body sensors (heart rate)'], ACTIVITY_RECOGNITION: ['p', 'L', 'mengenali aktivitas fisik (jalan, lari)', 'recognizes physical activity (walking, running)'],
+    INTERNET: ['n', 'I', 'akses internet', 'internet access'], ACCESS_NETWORK_STATE: ['n', 'I', 'cek status jaringan', 'checks network state'], ACCESS_WIFI_STATE: ['n', 'I', 'cek status Wi-Fi', 'checks Wi-Fi state'],
+    CHANGE_WIFI_STATE: ['n', 'L', 'ubah koneksi Wi-Fi', 'changes the Wi-Fi connection'], CHANGE_NETWORK_STATE: ['n', 'L', 'ubah status jaringan', 'changes network state'],
+    BLUETOOTH: ['n', 'L', 'Bluetooth dasar (versi lama, sebelum Android 12)', 'basic Bluetooth (legacy, before Android 12)'], BLUETOOTH_ADMIN: ['n', 'L', 'kelola/pasangkan Bluetooth (versi lama)', 'manages/pairs Bluetooth (legacy)'],
+    BLUETOOTH_SCAN: ['n', 'L', 'mencari perangkat Bluetooth di sekitar', 'scans for nearby Bluetooth devices'], BLUETOOTH_CONNECT: ['n', 'L', 'terhubung ke perangkat Bluetooth', 'connects to Bluetooth devices'],
+    BLUETOOTH_ADVERTISE: ['n', 'L', 'menyiarkan Bluetooth ke perangkat sekitar', 'advertises Bluetooth to nearby devices'], NEARBY_WIFI_DEVICES: ['n', 'L', 'mencari perangkat Wi-Fi di sekitar', 'finds nearby Wi-Fi devices'], NFC: ['n', 'L', 'memakai NFC', 'uses NFC'],
+    SYSTEM_ALERT_WINDOW: ['u', 'M', 'menampilkan layar di atas aplikasi lain (risiko tapjacking)', 'draws over other apps (tapjacking risk)'], POST_NOTIFICATIONS: ['u', 'I', 'menampilkan notifikasi', 'shows notifications'],
+    USE_FULL_SCREEN_INTENT: ['u', 'L', 'membuka layar penuh otomatis', 'opens full-screen automatically'], ACCESS_NOTIFICATION_POLICY: ['u', 'I', 'mengatur mode Jangan Ganggu', 'manages Do Not Disturb'], VIBRATE: ['u', 'I', 'getar', 'vibration'],
+    SCHEDULE_EXACT_ALARM: ['u', 'L', 'alarm/jadwal tepat waktu', 'exact alarms/schedules'], USE_EXACT_ALARM: ['u', 'L', 'alarm tepat waktu (otomatis)', 'exact alarms (automatic)'],
+    BROADCAST_CLOSE_SYSTEM_DIALOGS: ['u', 'I', 'menutup dialog sistem (usang)', 'closes system dialogs (deprecated)'], BIND_ACCESSIBILITY_SERVICE: ['u', 'H', 'mengendalikan layar dan membaca isi aplikasi lain', 'controls the screen and reads other apps\' content'],
+    WAKE_LOCK: ['s', 'I', 'mencegah perangkat tidur', 'keeps the device awake'], FOREGROUND_SERVICE: ['s', 'I', 'berjalan sebagai layanan latar depan', 'runs as a foreground service'],
+    RECEIVE_BOOT_COMPLETED: ['s', 'L', 'jalan otomatis saat perangkat menyala', 'starts automatically at boot'], REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: ['s', 'L', 'minta dikecualikan dari penghemat baterai', 'asks to be exempt from battery optimization'],
+    REQUEST_INSTALL_PACKAGES: ['s', 'M', 'memasang APK lain', 'installs other APKs'], INSTALL_PACKAGES: ['s', 'H', 'memasang aplikasi tanpa konfirmasi', 'installs apps without confirmation'], QUERY_ALL_PACKAGES: ['s', 'M', 'melihat daftar semua aplikasi terpasang', 'sees all installed apps'],
+    READ_LOGS: ['s', 'H', 'baca log sistem', 'reads system logs'], BIND_DEVICE_ADMIN: ['s', 'H', 'menjadi admin perangkat', 'becomes a device admin'], WRITE_SECURE_SETTINGS: ['s', 'H', 'ubah setelan keamanan sistem', 'edits secure system settings'],
+    WRITE_SETTINGS: ['s', 'L', 'ubah setelan sistem', 'edits system settings'], DISABLE_KEYGUARD: ['s', 'M', 'mematikan kunci layar', 'disables the lock screen'], USE_BIOMETRIC: ['s', 'I', 'sidik jari/wajah untuk login', 'fingerprint/face for sign-in'],
+    USE_FINGERPRINT: ['s', 'I', 'sidik jari (versi lama)', 'fingerprint (legacy)'], MODIFY_AUDIO_SETTINGS: ['s', 'I', 'ubah pengaturan audio', 'changes audio settings'], KILL_BACKGROUND_PROCESSES: ['s', 'L', 'menghentikan proses aplikasi lain', 'kills other apps\' processes'], GET_TASKS: ['s', 'L', 'melihat aplikasi yang sedang berjalan', 'sees running apps']
   };
+  const OTHER_PERM = {
+    'com.google.android.c2dm.permission.RECEIVE': ['terima notifikasi push (FCM)', 'receives push notifications (FCM)'], 'com.android.vending.BILLING': ['pembelian dalam aplikasi (Google Play)', 'in-app purchases (Google Play)'],
+    'com.google.android.gms.permission.AD_ID': ['ID iklan Google', 'Google advertising ID'], 'com.android.vending.CHECK_LICENSE': ['cek lisensi Google Play', 'Google Play license check']
+  };
+  const CAT = {
+    f: ['📁', 'Penyimpanan & file', 'Storage & files'], l: ['📍', 'Lokasi', 'Location'], c: ['📷', 'Kamera & mikrofon', 'Camera & microphone'], p: ['👤', 'Kontak, telepon & SMS', 'Contacts, phone & SMS'],
+    n: ['📶', 'Jaringan, Wi-Fi & Bluetooth', 'Network, Wi-Fi & Bluetooth'], u: ['🔔', 'Notifikasi, layar & alarm', 'Notifications, screen & alarms'], s: ['⚙️', 'Sistem & latar belakang', 'System & background'], o: ['❓', 'Lainnya / kustom', 'Other / custom']
+  };
+  const RISK = { H: ['🔴', 'berisiko tinggi', 'high risk'], M: ['🟠', 'sensitif', 'sensitive'], L: ['🟡', 'perlu ditinjau', 'worth reviewing'], I: ['⚪', 'umum', 'common'] };
   const permShort = (p) => p.replace(/^android\.permission\./, '');
+  function permInfo(p, pkg, L) {
+    const s = permShort(p), isA = /^android\.permission\./.test(p), r = isA && PERM[s], fg = isA && /^FOREGROUND_SERVICE_(.+)$/.exec(s);
+    if (r) return [r[0], r[1], r[2 + L]];
+    if (fg) return ['s', 'I', (L ? 'foreground service: ' : 'layanan latar depan: ') + fg[1].toLowerCase().replace(/_/g, ' ')];
+    if (OTHER_PERM[p]) return ['o', 'I', OTHER_PERM[p][L]];
+    if (pkg && p.startsWith(pkg + '.')) return ['o', 'I', L ? 'custom permission of this app' : 'izin kustom milik aplikasi ini'];
+    return ['o', 'I', isA ? (L ? 'other Android permission' : 'izin Android lainnya') : (L ? 'third-party / custom permission' : 'izin pihak ketiga / kustom')];
+  }
   function permFinds(m, L, add) {
     const g = { H: [], M: [], L: [] };
-    m.perms.forEach(p => { const r = PERM[permShort(p)]; if (r && /^android\.permission\./.test(p)) g[r[0]].push(permShort(p) + ' (' + r[1 + L] + ')'); });
+    m.perms.forEach(p => { const r = /^android\.permission\./.test(p) && PERM[permShort(p)]; if (r && g[r[1]]) g[r[1]].push(permShort(p) + ' (' + r[2 + L] + ')'); });
     if (g.H.length) add('HIGH', 'ak_perm_high', { x: more(g.H, 12) });
     if (g.M.length) add('MEDIUM', 'ak_perm_med', { x: more(g.M, 12) });
     if (g.L.length) add('LOW', 'ak_perm_low', { x: more(g.L, 12) });
+  }
+  // Baris metadata izin: ringkasan + satu baris per kategori (ikon risiko, nama izin, penjelasan). Dipecah ≤ 540 karakter per baris.
+  function permRows(m, L, R) {
+    const by = {}, cnt = { H: 0, M: 0, L: 0, I: 0 }, ord = 'HMLI';
+    m.perms.forEach(p => { const [c, r, d] = permInfo(p, m.pkg, L); (by[c] = by[c] || []).push([r, RISK[r][0] + ' ' + permShort(p) + ' — ' + d]); cnt[r]++; });
+    R.meta.push([LBL.perms[L] + ' (' + m.perms.length + ')', ord.split('').map(k => RISK[k][0] + ' ' + cnt[k] + ' ' + RISK[k][1 + L]).join(' · ')]);
+    Object.keys(CAT).filter(c => by[c]).forEach(c => {
+      let buf = [], len = 0, part = 0;
+      const flush = () => { if (buf.length) R.meta.push([CAT[c][0] + ' ' + CAT[c][1 + L] + ' (' + by[c].length + ')' + (part++ ? ' …' : ''), buf.join('\n')]); buf = []; len = 0; };
+      by[c].sort((a, b) => ord.indexOf(a[0]) - ord.indexOf(b[0])).forEach(x => { if (len + x[1].length > 540) flush(); buf.push(x[1]); len += x[1].length + 1; });
+      flush();
+    });
   }
   const weakLevel = (lv) => { const n = num(lv); return /^(normal|dangerous)$/i.test(lv) || (Number.isFinite(n) && /^[0-9]/.test(lv) && ((n & 0xf) === 0 || (n & 0xf) === 1)); };
   function compFinds(m, add) {
@@ -298,8 +342,16 @@
     if (web.length) add('LOW', 'ak_deeplink_web', { x: more(uniq(web)) });
     return uniq(all);
   }
-  const ANDROID_API = { 19: '4.4', 21: '5.0', 23: '6.0', 24: '7.0', 26: '8.0', 28: '9', 29: '10', 30: '11', 31: '12', 33: '13', 34: '14', 35: '15' };
-  const apiName = (n) => ANDROID_API[n] || ANDROID_API[Object.keys(ANDROID_API).filter(k => +k <= n).pop()] || '?';
+  // API level -> versi Android (nama kode hanya untuk versi lama yang resmi bernama).
+  const ANDROID = { 14: '4.0 Ice Cream Sandwich', 15: '4.0.3', 16: '4.1 Jelly Bean', 17: '4.2', 18: '4.3', 19: '4.4 KitKat', 21: '5.0 Lollipop', 22: '5.1', 23: '6.0 Marshmallow', 24: '7.0 Nougat', 25: '7.1', 26: '8.0 Oreo', 27: '8.1', 28: '9 Pie', 29: '10', 30: '11', 31: '12', 32: '12L', 33: '13', 34: '14', 35: '15', 36: '16' };
+  const androidName = (n) => (ANDROID[n] ? 'Android ' + ANDROID[n] : (n > 36 ? 'API ' + n : '?'));
+  const apiLabel = (n) => 'API ' + n + ' = ' + androidName(n);
+  // Dua baris SDK yang mudah dibaca: setara Android berapa, apakah sesuai saran.
+  function sdkRows(m, L, R) {
+    const st = (ok, yes, no) => (ok ? '✅ ' + yes : '⚠️ ' + no);
+    if (m.min) R.meta.push([LBL.sdkmin[L], st(m.min >= REC_MIN_SDK, L ? 'meets the recommendation' : 'sesuai saran', L ? 'older than recommended' : 'lebih lama dari saran') + ' — ' + apiLabel(m.min) + (L ? '. Recommended ≥ ' : '. Disarankan ≥ ') + apiLabel(REC_MIN_SDK)]);
+    R.meta.push([LBL.sdktgt[L], st(m.target >= PLAY_TARGET_SDK, L ? 'meets the Play Store reference' : 'memenuhi acuan Play Store', L ? 'below the Play Store reference' : 'di bawah acuan Play Store') + ' — ' + apiLabel(m.target) + (L ? '. Recommended ≥ ' : '. Disarankan ≥ ') + apiLabel(PLAY_TARGET_SDK)]);
+  }
   function manifestFinds(m, L, add) {
     const a = m.app;
     if (a.debuggable === 'true') add('HIGH', 'ak_debuggable');
@@ -308,7 +360,7 @@
     if (a.usesCleartextTraffic === 'true') add('MEDIUM', 'ak_cleartext');
     else if (a.usesCleartextTraffic === undefined && !a.networkSecurityConfig && m.target < 28) add('LOW', 'ak_cleartext_def', { x: m.target });
     if (a.requestLegacyExternalStorage === 'true') add('LOW', 'ak_legacystorage');
-    if (m.min && m.min < 24) add(m.min < 21 ? 'MEDIUM' : 'LOW', 'ak_minsdk', { x: m.min, y: apiName(m.min) });
+    if (m.min && m.min < REC_MIN_SDK) add(m.min < 21 ? 'MEDIUM' : 'LOW', 'ak_minsdk', { x: m.min, y: androidName(m.min).replace('Android ', ''), z: apiLabel(REC_MIN_SDK) });
     if (m.target < PLAY_TARGET_SDK) add(m.target < 28 ? 'HIGH' : (m.target < 33 ? 'MEDIUM' : 'LOW'), 'ak_targetsdk', { x: m.target, y: PLAY_TARGET_SDK });
     permFinds(m, L, add); compFinds(m, add);
   }
@@ -521,11 +573,11 @@
     if (m) {
       R.meta.push([LBL.pkg[L], m.pkg]);
       R.meta.push([LBL.ver[L], m.vn + (m.vc ? ' (' + m.vc + ')' : '')]);
-      R.meta.push([LBL.sdk[L], (m.min || '?') + ' / ' + m.target]);
+      sdkRows(m, L, R);
       if (m.app.name) R.meta.push([LBL.app[L], m.app.name]);
       manifestFinds(m, L, add);
       const links = linkFinds(m, add);
-      R.meta.push([LBL.perms[L] + ' (' + m.perms.length + ')', m.perms.map(permShort).join(', ')]);
+      permRows(m, L, R);
       R.meta.push([LBL.comps[L], ['activity', 'service', 'receiver', 'provider'].map(t => t + ' ' + m.comps.filter(x => x.tag === t).length).join(', ')]);
       if (links.length) R.meta.push([LBL.links[L], more(links, 12)]);
       try { await nscFinds(c, m, add); } catch (e) { add('INFO', 'ak_parse_fail', { x: 'network_security_config' }); }
