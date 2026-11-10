@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.14';
+    window.APP_VERSION = '2.15';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -2610,6 +2610,6 @@
     </div>
   </div>
 
-  <script>loadVersioned(document.body, ['js/core-pipe.js', 'js/scanners.js', 'js/hooks-ops.js', 'js/app.js']);</script>
+  <script>loadVersioned(document.body, ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/app.js']);</script>
 </body>
 </html>

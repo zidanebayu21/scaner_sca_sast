@@ -3537,6 +3537,14 @@ async function zipText(ctx, e) {
   const p = e.local, off = p + 30 + u16le(ctx.b, p + 26) + u16le(ctx.b, p + 28), data = ctx.b.subarray(off, off + e.csize);
   try { return new TextDecoder().decode(e.method === 0 ? data : await inflateBytes(data, 'deflate-raw')); } catch (err) { return ''; }
 }
+// Analisis keamanan aplikasi mobile (manifest, izin, komponen, tanda tangan, string/secret); logika di js/apk.js, semua lokal.
+async function fiMobile(ctx) {
+  try {
+    const res = await ApkScan.scan(ctx.b, { lang: LANG === 'en' ? 'en' : 'id', name: ctx.file.name, inflate: u => inflateBytes(u, 'deflate-raw') });
+    res.meta.forEach(([k, v]) => ctx.meta(k, v));
+    res.finds.forEach(f => ctx.find(f.sev, f.key, f.vars));
+  } catch (e) { ctx.find('INFO', 'ak_parse_fail', { x: e.message }); }
+}
 const xmlDoc = s => new DOMParser().parseFromString(s, 'application/xml');
 const xmlVal = (doc, tag) => { const el = doc.getElementsByTagNameNS('*', tag)[0]; return el ? el.textContent.trim() : ''; };
 async function fiZip(ctx) {
@@ -3546,14 +3554,17 @@ async function fiZip(ctx) {
   const total = list.reduce((s, e) => s + e.size, 0), comp = list.reduce((s, e) => s + e.csize, 0);
   ctx.meta(tr('fi_m_entries'), list.length);
   ctx.meta(tr('fi_m_unzipped'), humanSize(total));
+  const mob = typeof ApkScan !== 'undefined' ? ApkScan.kind(names) : null; // APK / AAB / XAPK / IPA (js/apk.js)
   const kind = OOXML_KIND.find(([dir]) => names.includes('[Content_Types].xml') && names.some(n => n.startsWith(dir)));
   const mimetype = byName('mimetype') ? (await zipText(ctx, byName('mimetype'))).trim() : '';
   if (kind) Object.assign(ctx.r.det, { label: kind[1], ext: kind[2] });
   else if (mimetype === 'application/epub+zip') Object.assign(ctx.r.det, { label: 'EPUB', ext: ['epub'] });
   else if (mimetype.includes('opendocument')) Object.assign(ctx.r.det, { label: 'OpenDocument', ext: ['odt', 'ods', 'odp', 'odg', 'odf', 'ott'] });
+  else if (mob) Object.assign(ctx.r.det, { label: mob.label, ext: mob.ext, exec: true });
   else if (names.includes('AndroidManifest.xml')) Object.assign(ctx.r.det, { label: 'Android APK', ext: ['apk', 'aab', 'xapk'], exec: true });
   else if (names.includes('META-INF/MANIFEST.MF')) Object.assign(ctx.r.det, { label: 'Java JAR', ext: ['jar', 'war', 'ear'], exec: true });
   if (mimetype) ctx.meta('mimetype', mimetype);
+  if (mob) await fiMobile(ctx);
   // Keamanan arsip
   const slip = names.find(n => /(^|[\\/])\.\.([\\/]|$)/.test(n) || /^([a-z]:)?[\\/]/i.test(n));
   if (slip) ctx.find('HIGH', 'fi_s_zip_slip', { x: slip });
