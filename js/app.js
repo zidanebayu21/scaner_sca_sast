@@ -36,6 +36,7 @@ const TAB_LIST = [
 ];
 const COLAB_SONAR_URL = 'https://colab.research.google.com/drive/1_Mx-FfnXU9aqYy6UqIzlX7myA3ysdwSt?usp=sharing';
 const COLAB_AI_URL = 'https://colab.research.google.com/drive/1J0ikc9KemPid4dzbdNQeQkHDRRovoTBP?usp=sharing';
+const COLAB_DBEAVER_URL = 'https://colab.research.google.com/drive/1zB9iat3NLv8XQ8GFQB8lww8pdZrpkAW7?usp=sharing';
 // Potongan jawaban dari satu baris SSE chat completions ("data: {...}"); baris lain diabaikan.
 function aiDelta(line) {
   const d = line.replace(/^data:\s*/, '').trim();
@@ -131,7 +132,7 @@ createApp({
       wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },
       gl: { sources: [], commits: [], order: {}, binfo: {}, leak: {}, leakVer: 0, leakShow: false, leakSev: '', branch: '', zoom: 0, q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, dateKind: 'a', view: 'list', page: 300, sel: null, files: null, filesBusy: false, busy: false, prog: '', err: '', msg: '', paste: '', pasteName: '', over: false, max: 20000, repNoMerge: true, copied: false },
       clock: { q: '', pins: [], now: Date.now(), live: true, fixedMs: null, base: 'mine', ts: '', copied: false },
-      colab: { sonarUrl: COLAB_SONAR_URL, paste: '', url: '', token: '', key: '', copied: '', aiNotebook: COLAB_AI_URL,
+      colab: { sonarUrl: COLAB_SONAR_URL, paste: '', url: '', token: '', key: '', copied: '', aiNotebook: COLAB_AI_URL, dbNotebook: COLAB_DBEAVER_URL, dbUrl: '',
         ai: { url: '', key: '', model: '', msg: '', err: '', q: '', msgs: [], busy: false } },
       ping: { targets: [], collapsed: {}, form: { name: '', url: '', group: '', interval: 10, timeout: 5000, expect: 'any', method: 'GET' }, editId: null, bulk: '', bulkGroup: '', bulkInterval: 10, filter: 'all', q: '', selId: null, sound: true, alarmDown: false, notif: false, running: true, tick: 0, now: Date.now(), alarm: null, err: '', msg: '', mixedOk: location.protocol !== 'https:', mixedTesting: false, mixedAt: 0, dlBusy: false },
       swag: { url: '', text: '', over: false, busy: false, err: '', msg: '', model: null, src: '', baseUrl: '', token: '', tags: {}, fmt: 'pm', copied: false, scriptCopied: false },
@@ -174,6 +175,10 @@ createApp({
         ps: `$env:SONAR_TOKEN = "${token}"; sonar-scanner "-Dsonar.host.url=${url}"` + (key ? ` "-Dsonar.projectKey=${key}"` : ''),
         sh: `SONAR_TOKEN="${token}" sonar-scanner -Dsonar.host.url=${url}` + (key ? ` -Dsonar.projectKey=${key}` : '')
       };
+    },
+    // Link DBeaver Web (CloudBeaver) dari output notebook; hanya https agar tidak bisa disisipi javascript:/data: URL (OWASP ASVS V5.1.5).
+    colabDbHref() {
+      try { const u = new URL(this.colab.dbUrl.trim()); return u.protocol === 'https:' ? u.href : ''; } catch { return ''; }
     },
     cmdList() {
       const catTab = this.t('cmdCatTab'), catAct = this.t('cmdCatAct');

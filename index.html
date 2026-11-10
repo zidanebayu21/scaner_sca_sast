@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.12';
+    window.APP_VERSION = '2.13';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -651,6 +651,20 @@
           </div>
         </template>
         <div class="muted mt-15" v-html="t('colab_ai_note')"></div>
+
+        <h3 class="mt-5">{{ t('colab_db_head') }}</h3>
+        <p class="muted" v-html="t('colab_db_desc')"></p>
+        <div class="actions">
+          <a class="btn blue" :href="colab.dbNotebook" target="_blank" rel="noopener noreferrer">{{ t('colab_db_open') }}</a>
+        </div>
+        <ol class="muted list-tight">
+          <li v-for="n in 3" :key="n" v-html="t('colab_db_step' + n)"></li>
+        </ol>
+        <div class="row">
+          <input type="text" v-model="colab.dbUrl" :placeholder="t('colab_db_url')" />
+          <a class="btn" :class="{ disabled: !colabDbHref }" :href="colabDbHref || null" target="_blank" rel="noopener noreferrer">{{ t('colab_db_go') }}</a>
+        </div>
+        <div class="muted mt-15" v-html="t('colab_db_note')"></div>
       </section>
 
       <!-- JWT Decode dinonaktifkan: sudah tercakup di Smart Decode (recJwt memakai decodeJwt yang sama). Untuk mengaktifkan lagi: buka komentar ini, entri TAB_LIST 'jwt', serta kembalikan data jwtText dan computed jwt() { return decodeJwt(this.jwtText); }.

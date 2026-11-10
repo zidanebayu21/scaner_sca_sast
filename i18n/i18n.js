@@ -257,7 +257,15 @@ window.APP_I18N = {
         colab_ai_you: 'Anda', colab_ai_send: 'Tanya (Ctrl+Enter)', colab_ai_clear: 'Bersihkan percakapan',
         colab_ai_q_ph: 'Tanyakan kode Anda, mis. "Kenapa fungsi ini error?" lalu tempel kodenya...',
         colab_ai_system: 'Anda asisten pemrograman senior. Jawab dalam bahasa yang dipakai pengguna, ringkas dan tepat, sertakan contoh kode bila membantu. Untuk isu keamanan, jelaskan risikonya dan sebut referensi OWASP/CWE yang relevan.',
-        colab_ai_note: 'Pertanyaan dan kode dikirim ke runtime Colab Anda (lewat Cloudflare), bukan ke OpenAI/Gemini. API key hanya di memori halaman ini; link Hubungkan otomatis membawa key di bagian <code>#</code> URL (tidak terkirim ke server) dan langsung dihapus dari address bar. Runtime gratis terputus saat idle; setiap run baru URL dan API key berganti.'
+        colab_ai_note: 'Pertanyaan dan kode dikirim ke runtime Colab Anda (lewat Cloudflare), bukan ke OpenAI/Gemini. API key hanya di memori halaman ini; link Hubungkan otomatis membawa key di bagian <code>#</code> URL (tidak terkirim ke server) dan langsung dihapus dari address bar. Runtime gratis terputus saat idle; setiap run baru URL dan API key berganti.',
+        colab_db_head: 'DBeaver Web (CloudBeaver)',
+        colab_db_desc: 'Klien database berbasis web (PostgreSQL, MySQL, SQL Server, dll.) yang dijalankan di Colab dan dibuka lewat link publik <code>https://xxx.trycloudflare.com</code>. Browser tidak bisa konek langsung ke database lewat TCP, jadi CloudBeaver menjadi perantaranya: koneksi database ditambah dari halamannya.',
+        colab_db_open: '▶ Buka notebook DBeaver Web di Colab',
+        colab_db_step1: 'Buka notebook, <b>Connect</b>, isi <code>CB_ADMIN_USER</code> / <code>CB_ADMIN_PASS</code> di cell pertama (kosongkan <code>DB_*</code>), lalu jalankan cell 1 → 2 → 3 berurutan.',
+        colab_db_step2: 'Tunggu <b>CloudBeaver siap</b> (±1-2 menit, unduh dari Docker Hub sekali per runtime), lalu tempel link <code>trycloudflare.com</code> dari output ke kolom di bawah dan klik Buka. Login dengan admin yang tadi diisi.',
+        colab_db_step3: 'Tambah koneksi lewat <b>New Connection</b>; agar semua database di server terlihat, aktifkan <b>Show all databases</b> pada koneksi PostgreSQL.',
+        colab_db_url: 'URL CloudBeaver (https://....trycloudflare.com)', colab_db_go: 'Buka',
+        colab_db_note: 'Kredensial database diisi di halaman CloudBeaver (runtime Colab Anda), bukan di halaman ini. Ganti <code>CB_ADMIN_PASS</code> dari nilai contoh dan jangan bagikan link-nya. Runtime gratis terputus saat idle atau saldo compute habis; konfigurasi koneksi ikut hilang dan setiap run baru URL berganti.'
       },
       en: {
         tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
@@ -537,8 +545,16 @@ window.APP_I18N = {
         colab_ai_q_ph: 'Ask about your code, e.g. "Why does this function fail?" then paste the code...',
         colab_ai_system: 'You are a senior programming assistant. Answer in the language the user writes in, concise and precise, with code examples when helpful. For security issues, explain the risk and cite relevant OWASP/CWE references.',
         colab_ai_note: 'Questions and code are sent to your own Colab runtime (through Cloudflare), not to OpenAI/Gemini. The API key stays only in this page\'s memory; the auto-connect link carries the key in the URL <code>#</code> part (never sent to a server) and it is removed from the address bar immediately. Free runtimes disconnect when idle; every new run changes the URL and API key.',
-        grp_colab_title: 'Colab Server — SonarQube & AI',
-        grp_colab_desc: 'This page only calls the Colab server you run yourself: sonar-scanner on your computer sends code to SonarQube, and the Ask Code chat sends questions to the LLM gateway (API key), both through a Cloudflare quick tunnel.'
+        colab_db_head: 'DBeaver Web (CloudBeaver)',
+        colab_db_desc: 'A web-based database client (PostgreSQL, MySQL, SQL Server, etc.) that runs on Colab and opens through a public link <code>https://xxx.trycloudflare.com</code>. Browsers cannot connect to a database over TCP directly, so CloudBeaver acts as the go-between: add database connections from its own page.',
+        colab_db_open: '▶ Open the DBeaver Web notebook in Colab',
+        colab_db_step1: 'Open the notebook, <b>Connect</b>, fill <code>CB_ADMIN_USER</code> / <code>CB_ADMIN_PASS</code> in the first cell (leave <code>DB_*</code> empty), then run cells 1 → 2 → 3 in order.',
+        colab_db_step2: 'Wait for <b>CloudBeaver siap</b> (~1-2 minutes, downloaded from Docker Hub once per runtime), then paste the <code>trycloudflare.com</code> link from the output into the field below and click Open. Log in with the admin you set.',
+        colab_db_step3: 'Add a connection via <b>New Connection</b>; to see every database on the server, enable <b>Show all databases</b> on the PostgreSQL connection.',
+        colab_db_url: 'CloudBeaver URL (https://....trycloudflare.com)', colab_db_go: 'Open',
+        colab_db_note: 'Database credentials are entered on the CloudBeaver page (your Colab runtime), not on this page. Change <code>CB_ADMIN_PASS</code> from the sample value and do not share the link. Free runtimes disconnect when idle or when compute units run out; saved connections are lost with them and every new run changes the URL.',
+        grp_colab_title: 'Colab Server — SonarQube, AI & DBeaver Web',
+        grp_colab_desc: 'This page only calls the Colab server you run yourself: sonar-scanner on your computer sends code to SonarQube, and the Ask Code chat sends questions to the LLM gateway (API key), both through a Cloudflare quick tunnel. The DBeaver Web link only opens the CloudBeaver page you run yourself.'
       },
       // Kamus frasa untuk L()/Lf()/localizeScript(): kunci = teks Indonesia apa adanya di index.html.
       text_en: {
