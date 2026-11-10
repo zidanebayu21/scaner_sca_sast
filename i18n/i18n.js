@@ -265,7 +265,15 @@ window.APP_I18N = {
         colab_db_step2: 'Tunggu <b>CloudBeaver siap</b> (±1-2 menit, unduh dari Docker Hub sekali per runtime), lalu tempel link <code>trycloudflare.com</code> dari output ke kolom di bawah dan klik Buka. Login dengan admin yang tadi diisi.',
         colab_db_step3: 'Tambah koneksi lewat <b>New Connection</b>; agar semua database di server terlihat, aktifkan <b>Show all databases</b> pada koneksi PostgreSQL.',
         colab_db_url: 'URL CloudBeaver (https://....trycloudflare.com)', colab_db_go: 'Buka',
-        colab_db_note: 'Kredensial database diisi di halaman CloudBeaver (runtime Colab Anda), bukan di halaman ini. Ganti <code>CB_ADMIN_PASS</code> dari nilai contoh dan jangan bagikan link-nya. Runtime gratis terputus saat idle atau saldo compute habis; konfigurasi koneksi ikut hilang dan setiap run baru URL berganti.'
+        colab_db_note: 'Kredensial database diisi di halaman CloudBeaver (runtime Colab Anda), bukan di halaman ini. Ganti <code>CB_ADMIN_PASS</code> dari nilai contoh dan jangan bagikan link-nya. Runtime gratis terputus saat idle atau saldo compute habis; konfigurasi koneksi ikut hilang dan setiap run baru URL berganti.',
+        colab_zap_head: 'ZAP Web (OWASP ZAP)',
+        colab_zap_desc: 'GUI ZAP (penguji keamanan web: spider, active scan, proxy) yang dijalankan di Colab dan tampil di browser lewat WebSwing, dibuka dari link publik <code>https://xxx.trycloudflare.com/zap/</code>. Tanpa Docker: image resmi ZAP diunduh langsung dari ghcr.io.',
+        colab_zap_open: '▶ Buka notebook ZAP Web di Colab',
+        colab_zap_step1: 'Buka notebook, <b>Connect</b>, lalu jalankan <b>sel 1</b> (pasang, sekali per runtime) dan <b>sel 2</b> (jalankan) berurutan.',
+        colab_zap_step2: 'Tunggu baris <code>BUKA: https://....trycloudflare.com/zap/</code> (±15 detik), tempel link itu ke kolom di bawah dan klik Buka. GUI ZAP butuh ±30 detik untuk tampil.',
+        colab_zap_step3: 'Pilih opsi sesi ZAP lalu pakai seperti biasa. Scan hanya untuk target yang Anda punya izinnya.',
+        colab_zap_url: 'URL ZAP Web (https://....trycloudflare.com/zap/)', colab_zap_go: 'Buka',
+        colab_zap_note: 'Link ZAP Web terbuka untuk siapa pun yang memilikinya dan tanpa login, jadi jangan dibagikan; tutup dengan menghentikan runtime atau <code>pkill cloudflared</code>. Active scan mengirim serangan sungguhan: pakai hanya pada target milik sendiri atau yang berizin tertulis. Runtime gratis terputus saat idle; sesi ZAP ikut hilang dan setiap run baru URL berganti.'
       },
       en: {
         tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
@@ -553,8 +561,16 @@ window.APP_I18N = {
         colab_db_step3: 'Add a connection via <b>New Connection</b>; to see every database on the server, enable <b>Show all databases</b> on the PostgreSQL connection.',
         colab_db_url: 'CloudBeaver URL (https://....trycloudflare.com)', colab_db_go: 'Open',
         colab_db_note: 'Database credentials are entered on the CloudBeaver page (your Colab runtime), not on this page. Change <code>CB_ADMIN_PASS</code> from the sample value and do not share the link. Free runtimes disconnect when idle or when compute units run out; saved connections are lost with them and every new run changes the URL.',
-        grp_colab_title: 'Colab Server — SonarQube, AI & DBeaver Web',
-        grp_colab_desc: 'This page only calls the Colab server you run yourself: sonar-scanner on your computer sends code to SonarQube, and the Ask Code chat sends questions to the LLM gateway (API key), both through a Cloudflare quick tunnel. The DBeaver Web link only opens the CloudBeaver page you run yourself.'
+        colab_zap_head: 'ZAP Web (OWASP ZAP)',
+        colab_zap_desc: 'The ZAP GUI (web security tester: spider, active scan, proxy) runs on Colab and shows in your browser through WebSwing, opened from a public link <code>https://xxx.trycloudflare.com/zap/</code>. No Docker: the official ZAP image is downloaded straight from ghcr.io.',
+        colab_zap_open: '▶ Open the ZAP Web notebook in Colab',
+        colab_zap_step1: 'Open the notebook, <b>Connect</b>, then run <b>cell 1</b> (install, once per runtime) and <b>cell 2</b> (start) in order.',
+        colab_zap_step2: 'Wait for the <code>BUKA: https://....trycloudflare.com/zap/</code> line (~15 seconds), paste that link into the field below and click Open. The ZAP GUI takes ~30 seconds to appear.',
+        colab_zap_step3: 'Pick a ZAP session option and use it as usual. Only scan targets you are authorized to test.',
+        colab_zap_url: 'ZAP Web URL (https://....trycloudflare.com/zap/)', colab_zap_go: 'Open',
+        colab_zap_note: 'The ZAP Web link is open to anyone who has it and has no login, so do not share it; close it by stopping the runtime or running <code>pkill cloudflared</code>. Active scan sends real attacks: use it only on your own targets or ones with written permission. Free runtimes disconnect when idle; the ZAP session is lost with them and every new run changes the URL.',
+        grp_colab_title: 'Colab Server — SonarQube, AI, DBeaver Web & ZAP Web',
+        grp_colab_desc: 'This page only calls the Colab server you run yourself: sonar-scanner on your computer sends code to SonarQube, and the Ask Code chat sends questions to the LLM gateway (API key), both through a Cloudflare quick tunnel. The DBeaver Web and ZAP Web links only open the pages you run yourself.'
       },
       // Kamus frasa untuk L()/Lf()/localizeScript(): kunci = teks Indonesia apa adanya di index.html.
       text_en: {
