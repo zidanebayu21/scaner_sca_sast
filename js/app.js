@@ -195,7 +195,7 @@ createApp({
         run: () => { this.visibleTabs[t.key] = true; this.tab = t.key; this.saveVisibleTabs(); }
       }));
       const acts = [
-        { id: 'a:master', label: '⚡ ' + this.t('masterHookMenu'), sub: 'master hook bookmarklet all in one wa shopee sheet swag', cat: catAct, run: () => this.openMasterHook() },
+        { id: 'a:master', label: '⚡ ' + this.t('masterHookMenu'), sub: 'master hook bookmarklet all in one wa shopee sheet swag js recon skip link', cat: catAct, run: () => this.openMasterHook() },
         { id: 'a:pipe', label: '⇅ ' + this.t('pipeTitle'), sub: 'pipe inbound outbound network traffic log interceptor', cat: catAct, run: () => this.togglePipePanel() },
         { id: 'a:pin', label: (this.pinnedTabs[this.tab] ? '☆ ' : '★ ') + this.t(this.pinnedTabs[this.tab] ? 'unpinTip' : 'pinTip'), sub: 'pin favorite star tab', cat: catAct, run: () => this.togglePinTab(this.tab) },
         { id: 'a:side', label: (this.sideOpen ? '◧ ' : '▢ ') + this.t(this.sideOpen ? 'sideHideTip' : 'sideShowTip'), sub: 'sidebar', cat: catAct, run: () => this.toggleSide() },
@@ -549,17 +549,9 @@ createApp({
       const txt = this.swagOut(this.swag.fmt).text;
       return txt.length > 200000 ? txt.slice(0, 200000) + '\n...' : txt;
     },
-    skipBookmarklet() {
-      const L2 = {};
-      ['done', 'final', 'open', 'copy', 'hop', 'waiting', 'step', 'too_many', 'no_step', 'captcha', 'expired', 'adblock', 'revealing', 'gate', 'unsupported', 'mode_flow', 'mode_reveal', 'mode_gate', 'mode_param', 'mode_page'].forEach(k => { L2[k] = this.t('skip_bm_' + k); });
-      return 'javascript:' + encodeURIComponent('(' + skipLinkMain.toString() + ')(' + JSON.stringify({ auto: this.skip.auto, L: L2 }) + ');');
-    },
+    skipBookmarklet() { return 'javascript:' + encodeURIComponent('(' + skipLinkMain.toString() + ')(' + JSON.stringify(skipHookCfg(this.skip.auto)) + ');'); },
     skipDecoded() { return this.skip.url.trim() ? skipDecodeUrl(this.skip.url) : null; },
-    jsrBookmarklet() {
-      const L2 = {};
-      ['collecting', 'send', 'download', 'fetching', 'files', 'maps', 'hint', 'local', 'popup', 'sent'].forEach(k => { L2[k] = this.t('jsr_bm_' + k); });
-      return 'javascript:' + encodeURIComponent('(' + jsrHookMain.toString() + ')(' + JSON.stringify(Object.assign(pupAppCfg(), { L: L2 })) + ');');
-    },
+    jsrBookmarklet() { return 'javascript:' + encodeURIComponent('(' + jsrHookMain.toString() + ')(' + JSON.stringify(jsrHookCfg()) + ');'); },
     jsrEps() {
       const r = this.jsr.res;
       if (!r) return [];
@@ -736,7 +728,7 @@ createApp({
     svGMaxCols() { let n = 0; (this.svVisible || []).forEach(r => { if (r.c && r.c.length > n) n = r.c.length; }); return Math.min(n, 30); },
     sheetBookmarklet() { return 'javascript:' + encodeURIComponent(localizeScript('(' + sheetHookMain.toString() + ')(' + JSON.stringify(pupAppCfg()) + ');')); },
     pupBookmarklet() { return 'javascript:' + encodeURIComponent(pupScript()); },
-    masterScript() { return masterHookScript(); },
+    masterScript() { return masterHookScript(this.skip.auto); },
     masterBookmarklet() { return 'javascript:' + encodeURIComponent(this.masterScript); },
     pipeTop3() {
       return (this.pipe.logs || []).slice(0, 2);

@@ -4891,23 +4891,50 @@ function masterHookMain(cfg, tools) {
   addChoice("💬 WA Hook", function () { tools.wa(cfg); }, /(^|\.)whatsapp\.com$/.test(host));
   addChoice("🛒 Shopee Hook", function () { tools.shp(cfg); }, /(^|\.)shopee\./.test(host));
   addChoice("📊 Sheet Hook", function () { tools.sheet(cfg); }, host === 'docs.google.com');
+  addChoice("🔎 JS Recon", function () { tools.jsr(cfg.jsr); }, false);
+  addChoice("⏩ Skip Link", function () { tools.skip(cfg.skip); }, false);
   box.appendChild(head); box.appendChild(sub); box.appendChild(grid);
+  if (cfg.app) {
+    var appB = document.createElement('button');
+    appB.textContent = "↗ Buka Scanner";
+    Object.assign(appB.style, { background: 'none', color: '#aa9888', border: '0', padding: '6px 0 0', cursor: 'pointer', font: 'inherit', fontSize: '11.5px' });
+    appB.onclick = function () { window.open(cfg.app, '_blank', 'noopener'); };
+    box.appendChild(appB);
+  }
   document.body.appendChild(box);
   var drag = false, dx = 0, dy = 0;
   head.addEventListener('mousedown', function (e) {
     if (e.target === closeB) return;
     var r = box.getBoundingClientRect(); drag = true; dx = e.clientX - r.left; dy = e.clientY - r.top; e.preventDefault();
   });
-  window.addEventListener('mousemove', function (e) {
+  function onMove(e) {
     if (!drag) return;
     box.style.left = Math.max(0, Math.min(window.innerWidth - box.offsetWidth, e.clientX - dx)) + 'px';
     box.style.top = Math.max(0, Math.min(window.innerHeight - box.offsetHeight, e.clientY - dy)) + 'px';
     box.style.right = 'auto';
-  });
-  window.addEventListener('mouseup', function () { drag = false; });
+  }
+  function onUp() { drag = false; }
+  function onKey(e) { if (e.key === 'Escape' && window.__scaMasterPanel === box) closeB.onclick(); }
+  // listener dilepas saat panel hilang agar klik bookmark berulang tidak menumpuk listener
+  function watch() {
+    if (box.isConnected) { setTimeout(watch, 1000); return; }
+    window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); document.removeEventListener('keydown', onKey, true);
+  }
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  document.addEventListener('keydown', onKey, true);
+  watch();
 }
-function masterHookScript() {
-  const cfg = JSON.stringify(pupAppCfg());
+// Label dwibahasa untuk bookmarklet yang teksnya dikirim lewat cfg.L (Skip Link, JS Recon)
+function hookLabels(prefix, keys) { const o = {}; keys.forEach(k => { o[k] = tr(prefix + k); }); return o; }
+function skipHookCfg(auto) {
+  return { auto: auto, L: hookLabels('skip_bm_', ['done', 'final', 'open', 'copy', 'hop', 'waiting', 'step', 'too_many', 'no_step', 'captcha', 'expired', 'adblock', 'revealing', 'gate', 'unsupported', 'mode_flow', 'mode_reveal', 'mode_gate', 'mode_param', 'mode_page']) };
+}
+function jsrHookCfg() {
+  return Object.assign(pupAppCfg(), { L: hookLabels('jsr_bm_', ['collecting', 'send', 'download', 'fetching', 'files', 'maps', 'hint', 'local', 'popup', 'sent']) });
+}
+function masterHookScript(skipAuto) {
+  const cfg = JSON.stringify(Object.assign(pupAppCfg(), { skip: skipHookCfg(skipAuto), jsr: jsrHookCfg() }));
   const src = '(function () {\n'
     + '(' + hookGuardInstall.toString() + ')();\n'
     + 'function apiHookMain() {\n' + HOOK_BODY_LINES.join('\n') + '\n}\n'
@@ -4918,6 +4945,8 @@ function masterHookScript() {
     + '  shp: ' + shpHookMain.toString() + ',\n'
     + '  sheet: ' + sheetHookMain.toString() + ',\n'
     + '  swag: ' + swagPageMain.toString() + ',\n'
+    + '  jsr: ' + jsrHookMain.toString() + ',\n'
+    + '  skip: ' + skipLinkMain.toString() + ',\n'
     + '  pupLaunch: ' + pupLauncher.toString() + ',\n'
     + '  pupRec: ' + pupRecorderMain.toString() + ',\n'
     + '  pupPlay: ' + pupPlayerMain.toString() + '\n'
