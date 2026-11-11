@@ -572,6 +572,18 @@ main > section {
 .pdf-cap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
 .pdf-act { display: flex; justify-content: space-between; }
 .pdf-act .lnk { font-size: 14px; padding: 2px 6px; }
+.pdf-stage { position: relative; width: min(100%, 720px); margin: 8px auto 0; border: 1px solid var(--border); background: #fff; user-select: none; touch-action: none; cursor: crosshair; line-height: 0; }
+.pdf-stage > img { width: 100%; display: block; pointer-events: none; }
+.pdf-sig { position: absolute; cursor: move; outline: 1px dashed var(--accent); touch-action: none; }
+.pdf-sig img { width: 100%; display: block; pointer-events: none; }
+.pdf-sig .pdf-sx, .pdf-sig .pdf-sz { position: absolute; width: 18px; height: 18px; line-height: 16px; text-align: center; font-size: 11px; background: var(--accent); color: #fff; border-radius: 50%; }
+.pdf-sig .pdf-sx { top: -9px; right: -9px; cursor: pointer; } .pdf-sig .pdf-sz { right: -9px; bottom: -9px; cursor: nwse-resize; border-radius: 3px; }
+.pdf-sigs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.pdf-sigi { position: relative; border: 1px solid var(--border); border-radius: 6px; padding: 4px; cursor: pointer; background: repeating-conic-gradient(#8882 0% 25%, #fff 0% 50%) 50% / 12px 12px; }
+.pdf-sigi.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.pdf-sigi img { height: 48px; display: block; }
+.pdf-sigi .lnk { position: absolute; top: -8px; right: -8px; background: var(--panel-bg); border-radius: 50%; line-height: 1; padding: 2px 5px; border: 1px solid var(--border); }
+.pdf-pad { width: min(100%, 520px); height: 160px; background: #fff; border: 1px solid var(--border); border-radius: 6px; touch-action: none; cursor: crosshair; display: block; margin: 6px 0; }
 
 .tab-reset { background: transparent; border: none; color: var(--link); cursor: pointer; padding: 6px 0 0; font-size: 12px; }
 .grp { margin-top: 14px; }

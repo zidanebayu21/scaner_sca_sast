@@ -129,7 +129,7 @@ createApp({
         rs: { pct: 100, w: 0, h: 0, lock: true, alg: 'lanczos3' },
         fx: { preset: '', denoise: 0, deconv: 'none', sigma: 1.2, len: 9, angle: 0, iters: 10, amount: 0.6, radius: 1.0, threshold: 2, auto: false },
         ai: { model: 'w2x_photo', out: 2, noise: 1, tile: 192, ep: '' }, api: { prov: 'openai', key: '', prompt: '', models: {} }, boxes: [], boxMode: 'black', crop: null, ed: { mode: 'rect', color: '#ef4444', lw: 4, size: 28, text: '' } },
-      pdf: { pages: [], busy: '', prog: 0, err: '', msg: '', over: false, drag: -1, range: '', name: 'gabungan', wm: { text: '', op: 25, color: '#808080' }, comp: { on: false, dpi: 110, q: 70 } },
+      pdf: { pages: [], busy: '', prog: 0, err: '', msg: '', over: false, drag: -1, range: '', name: 'gabungan', wm: { text: '', op: 25, color: '#808080' }, comp: { on: false, dpi: 110, q: 70 }, sigs: [], sign: { open: false, pid: null, bg: '', active: null, pad: false } },
       sv: { books: [], cur: null, mode: 'sheet', q: '', gbook: '', gtotal: 0, gper: [], gbusy: false, inq: '', header: true, filters: {}, sort: { c: -1, desc: false }, total: 0, busy: '', scroll: 0, scrollX: 0, rowsVer: 0, hl: -1, stats: null, colW: 160, over: false, msg: '', err: '', recent: [], showDiff: false, dcfg: { a: '', b: '', keys: [], ic: true }, diff: null, dbusy: '', donly: '', dtotal: 0 },
       shp: { list: [], q: '', kw: '', level: '', mall: false, star: false, noAd: false, minSold: 0, minRate: 0, pMin: 0, pMax: 0, sort: 'sold', desc: true, page: 300, msg: '', err: '', paste: '' },
       wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },

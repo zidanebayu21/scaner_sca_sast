@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.20';
+    window.APP_VERSION = '2.21';
     // tema dipasang sedini mungkin agar latar tidak berkedip sebelum app.css tiba
     try { if (localStorage.getItem('scaTheme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) { /* localStorage tidak tersedia */ }
     window.APP_HEAD_ASSETS = ['css/app.css', 'js/vue.global.prod.js', 'i18n/i18n.js'];
@@ -1970,6 +1970,52 @@
                 <button class="lnk" :disabled="i === pdf.pages.length - 1" :title="t('pdf_t_right')" @click="pdfMove(i, i + 1)">▶</button>
               </div>
             </div>
+          </div>
+
+          <!-- Tanda tangan -->
+          <div class="ping-box mt-2">
+            <div class="gl-filters">
+              <b>✍ {{ t('pdf_sig') }}</b>
+              <button class="btn gray" @click="pdf.sign.open ? pdf.sign.open = false : pdfSignOpen(pdf.pages[0])">{{ pdf.sign.open ? t('pdf_sig_close') : t('pdf_sig_open') }}</button>
+              <span class="muted" v-if="!pdf.sign.open && pdf.pages.some(x => x.signs.length)">✓ {{ pdf.pages.reduce((n, x) => n + x.signs.length, 0) }}</span>
+            </div>
+            <template v-if="pdf.sign.open">
+              <div class="muted text-xs">{{ t('pdf_sig_how') }}</div>
+              <div class="gl-filters">
+                <button class="btn gray" @click="$refs.pdfSigFile.click()">📷 {{ t('pdf_sig_add') }}</button>
+                <button class="btn gray" @click="pdfSigPaste">📋 {{ t('pdf_sig_paste') }}</button>
+                <button class="btn gray" @click="pdf.sign.pad = !pdf.sign.pad">🖊 {{ t('pdf_sig_draw') }}</button>
+                <input type="file" ref="pdfSigFile" accept="image/*" class="hidden" @change="onPdfSigPick" />
+              </div>
+              <div v-if="pdf.sign.pad">
+                <div class="muted text-xs">{{ t('pdf_sig_pad_hint') }}</div>
+                <canvas ref="pdfPad" class="pdf-pad" width="1040" height="320" @pointerdown="pdfPadDown" @pointermove="pdfPadMove" @pointerup="pdfPadUp" @pointercancel="pdfPadUp"></canvas>
+                <button class="btn" @click="pdfPadUse">{{ t('pdf_sig_pad_use') }}</button> <button class="btn gray" @click="pdfPadClear">{{ t('pdf_sig_pad_clear') }}</button>
+              </div>
+              <div class="pdf-sigs" v-if="pdf.sigs.length">
+                <div v-for="sg in pdf.sigs" :key="sg.id" class="pdf-sigi" :class="{ on: sg.id === pdf.sign.active }" @click="pdf.sign.active = sg.id"><img :src="sg.url" alt="" /><button class="lnk" :title="t('pdf_sig_del')" @click.stop="pdfSigDel(sg)">✕</button></div>
+              </div>
+              <div class="gl-filters" v-if="pdfSigCur()">
+                <label :title="t('pdf_sig_sens_tip')">{{ t('pdf_sig_sens') }} <input type="range" min="40" max="250" :value="pdfSigCur().thr" style="width:160px" @input="pdfSigSet('thr', +$event.target.value)" /> {{ pdfSigCur().thr }}</label>
+                <label>{{ t('pdf_sig_ink') }} <select :value="pdfSigCur().ink" @change="pdfSigSet('ink', $event.target.value)"><option value="orig">{{ t('pdf_sig_ink_orig') }}</option><option value="black">{{ t('pdf_sig_ink_black') }}</option><option value="blue">{{ t('pdf_sig_ink_blue') }}</option></select></label>
+              </div>
+              <div class="gl-filters" v-if="pdfSignPage()">
+                <button class="btn gray" :disabled="pdfSignIdx() < 1" :title="t('pdf_sig_prev')" @click="pdfSignStep(-1)">◀</button>
+                <span>{{ t('pdf_sig_page').replace('{i}', pdfSignIdx() + 1).replace('{n}', pdf.pages.length) }}</span>
+                <button class="btn gray" :disabled="pdfSignIdx() >= pdf.pages.length - 1" :title="t('pdf_sig_next')" @click="pdfSignStep(1)">▶</button>
+                <button class="btn gray" :disabled="!pdfSignPage().signs.length || pdf.pages.length < 2" @click="pdfSignCopyAll">{{ t('pdf_sig_all') }}</button>
+              </div>
+              <div v-if="pdfSignPage() && !pdf.sign.bg" class="muted">⏳ {{ t('pdf_sig_loading') }}</div>
+              <div v-if="pdfSignPage() && pdf.sign.bg" ref="pdfStage" class="pdf-stage" @click="pdfSigPlace">
+                <img :src="pdf.sign.bg" alt="" draggable="false" />
+                <div v-for="s in pdfSignPage().signs" :key="s.id" class="pdf-sig" :style="pdfSigStyle(pdfSignPage(), s)" @pointerdown="pdfSigDown($event, s, 'move')" @pointermove="pdfSigMove" @pointerup="pdfSigUp" @pointercancel="pdfSigUp">
+                  <img :src="pdfSigById(s.sig).url" alt="" draggable="false" />
+                  <span class="pdf-sx" :title="t('pdf_sig_rm')" @pointerdown.stop @click.stop="pdfSigRemove(pdfSignPage(), s)">✕</span>
+                  <span class="pdf-sz" @pointerdown="pdfSigDown($event, s, 'size')" @pointermove="pdfSigMove" @pointerup="pdfSigUp" @pointercancel="pdfSigUp">⤡</span>
+                </div>
+              </div>
+              <div class="sev-MEDIUM text-xs mt-1">⚠ {{ t('pdf_sig_warn') }}</div>
+            </template>
           </div>
 
           <div class="ping-box mt-2">
