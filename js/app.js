@@ -127,7 +127,7 @@ createApp({
       im: { src: {}, cur: {}, meta: null, hist: 0, tool: 'compress', busy: '', prog: 0, err: '', msg: '', over: false, fmt: 'image/webp', q: 82, outScale: 1, outSize: 0, outW: 0, outH: 0, outMeta: null, encBusy: false, avif: false, table: [], tableBusy: false, target: 500, cmp: 0, actual: false, aiGen: false,
         rs: { pct: 100, w: 0, h: 0, lock: true, alg: 'lanczos3' },
         fx: { preset: '', denoise: 0, deconv: 'none', sigma: 1.2, len: 9, angle: 0, iters: 10, amount: 0.6, radius: 1.0, threshold: 2, auto: false },
-        ai: { model: 'w2x_photo', out: 2, noise: 1, tile: 192, ep: '' }, api: { prov: 'openai', key: '', prompt: '', models: {} }, boxes: [], boxMode: 'black' },
+        ai: { model: 'w2x_photo', out: 2, noise: 1, tile: 192, ep: '' }, api: { prov: 'openai', key: '', prompt: '', models: {} }, boxes: [], boxMode: 'black', crop: null, ed: { mode: 'rect', color: '#ef4444', lw: 4, size: 28, text: '' } },
       sv: { books: [], cur: null, mode: 'sheet', q: '', gbook: '', gtotal: 0, gper: [], gbusy: false, inq: '', header: true, filters: {}, sort: { c: -1, desc: false }, total: 0, busy: '', scroll: 0, scrollX: 0, rowsVer: 0, hl: -1, stats: null, colW: 160, over: false, msg: '', err: '', recent: [], showDiff: false, dcfg: { a: '', b: '', keys: [], ic: true }, diff: null, dbusy: '', donly: '', dtotal: 0 },
       shp: { list: [], q: '', kw: '', level: '', mall: false, star: false, noAd: false, minSold: 0, minRate: 0, pMin: 0, pMax: 0, sort: 'sold', desc: true, page: 300, msg: '', err: '', paste: '' },
       wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },
@@ -693,7 +693,7 @@ createApp({
         docs: r => ((r.docs || []).join(' ') + ' ' + (r.links || []).join(' ')).trim()
       });
     },
-    imTools() { return [{ k: 'compress', label: '🗜 ' + this.t('im_t_compress') }, { k: 'resize', label: '↔ ' + this.t('im_t_resize') }, { k: 'fix', label: '🔍 ' + this.t('im_t_fix') }, { k: 'ailocal', label: '✨ ' + this.t('im_t_ailocal') }, { k: 'aiapi', label: '🤖 ' + this.t('im_t_aiapi') }, { k: 'redact', label: '⬛ ' + this.t('im_t_redact') }]; },
+    imTools() { return [{ k: 'compress', label: '🗜 ' + this.t('im_t_compress') }, { k: 'resize', label: '↔ ' + this.t('im_t_resize') }, { k: 'fix', label: '🔍 ' + this.t('im_t_fix') }, { k: 'ailocal', label: '✨ ' + this.t('im_t_ailocal') }, { k: 'aiapi', label: '🤖 ' + this.t('im_t_aiapi') }, { k: 'redact', label: '⬛ ' + this.t('im_t_redact') }, { k: 'edit', label: '✏ ' + this.t('im_t_edit') }]; },
     imAlgs() { return ['lanczos3', 'lanczos2', 'catmull', 'mitchell', 'bilinear', 'area', 'nearest'].map(k => ({ k, label: this.t('im_a_' + k), tip: this.t('im_a_' + k + '_tip') })); },
     imModels() { return IMG_MODELS; },
     imProviders() { return IMG_AI_PROVIDERS; },
@@ -1411,7 +1411,7 @@ createApp({
     },
     // ---- Studio Gambar
     imInit() {
-      this.imOrig = null; this.imCur = null; this.imHist = []; this.imOrigBuf = null; this.imBlob = null; this.imSess = null; this.imSessKey = '';
+      this.imOrig = null; this.imCur = null; this.imHist = []; this.imHistB = []; this.imOrigBuf = null; this.imBlob = null; this.imSess = null; this.imSessKey = '';
       try { const p = JSON.parse(localStorage.getItem(IMG_PREFS_KEY) || '{}'); if (p && typeof p === 'object') { ['prov', 'prompt'].forEach(k => { if (typeof p[k] === 'string') this.im.api[k] = p[k]; }); if (p.models && typeof p.models === 'object') this.im.api.models = Object.assign({}, this.im.api.models, p.models); if (p.fmt) this.im.fmt = p.fmt; if (p.q) this.im.q = p.q; } } catch (e) { /* abaikan */ }
       document.addEventListener('paste', e => {
         if (this.tab !== 'img') return;
@@ -1436,13 +1436,14 @@ createApp({
     },
     async imLoad(file) {
       const im = this.im;
-      im.err = ''; im.msg = ''; im.boxes = []; im.aiGen = false; im.outScale = 1;
+      im.err = ''; im.msg = ''; im.boxes = []; im.crop = null; im.aiGen = false; im.outScale = 1;
       try {
         this.imOrigBuf = await file.arrayBuffer();
         im.meta = imgMeta(this.imOrigBuf);
         const bmp = await createImageBitmap(new Blob([this.imOrigBuf], { type: file.type || 'image/png' }));
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
-        this.imOrig = c; this.imCur = c; this.imHist = [];
+        this.imOrig = c; this.imCur = c; this.imHist = []; this.imHistB = [];
+        im.ed.lw = Math.max(3, Math.round(c.width / 300)); im.ed.size = Math.max(16, Math.round(c.width / 40));
         im.src = { name: file.name || 'gambar', size: file.size, type: file.type || '?', w: c.width, h: c.height };
         im.cur = { w: c.width, h: c.height }; im.hist = 0;
         im.rs.w = c.width; im.rs.h = c.height; im.rs.pct = 100;
@@ -1450,21 +1451,45 @@ createApp({
       } catch (e) { im.err = this.t('im_err_load') + ' ' + (e.message || e); }
     },
     imSetCur(c, label) {
-      this.imHist.push(this.imCur); if (this.imHist.length > 6) this.imHist.shift();
+      this.imHist.push(this.imCur); this.imHistB.push(JSON.stringify(this.im.boxes)); if (this.imHist.length > 6) { this.imHist.shift(); this.imHistB.shift(); }
       this.imCur = c; this.im.cur = { w: c.width, h: c.height }; this.im.hist = this.imHist.length; this.im.msg = label || '';
       this.im.rs.w = c.width; this.im.rs.h = c.height; this.im.rs.pct = 100;
       this.$nextTick(() => { this.imDraw(); this.imEncodeSoon(); });
     },
-    imUndo() { if (!this.imHist.length) return; this.imCur = this.imHist.pop(); this.im.cur = { w: this.imCur.width, h: this.imCur.height }; this.im.hist = this.imHist.length; this.im.aiGen = false; this.imDraw(); this.imEncodeSoon(); },
-    imReset() { if (!this.imOrig) return; this.imHist = []; this.imCur = this.imOrig; this.im.cur = { w: this.imOrig.width, h: this.imOrig.height }; this.im.hist = 0; this.im.boxes = []; this.im.aiGen = false; this.im.outScale = 1; this.imDraw(); this.imEncodeSoon(); },
+    imUndo() { if (!this.imHist.length) return; this.imCur = this.imHist.pop(); this.im.boxes = JSON.parse(this.imHistB.pop() || '[]'); this.im.crop = null; this.im.cur = { w: this.imCur.width, h: this.imCur.height }; this.im.hist = this.imHist.length; this.im.aiGen = false; this.imDraw(); this.imEncodeSoon(); },
+    imReset() { if (!this.imOrig) return; this.imHist = []; this.imHistB = []; this.im.crop = null; this.imCur = this.imOrig; this.im.cur = { w: this.imOrig.width, h: this.imOrig.height }; this.im.hist = 0; this.im.boxes = []; this.im.aiGen = false; this.im.outScale = 1; this.imDraw(); this.imEncodeSoon(); },
     imData(c) { return c.getContext('2d').getImageData(0, 0, c.width, c.height); },
     imCanvasFrom(buf, w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), w, h), 0, 0); return c; },
-    // gambar akhir = gambar kerja + sensor area (+ skala output dari mode target ukuran)
+    // anotasi (kotak, panah, teks) digambar dengan skala s agar sama di pratinjau dan file output
+    imMark(g, b, s) {
+      g.save(); g.strokeStyle = g.fillStyle = b.color; g.lineWidth = b.lw * s; g.lineJoin = g.lineCap = 'round';
+      if (b.mode === 'rect') g.strokeRect(b.x * s, b.y * s, b.w * s, b.h * s);
+      else if (b.mode === 'arrow') {
+        const x0 = b.x0 * s, y0 = b.y0 * s, x1 = b.x1 * s, y1 = b.y1 * s, a = Math.atan2(y1 - y0, x1 - x0), hl = Math.max(b.lw * 4, 12) * s;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1 - Math.cos(a) * hl * 0.8, y1 - Math.sin(a) * hl * 0.8); g.stroke();
+        g.beginPath(); g.moveTo(x1, y1); g.lineTo(x1 - Math.cos(a - 0.45) * hl, y1 - Math.sin(a - 0.45) * hl); g.lineTo(x1 - Math.cos(a + 0.45) * hl, y1 - Math.sin(a + 0.45) * hl); g.closePath(); g.fill();
+      } else {
+        g.font = 'bold ' + b.size * s + 'px sans-serif'; g.textBaseline = 'top'; g.strokeStyle = '#fff'; g.lineWidth = Math.max(2, b.size * s / 6);
+        g.strokeText(b.text, b.x * s, b.y * s); g.fillText(b.text, b.x * s, b.y * s);
+      }
+      g.restore();
+    },
+    imIsMark(b) { return b.mode === 'rect' || b.mode === 'arrow' || b.mode === 'text'; },
+    imDropBox(all) { if (all) this.im.boxes = []; else this.im.boxes.pop(); this.imDraw(); this.imEncodeSoon(); },
+    // crop: gambar kerja dipotong (bisa di-Batal), sensor dan anotasi ikut digeser
+    imCrop() {
+      const r = this.im.crop; if (!r || !this.imCur) return;
+      const c = document.createElement('canvas'); c.width = r.w; c.height = r.h; c.getContext('2d').drawImage(this.imCur, -r.x, -r.y);
+      const moved = this.im.boxes.map(b => (b.mode === 'arrow' ? Object.assign({}, b, { x0: b.x0 - r.x, y0: b.y0 - r.y, x1: b.x1 - r.x, y1: b.y1 - r.y }) : Object.assign({}, b, { x: b.x - r.x, y: b.y - r.y })));
+      this.im.crop = null; this.imSetCur(c, this.t('im_e_cropped')); this.im.boxes = moved;
+    },
+    // gambar akhir = gambar kerja + sensor area + anotasi (+ skala output dari mode target ukuran)
     imComposite(scale) {
       const src = this.imCur, s = scale || 1, w = Math.max(1, Math.round(src.width * s)), h = Math.max(1, Math.round(src.height * s));
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, w, h);
       this.im.boxes.forEach(b => {
+        if (this.imIsMark(b)) { this.imMark(g, b, s); return; }
         const x = Math.round(b.x * s), y = Math.round(b.y * s), bw = Math.max(1, Math.round(b.w * s)), bh = Math.max(1, Math.round(b.h * s));
         if (b.mode === 'black') { g.fillStyle = '#000'; g.fillRect(x, y, bw, bh); return; }
         if (b.mode === 'pixel') {
@@ -1487,16 +1512,40 @@ createApp({
         g.fillStyle = '#f59e0b'; g.fillRect(cx - 1, 0, 2, v.height);
       }
       g.strokeStyle = '#ef4444'; g.lineWidth = Math.max(2, v.width / 600);
-      this.im.boxes.forEach(b => g.strokeRect(b.x, b.y, b.w, b.h));
-      if (this.imDrag) { const d = this.imDrag; g.setLineDash([6, 4]); g.strokeRect(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0)); g.setLineDash([]); }
+      this.im.boxes.forEach(b => { if (!this.imIsMark(b)) g.strokeRect(b.x, b.y, b.w, b.h); });
+      const r = this.im.tool === 'edit' && this.im.crop;
+      if (r) { g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, v.width, r.y); g.fillRect(0, r.y + r.h, v.width, v.height - r.y - r.h); g.fillRect(0, r.y, r.x, r.h); g.fillRect(r.x + r.w, r.y, v.width - r.x - r.w, r.h); g.setLineDash([6, 4]); g.strokeRect(r.x, r.y, r.w, r.h); g.setLineDash([]); }
+      const d = this.imDrag; if (!d) return;
+      const m = this.imDragMode();
+      if (m === 'rect' || m === 'arrow') this.imMark(g, this.imShape(d, m), 1);
+      else { g.setLineDash([6, 4]); g.strokeRect(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0)); g.setLineDash([]); }
+    },
+    imDragMode() { return this.im.tool === 'edit' ? this.im.ed.mode : this.im.boxMode; },
+    imShape(d, mode) {
+      const e = this.im.ed, st = { mode, color: e.color, lw: Math.max(1, e.lw || 1) };
+      if (mode === 'arrow') return Object.assign(st, { x0: Math.round(d.x0), y0: Math.round(d.y0), x1: Math.round(d.x1), y1: Math.round(d.y1) });
+      return Object.assign(st, { x: Math.round(Math.min(d.x0, d.x1)), y: Math.round(Math.min(d.y0, d.y1)), w: Math.round(Math.abs(d.x1 - d.x0)), h: Math.round(Math.abs(d.y1 - d.y0)) });
     },
     imPt(ev) { const v = this.$refs.imView, r = v.getBoundingClientRect(); return { x: Math.max(0, Math.min(v.width, (ev.clientX - r.left) * v.width / r.width)), y: Math.max(0, Math.min(v.height, (ev.clientY - r.top) * v.height / r.height)) }; },
-    imDown(ev) { if (this.im.tool !== 'redact' || !this.imCur) return; const p = this.imPt(ev); this.imDrag = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId); },
+    imDown(ev) {
+      const im = this.im; if ((im.tool !== 'redact' && im.tool !== 'edit') || !this.imCur) return;
+      const p = this.imPt(ev);
+      if (im.tool === 'edit' && im.ed.mode === 'text') {
+        const text = im.ed.text.trim(); if (!text) { im.msg = this.t('im_e_text_empty'); return; }
+        im.boxes.push({ mode: 'text', x: Math.round(p.x), y: Math.round(p.y), text, color: im.ed.color, lw: 1, size: Math.max(8, im.ed.size || 8) }); this.imDraw(); this.imEncodeSoon(); return;
+      }
+      this.imDrag = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId);
+    },
     imMove(ev) { if (!this.imDrag) return; const p = this.imPt(ev); this.imDrag.x1 = p.x; this.imDrag.y1 = p.y; if (!this.imRaf) this.imRaf = requestAnimationFrame(() => { this.imRaf = 0; this.imDraw(); }); },
     imUp() {
       const d = this.imDrag; this.imDrag = null; if (!d) return;
-      const b = { x: Math.round(Math.min(d.x0, d.x1)), y: Math.round(Math.min(d.y0, d.y1)), w: Math.round(Math.abs(d.x1 - d.x0)), h: Math.round(Math.abs(d.y1 - d.y0)), mode: this.im.boxMode };
-      if (b.w > 3 && b.h > 3) this.im.boxes.push(b);
+      const m = this.imDragMode(), b = this.imShape(d, m === 'arrow' ? 'arrow' : 'rect');
+      if (m === 'arrow') { if (Math.hypot(b.x1 - b.x0, b.y1 - b.y0) > 5) this.im.boxes.push(b); }
+      else if (b.w > 3 && b.h > 3) {
+        if (m === 'crop') this.im.crop = { x: b.x, y: b.y, w: b.w, h: b.h };
+        else if (m === 'rect') this.im.boxes.push(b);
+        else this.im.boxes.push({ x: b.x, y: b.y, w: b.w, h: b.h, mode: m });
+      }
       this.imDraw(); this.imEncodeSoon();
     },
     imEncode(c, fmt, q) { return new Promise(res => c.toBlob(b => res(b), fmt, q / 100)); },

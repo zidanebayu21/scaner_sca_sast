@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.16';
+    window.APP_VERSION = '2.17';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1845,10 +1845,33 @@
               <label><input type="radio" value="black" v-model="im.boxMode" /> ⬛ {{ t('im_r_black') }}</label>
               <label><input type="radio" value="pixel" v-model="im.boxMode" /> ▦ {{ t('im_r_pixel') }}</label>
               <label><input type="radio" value="blur" v-model="im.boxMode" /> 💧 {{ t('im_r_blur') }}</label>
-              <button class="btn gray" :disabled="!im.boxes.length" @click="im.boxes.pop(); imDraw(); imEncodeSoon()">↶ {{ t('im_r_undo') }}</button>
-              <button class="btn gray" :disabled="!im.boxes.length" @click="im.boxes = []; imDraw(); imEncodeSoon()">{{ t('im_r_clear') }} ({{ im.boxes.length }})</button>
+              <button class="btn gray" :disabled="!im.boxes.length" @click="imDropBox(false)">↶ {{ t('im_r_undo') }}</button>
+              <button class="btn gray" :disabled="!im.boxes.length" @click="imDropBox(true)">{{ t('im_r_clear') }} ({{ im.boxes.length }})</button>
             </div>
             <div class="muted text-xs">{{ t('im_redact_note') }}</div>
+          </div>
+
+          <!-- Edit: crop, kotak, panah, teks -->
+          <div v-if="im.tool === 'edit'" class="ping-box">
+            <div class="gl-filters">
+              <button v-for="m in ['rect', 'arrow', 'text', 'crop']" :key="m" class="btn" :class="im.ed.mode === m ? 'blue' : 'gray'" style="padding:4px 12px" @click="im.ed.mode = m; imDraw()">{{ t('im_e_' + m) }}</button>
+              <template v-if="im.ed.mode !== 'crop'">
+                <label>{{ t('im_e_color') }} <input type="color" v-model="im.ed.color" /></label>
+                <label v-if="im.ed.mode !== 'text'">{{ t('im_e_lw') }} <input type="number" v-model.number="im.ed.lw" min="1" max="60" class="w-16" /> px</label>
+                <template v-else>
+                  <label>{{ t('im_e_size') }} <input type="number" v-model.number="im.ed.size" min="8" max="400" class="w-16" /> px</label>
+                  <input type="text" v-model="im.ed.text" :placeholder="t('im_e_text_ph')" style="width:260px" />
+                </template>
+                <button class="btn gray" :disabled="!im.boxes.length" @click="imDropBox(false)">↶ {{ t('im_e_undo') }}</button>
+                <button class="btn gray" :disabled="!im.boxes.length" @click="imDropBox(true)">{{ t('im_e_clear') }} ({{ im.boxes.length }})</button>
+              </template>
+              <template v-else>
+                <span v-if="im.crop" class="muted">{{ im.crop.w }}×{{ im.crop.h }}</span>
+                <button class="btn" :disabled="!im.crop" @click="imCrop">✂ {{ t('im_e_crop_go') }}</button>
+                <button class="btn gray" :disabled="!im.crop" @click="im.crop = null; imDraw()">{{ t('im_e_crop_cancel') }}</button>
+              </template>
+            </div>
+            <div class="muted text-xs">{{ t('im_e_note_' + im.ed.mode) }}</div>
           </div>
 
           <div v-if="im.busy" style="margin:8px 0"><span class="muted">⏳ {{ im.busy }} {{ im.prog ? im.prog + '%' : '' }}</span><div class="gl-prog"><div :style="{ width: im.prog + '%', background: 'var(--accent)' }"></div></div></div>
@@ -1860,7 +1883,7 @@
             <label><input type="checkbox" v-model="im.actual" /> {{ t('im_actual') }}</label>
           </div>
           <div class="im-view" :class="{ actual: im.actual }">
-            <canvas ref="imView" :style="{ cursor: im.tool === 'redact' ? 'crosshair' : 'default' }" @pointerdown="imDown" @pointermove="imMove" @pointerup="imUp"></canvas>
+            <canvas ref="imView" :style="{ cursor: im.tool === 'edit' && im.ed.mode === 'text' ? 'text' : (im.tool === 'redact' || im.tool === 'edit' ? 'crosshair' : 'default') }" @pointerdown="imDown" @pointermove="imMove" @pointerup="imUp"></canvas>
           </div>
 
           <!-- Output -->

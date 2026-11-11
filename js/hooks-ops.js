@@ -5235,7 +5235,7 @@ async function imgModelBytes(m, onProg) {
 
 const IM_I18N = {
   id: {
-    tab_img: 'Studio Gambar', im_title: 'Studio Gambar — kompres, perbesar, perjelas, sensor, hapus EXIF',
+    tab_img: 'Studio Gambar', im_title: 'Studio Gambar — kompres, perbesar, perjelas, sensor, edit (crop, kotak, panah, teks), hapus EXIF',
     im_intro: 'Tempel (Ctrl+V), drop, atau pilih gambar. Kompres dengan ukuran asli langsung terlihat, resize dengan algoritma pilihan, perjelas gambar buram, upscale AI lokal (Real-ESRGAN di browser) atau lewat API AI dengan token Anda, sensor area sensitif, dan metadata EXIF/GPS dibuang saat disimpan.',
     im_drop: 'Ctrl+V untuk tempel, drop, atau klik untuk pilih gambar', im_drop_sub: 'JPG, PNG, WebP, AVIF, GIF, BMP',
     im_paste: 'Tempel dari clipboard', im_undo: 'Batal', im_reset: 'Kembali ke asli', im_no_clip: 'Tidak ada gambar di clipboard (atau izin clipboard ditolak). Coba Ctrl+V di halaman ini.',
@@ -5270,13 +5270,18 @@ const IM_I18N = {
     im_ai_label: 'Gambar ini hasil AI generatif: bukan bukti asli.',
     im_redact_how: 'Tarik kotak di pratinjau. Mode:', im_r_black: 'Blok hitam', im_r_pixel: 'Pixelate', im_r_blur: 'Blur', im_r_undo: 'Hapus kotak terakhir', im_r_clear: 'Hapus semua kotak',
     im_redact_note: 'Untuk token/password/NIK pakai blok hitam: blur dan pixelate pada teks kadang masih bisa ditebak ulang. Sensor diterapkan pada file yang diunduh/disalin.',
+    im_t_edit: 'Edit (crop, kotak, panah, teks)', im_e_rect: '▭ Kotak', im_e_arrow: '↗ Panah', im_e_text: 'T Teks', im_e_crop: '✂ Crop',
+    im_e_color: 'Warna', im_e_lw: 'Tebal garis', im_e_size: 'Ukuran huruf', im_e_text_ph: 'Tulis teks, lalu klik di gambar', im_e_text_empty: 'Tulis teksnya dulu di kolom teks, lalu klik posisi di gambar.',
+    im_e_undo: 'Hapus yang terakhir', im_e_clear: 'Hapus semua', im_e_crop_go: 'Terapkan crop', im_e_crop_cancel: 'Batalkan pilihan', im_e_cropped: 'Gambar di-crop. Tombol Batal mengembalikannya.',
+    im_e_note_rect: 'Tarik di pratinjau untuk membuat kotak penanda di bagian yang ingin dijelaskan.', im_e_note_arrow: 'Tarik dari pangkal ke ujung: kepala panah ada di titik lepas.',
+    im_e_note_text: 'Tulis teks di kolom, lalu klik di gambar: teks ditaruh mulai dari titik klik (pojok kiri atas).', im_e_note_crop: 'Tarik area yang ingin dipertahankan, lalu klik Terapkan crop.',
     im_cmp: 'Bandingkan dengan asli', im_cmp_tip: 'Geser: bagian kiri garis = gambar asli, kanan = hasil.', im_actual: 'Ukuran asli (100%)',
     im_outscale: 'Skala output', im_vs_orig: 'dari file asli', im_out_meta: 'metadata masih ada', im_out_clean: 'tanpa metadata ✓', im_download: 'Unduh', im_copy: 'Salin PNG', im_copied: 'Tersalin ke clipboard.',
     im_note: 'Semua proses klasik jalan lokal di browser (Web Worker). Hanya Upscale AI lokal (unduh runtime/model sekali) dan AI via API yang memakai jaringan.',
     grp_img_title: 'Studio Gambar', grp_img_desc: 'Lokal di browser. Opsional: runtime + model Real-ESRGAN dari jsDelivr/Hugging Face, dan API AI pilihan Anda (OpenAI, Gemini, OpenRouter, Stability) dengan key Anda.'
   },
   en: {
-    tab_img: 'Image Studio', im_title: 'Image Studio — compress, upscale, sharpen, redact, strip EXIF',
+    tab_img: 'Image Studio', im_title: 'Image Studio — compress, upscale, sharpen, redact, edit (crop, box, arrow, text), strip EXIF',
     im_intro: 'Paste (Ctrl+V), drop or pick an image. Compress with the real output size shown instantly, resize with a chosen algorithm, sharpen blurry images, upscale with local AI (Real-ESRGAN in the browser) or via an AI API with your own key, redact sensitive areas, and EXIF/GPS metadata is stripped on save.',
     im_drop: 'Ctrl+V to paste, drop, or click to pick an image', im_drop_sub: 'JPG, PNG, WebP, AVIF, GIF, BMP',
     im_paste: 'Paste from clipboard', im_undo: 'Undo', im_reset: 'Back to original', im_no_clip: 'No image on the clipboard (or clipboard permission denied). Try Ctrl+V on this page.',
@@ -5311,6 +5316,11 @@ const IM_I18N = {
     im_ai_label: 'This image is generative AI output: not original evidence.',
     im_redact_how: 'Drag a box on the preview. Mode:', im_r_black: 'Black box', im_r_pixel: 'Pixelate', im_r_blur: 'Blur', im_r_undo: 'Remove last box', im_r_clear: 'Remove all boxes',
     im_redact_note: 'Use a black box for tokens/passwords/IDs: blurred or pixelated text can sometimes be reconstructed. Redaction is applied to the downloaded/copied file.',
+    im_t_edit: 'Edit (crop, box, arrow, text)', im_e_rect: '▭ Box', im_e_arrow: '↗ Arrow', im_e_text: 'T Text', im_e_crop: '✂ Crop',
+    im_e_color: 'Color', im_e_lw: 'Line width', im_e_size: 'Font size', im_e_text_ph: 'Type text, then click on the image', im_e_text_empty: 'Type the text in the text field first, then click a position on the image.',
+    im_e_undo: 'Remove last', im_e_clear: 'Remove all', im_e_crop_go: 'Apply crop', im_e_crop_cancel: 'Clear selection', im_e_cropped: 'Image cropped. Undo restores it.',
+    im_e_note_rect: 'Drag on the preview to draw a marker box around the part you want to explain.', im_e_note_arrow: 'Drag from tail to tip: the arrowhead sits where you release.',
+    im_e_note_text: 'Type text in the field, then click on the image: the text starts at the click point (top-left corner).', im_e_note_crop: 'Drag the area to keep, then click Apply crop.',
     im_cmp: 'Compare with original', im_cmp_tip: 'Slide: left of the line = original, right = result.', im_actual: 'Actual size (100%)',
     im_outscale: 'Output scale', im_vs_orig: 'vs original file', im_out_meta: 'metadata still present', im_out_clean: 'no metadata ✓', im_download: 'Download', im_copy: 'Copy PNG', im_copied: 'Copied to clipboard.',
     im_note: 'All classic processing runs locally in the browser (Web Worker). Only local AI upscale (one-time runtime/model download) and AI via API use the network.',
