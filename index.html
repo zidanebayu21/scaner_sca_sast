@@ -9,11 +9,11 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.24';
+    window.APP_VERSION = '2.25';
     // tema dipasang sedini mungkin agar latar tidak berkedip sebelum app.css tiba
     try { if (localStorage.getItem('scaTheme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) { /* localStorage tidak tersedia */ }
     window.APP_HEAD_ASSETS = ['css/app.css', 'js/vue.global.prod.js', 'i18n/i18n.js'];
-    window.APP_BODY_ASSETS = ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/wa-ext.js', 'js/pdf.js', 'js/app.js'];
+    window.APP_BODY_ASSETS = ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/pdf.js', 'js/app.js'];
     // garis progres di atas halaman: maju tiap satu aset selesai dimuat
     window.bootTick = function (n) {
       window.bootDone = (window.bootDone || 0) + n;
@@ -1512,16 +1512,6 @@
       <section v-else-if="tab === 'wa'">
         <h2 class="mt-0">{{ t('wa_title') }}</h2>
         <p class="muted">{{ t('wa_intro') }}</p>
-        <div class="mt-15" style="border-left:3px solid #22c55e;padding:10px 14px;background:rgba(127,127,127,.08);border-radius:8px">
-          <b>🧩 {{ t('wa_ext_title') }}</b> <span class="ping-chip" :class="wa.ext ? 'up' : ''">{{ wa.ext ? t('wa_ext_on') : t('wa_ext_off') }}</span>
-          <p class="muted mt-15">{{ t('wa_ext_desc') }}</p>
-          <ol class="muted list-tight p-0"><li>{{ t('wa_ext_s1') }}</li><li>{{ t('wa_ext_s2') }}</li><li>{{ t('wa_ext_s3') }}</li></ol>
-          <div class="actions">
-            <button class="btn blue" style="background:#15803d" @click="waExtDownload">⬇ {{ t('wa_ext_dl') }}</button>
-            <button class="btn gray" :disabled="!wa.ext" @click="waExtResync">↻ {{ t('wa_ext_resync') }}</button>
-          </div>
-          <div class="muted text-xs mt-15">{{ t('wa_ext_warn') }}</div>
-        </div>
         <ol class="muted list-tight p-0">
           <li>{{ t('wa_step1') }}</li>
           <li>{{ t('wa_step2') }}</li>

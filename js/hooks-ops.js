@@ -3648,11 +3648,9 @@ function waHookMain(cfg) {
     docs: 0,
     sent: (prev && prev.sent) || 0,
     w: (prev && prev.w && !prev.w.closed) ? prev.w : null,
-    ack: !!cfg.ext || !!(prev && prev.w && !prev.w.closed && prev.ack),
+    ack: !!(prev && prev.w && !prev.w.closed && prev.ack),
     st: 0, mt: 0, auto: 0
   };
-  // Mode ekstensi: data dikirim ke service worker ekstensi (arsip tetap), bukan ke tab scanner lewat postMessage
-  var EXT = !!cfg.ext;
   var KEY = '__waHookItems';
   function now() { return Date.now(); }
   function stripMarks(s) { return String(s === null || s === undefined ? '' : s).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ''); }
@@ -4172,7 +4170,7 @@ function waHookMain(cfg) {
     else render();
     return added;
   }
-  S.scan = scanDom; S.main = findMain; S.pane = findScrollPane; S.chat = chatName;
+  S.scan = scanDom;
   // ---- Panel melayang (kanan atas agar tidak menutupi kolom ketik WA di kanan bawah; bisa digeser)
   var panel = document.createElement('div');
   panel.setAttribute('data-wa-hook', '1');
@@ -4204,7 +4202,6 @@ function waHookMain(cfg) {
   document.addEventListener('mousemove', onMouseMove, true);
   document.addEventListener('mouseup', onMouseUp, true);
   x.onclick = function () { var h = body.style.display === 'none'; body.style.display = h ? '' : 'none'; x.textContent = h ? '–' : '+'; };
-  if (EXT) { body.style.display = 'none'; x.textContent = '+'; }
   S.show = function () { panel.style.display = ''; body.style.display = ''; x.textContent = '–'; };
   function list() { return S.order.map(function (id) { return S.items[id]; }).filter(Boolean); }
   function clean(it) { var o = {}; for (var k in it) if (k !== 'dirty') o[k] = it[k]; return o; }
@@ -4212,13 +4209,12 @@ function waHookMain(cfg) {
     var nc = Object.keys(S.chats).length;
     cnt.textContent = "Tertangkap: " + S.order.length + " pesan · " + nc + " chat · 🔗" + S.links + " · 📄" + S.docs + " · terkirim " + S.sent;
   }
-  function save() { if (EXT) return; try { sessionStorage.setItem(KEY, JSON.stringify(list().slice(-5000).map(clean))); } catch (e) { /* kuota penuh */ } }
+  function save() { try { sessionStorage.setItem(KEY, JSON.stringify(list().slice(-5000).map(clean))); } catch (e) { /* kuota penuh */ } }
   var tmr = 0;
   function changed(msg) { if (msg) info.textContent = msg; render(); save(); clearTimeout(tmr); tmr = setTimeout(flush, 650); }
   // ---- Kirim ke tab scanner
   var target = cfg.origin && cfg.origin !== 'null' ? cfg.origin : '*';
   function openApp() {
-    if (EXT) { try { chrome.runtime.sendMessage({ t: 'open' }); } catch (e) { info.textContent = "Ekstensi dimuat ulang: muat ulang tab WhatsApp Web."; } return; }
     if (!cfg.app) { info.textContent = "Scanner dibuka dari file lokal: pakai Salin/Unduh JSON lalu Import di tab WA Hook."; return; }
     try { S.w = window.open(cfg.app.split('#')[0] + '#wa-hook', 'scaWaHook'); } catch (e) { S.w = null; }
     if (!S.w) { info.textContent = "Popup diblokir: izinkan popup untuk WhatsApp Web, lalu klik Buka tabel."; return; }
@@ -4226,29 +4222,7 @@ function waHookMain(cfg) {
   }
   var pings = 0;
   function ping() { pings = 0; (function p() { if (S.ack || !S.w || S.w.closed || ++pings > 40) { if (!S.ack && pings > 40) info.textContent = "Tab scanner tidak merespons. Pakai Salin/Unduh JSON lalu Import."; return; } try { S.w.postMessage({ type: 'wa-hello' }, target); } catch (e) { /* belum siap */ } setTimeout(p, 400); })(); }
-  // Ekstensi: item baru dikirim ke service worker; baru dianggap terkirim setelah dibalas ok, jadi yang gagal dicoba lagi
-  function extTrim() {
-    if (S.order.length < 3000) return;
-    var drop = S.order.length - 2000, keep = [];
-    S.order.forEach(function (id) {
-      var it = S.items[id];
-      if (drop > 0 && it && !it.dirty) { delete S.items[id]; drop--; } else keep.push(id);
-    });
-    S.order = keep; recalcStats();
-  }
-  function extFlush() {
-    var batch = list().filter(function (it) { return it.dirty; });
-    if (!batch.length) return;
-    try {
-      chrome.runtime.sendMessage({ t: 'items', items: batch.map(clean) }, function (r) {
-        if (chrome.runtime.lastError || !r || !r.ok) { info.textContent = "Ekstensi belum merespons, mencoba lagi..."; setTimeout(flush, 5000); return; }
-        batch.forEach(function (it) { it.dirty = false; });
-        S.sent = r.total || S.sent; extTrim(); render();
-      });
-    } catch (e) { info.textContent = "Ekstensi dimuat ulang: muat ulang tab WhatsApp Web."; }
-  }
   function flush() {
-    if (EXT) { extFlush(); return; }
     if (!S.w || S.w.closed || !S.ack) return;
     var batch = list().filter(function (it) { return it.dirty; });
     if (!batch.length) return;
@@ -4333,8 +4307,8 @@ function waHookMain(cfg) {
       ? "Hook aktif. Buka chat & scroll untuk mengumpulkan pesan."
       : "Buka halaman web.whatsapp.com terlebih dahulu.";
   }
-  if (EXT || (S.w && !S.w.closed)) flush();
-  else openApp();
+  if (!S.w || S.w.closed) openApp();
+  else flush();
 }
 
 // ---- WA Hook: penyimpanan (IndexedDB scanner) + sanitasi lintas-tab
@@ -4429,11 +4403,6 @@ const WA_I18N = {
   id: {
     tab_wa: 'WA Hook', wa_title: 'WA Hook — arsipkan chat, link & referensi dokumen WhatsApp Web',
     wa_intro: 'WhatsApp Web sering membatasi riwayat sinkronisasi lama (±2 bulan). Jalankan hook ini sebulan sekali sambil scroll chat/grup penting: setiap pesan, link URL, dan nama dokumen yang tampil di layar otomatis dikumpulkan dan disimpan permanen di IndexedDB browser ini supaya 6 bulan ke depan mudah dicari tanpa perlu buka HP utama.',
-    wa_ext_title: 'Ekstensi otomatis (disarankan)', wa_ext_on: 'ekstensi terhubung', wa_ext_off: 'ekstensi belum terdeteksi',
-    wa_ext_desc: 'Tanpa klik bookmark dan tanpa pindah-pindah chat: ekstensi Chrome/Edge ini menyala sendiri di web.whatsapp.com, menyimpan semua pesan yang tampil, dan (bila diaktifkan) membuka tiap chat lalu menggulir riwayatnya secara berkala saat Anda sedang tidak memakainya. Arsip disimpan di penyimpanan browser (IndexedDB) dan otomatis mengalir ke tabel di bawah setiap tab scanner ini terbuka.',
-    wa_ext_s1: 'Unduh ekstensi (.zip) lalu ekstrak ke satu folder tetap.', wa_ext_s2: 'Buka chrome://extensions (atau edge://extensions), aktifkan Developer mode, klik Load unpacked, pilih folder tadi.', wa_ext_s3: 'Buka web.whatsapp.com dan tab scanner ini; selesai. Klik ikon ekstensi untuk status, Mulai sekarang, dan pengaturan.',
-    wa_ext_dl: 'Unduh ekstensi (.zip)', wa_ext_resync: 'Sinkron ulang semua', wa_ext_resync_msg: 'Meminta ekstensi mengirim ulang seluruh arsip...',
-    wa_ext_warn: 'Catatan: membuka chat otomatis tetap membaca layar WhatsApp Web Anda sendiri dan tidak memakai API, tetapi WhatsApp tidak mengizinkan otomatisasi resmi, jadi gunakan secukupnya. Chat dengan pesan belum dibaca dilewati secara bawaan karena membukanya mengirim tanda "dibaca". Ekstensi hanya jalan di web.whatsapp.com dan halaman scanner ini, dan tidak mengirim data ke mana pun.',
     wa_step1: 'Seret tombol 💬 WA Hook ke bookmark bar (atau klik Salin Script untuk ditempel di Console F12 tab WhatsApp Web).',
     wa_step2: 'Buka web.whatsapp.com, jalankan 💬 WA Hook. Izinkan popup bila diminta agar langsung terhubung ke tab tabel ini.',
     wa_step3: 'Buka chat/grup lalu scroll ke atas (atau klik ⏫ Auto-scroll di panel WA); semua pesan yang lewat otomatis tersimpan.',
@@ -4456,11 +4425,6 @@ const WA_I18N = {
   en: {
     tab_wa: 'WA Hook', wa_title: 'WA Hook — archive WhatsApp Web chats, links & document references',
     wa_intro: 'WhatsApp Web often limits older synced history (~2 months). Run this hook once a month while scrolling important chats/groups: every visible message, URL link, and document filename is collected and stored locally in IndexedDB so you can search references months later without opening your main phone.',
-    wa_ext_title: 'Automatic extension (recommended)', wa_ext_on: 'extension connected', wa_ext_off: 'extension not detected',
-    wa_ext_desc: 'No bookmark click and no switching chats: this Chrome/Edge extension starts by itself on web.whatsapp.com, saves every message shown, and (when enabled) opens each chat and scrolls its history periodically while you are not using it. The archive lives in browser storage (IndexedDB) and flows into the table below whenever this scanner tab is open.',
-    wa_ext_s1: 'Download the extension (.zip) and extract it into a permanent folder.', wa_ext_s2: 'Open chrome://extensions (or edge://extensions), turn on Developer mode, click Load unpacked, pick that folder.', wa_ext_s3: 'Open web.whatsapp.com and this scanner tab; done. Click the extension icon for status, Start now, and settings.',
-    wa_ext_dl: 'Download extension (.zip)', wa_ext_resync: 'Resync everything', wa_ext_resync_msg: 'Asking the extension to resend the whole archive...',
-    wa_ext_warn: 'Note: opening chats automatically still only reads your own WhatsApp Web screen and uses no API, but WhatsApp does not permit official automation, so use it sparingly. Chats with unread messages are skipped by default because opening them sends "read" receipts. The extension runs only on web.whatsapp.com and this scanner page and sends no data anywhere.',
     wa_step1: 'Drag the 💬 WA Hook button to your bookmarks bar (or click Copy Script to paste in the WhatsApp Web F12 Console).',
     wa_step2: 'Open web.whatsapp.com and run 💬 WA Hook. Allow popups if prompted so it connects straight to this table tab.',
     wa_step3: 'Open any chat/group and scroll up (or click ⏫ Auto-scroll on the WA panel); every visible message is saved automatically.',

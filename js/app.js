@@ -132,7 +132,7 @@ createApp({
       pdf: { pages: [], busy: '', prog: 0, err: '', msg: '', over: false, drag: -1, range: '', name: 'gabungan', wm: { text: '', op: 25, color: '#808080' }, comp: { on: false, dpi: 110, q: 70 }, sigs: [], sign: { open: false, pid: null, bg: '', active: null, pad: false } },
       sv: { books: [], cur: null, mode: 'sheet', q: '', gbook: '', gtotal: 0, gper: [], gbusy: false, inq: '', header: true, filters: {}, sort: { c: -1, desc: false }, total: 0, busy: '', scroll: 0, scrollX: 0, rowsVer: 0, hl: -1, stats: null, colW: 160, over: false, msg: '', err: '', recent: [], showDiff: false, dcfg: { a: '', b: '', keys: [], ic: true }, diff: null, dbusy: '', donly: '', dtotal: 0 },
       shp: { list: [], q: '', kw: '', level: '', mall: false, star: false, noAd: false, minSold: 0, minRate: 0, pMin: 0, pMax: 0, sort: 'sold', desc: true, page: 300, msg: '', err: '', paste: '' },
-      wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '', ext: false },
+      wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },
       gl: { sources: [], commits: [], order: {}, binfo: {}, leak: {}, leakVer: 0, leakShow: false, leakSev: '', branch: '', zoom: 0, q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, dateKind: 'a', view: 'list', page: 300, sel: null, files: null, filesBusy: false, busy: false, prog: '', err: '', msg: '', paste: '', pasteName: '', over: false, max: 20000, repNoMerge: true, copied: false },
       clock: { q: '', pins: [], now: Date.now(), live: true, fixedMs: null, base: 'mine', ts: '', copied: false },
       colab: { sonarUrl: COLAB_SONAR_URL, paste: '', url: '', token: '', key: '', copied: '', aiNotebook: COLAB_AI_URL, web: { db: { nb: COLAB_DBEAVER_URL, url: '' }, zap: { nb: COLAB_ZAP_URL, url: '' } },
@@ -1977,27 +1977,10 @@ createApp({
       this.waLoad();
       try { this.waBc = new BroadcastChannel('scaWaHook'); this.waBc.onmessage = () => { this.waLoad(); }; } catch (e) { this.waBc = null; }
       window.addEventListener('message', e => { this.waOnMessage(e); });
-      window.postMessage({ type: 'wa-ext-hello' }, location.origin);
       if (location.hash === '#wa-hook') { this.visibleTabs.wa = true; this.tab = 'wa'; try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { /* abaikan */ } }
-    },
-    // Simpan item ke IndexedDB scanner (sanitasi waClean + gabung waMerge), lalu panggil ack(total)
-    waStore(items, ack) {
-      const list = items.slice(0, 5000).map(waClean).filter(Boolean);
-      if (!list.length) return;
-      waPutMany(list).then(() => this.waLoad()).then(() => {
-        this.wa.msg = this.t('wa_got').replace('{n}', list.length);
-        try { ack(this.wa.list.length); } catch (err) { /* tab ditutup */ }
-        try { if (this.waBc) this.waBc.postMessage('changed'); } catch (err) { /* abaikan */ }
-      }).catch(err => { this.wa.err = String(err.message || err); });
-    },
-    // Pesan dari bridge ekstensi WA Hook Auto: hanya dari window ini sendiri (content script di halaman yang sama)
-    waOnExtMessage(d) {
-      if (d.type === 'wa-ext-ready') { this.wa.ext = true; return; }
-      if (d.type === 'wa-ext-items' && Array.isArray(d.items)) this.waStore(d.items, () => window.postMessage({ type: 'wa-ext-saved' }, location.origin));
     },
     waOnMessage(e) {
       const d = e.data;
-      if (d && typeof d === 'object' && e.source === window && e.origin === location.origin && /^wa-ext-/.test(String(d.type))) { this.waOnExtMessage(d); return; }
       if (!d || typeof d !== 'object' || !WA_ORIGIN.test(e.origin || '') || !e.source) return;
       if (d.type === 'wa-hello') {
         try { e.source.postMessage({ type: 'wa-ack' }, e.origin); if (window.AppPipe) window.AppPipe.recordPostOut(e.origin, { type: 'wa-ack' }, 'WA Hook'); } catch (err) { /* tab ditutup */ }
@@ -2005,14 +1988,15 @@ createApp({
         return;
       }
       if (d.type === 'wa-items' && Array.isArray(d.items)) {
-        this.waStore(d.items, total => {
-          e.source.postMessage({ type: 'wa-saved', total }, e.origin);
-          if (window.AppPipe) window.AppPipe.recordPostOut(e.origin, { type: 'wa-saved', total }, 'WA Hook');
-        });
+        const list = d.items.slice(0, 5000).map(waClean).filter(Boolean);
+        if (!list.length) return;
+        waPutMany(list).then(() => this.waLoad()).then(() => {
+          this.wa.msg = this.t('wa_got').replace('{n}', list.length);
+          try { e.source.postMessage({ type: 'wa-saved', total: this.wa.list.length }, e.origin); if (window.AppPipe) window.AppPipe.recordPostOut(e.origin, { type: 'wa-saved', total: this.wa.list.length }, 'WA Hook'); } catch (err) { /* abaikan */ }
+          try { if (this.waBc) this.waBc.postMessage('changed'); } catch (err) { /* abaikan */ }
+        }).catch(err => { this.wa.err = String(err.message || err); });
       }
     },
-    waExtDownload() { pupDownload('wa-hook-auto-ext.zip', waExtZip(waExtFiles()), 'application/zip'); },
-    waExtResync() { window.postMessage({ type: 'wa-ext-sync' }, location.origin); this.wa.msg = this.t('wa_ext_resync_msg'); },
     waLoad() {
       return waAll().then(list => {
         const dirty = [];
