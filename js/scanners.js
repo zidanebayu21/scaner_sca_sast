@@ -162,6 +162,7 @@ const API_GROUPS = [
   { key: 'ocr', title: 'OCR Gambar — baca teks dari gambar', desc: 'Hanya dipakai di tab OCR Gambar. Tesseract jalan di browser; OCR.space dan AI menerima gambar yang Anda kirim.' },
   { key: 'color', title: 'Color Picker', desc: 'Tidak memakai API: gambar dan warna diproses lokal di browser.', none: true },
   { key: 'img', title: 'Studio Gambar', desc: 'Lokal di browser. Opsional: runtime + model Real-ESRGAN dari jsDelivr/Hugging Face, dan API AI pilihan Anda (OpenAI, Gemini, OpenRouter, Stability) dengan key Anda.', none: true },
+  { key: 'pdf', title: 'PDF Tools', desc: 'File diproses lokal di browser dan tidak diunggah. Hanya mengunduh library pdf-lib dan pdf.js dari jsDelivr (versi dikunci + SRI).', none: true },
   { key: 'sheet', title: 'Sheet Viewer', desc: 'Tidak memakai API: file dibaca lokal di browser (Web Worker).', none: true },
   { key: 'tts', title: 'Text to Speech', desc: 'Memakai suara bawaan browser/OS. Suara bertanda online diproses di server Google/Microsoft (teks ikut terkirim); suara lokal tidak.', none: true },
   { key: 'vpn', title: 'VPN Docker', desc: 'Tidak memanggil API: hanya panduan dan file unduhan untuk dijalankan di PC Anda.', none: true },

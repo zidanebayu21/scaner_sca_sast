@@ -32,6 +32,7 @@ const TAB_LIST = [
   { key: 'tts', label: 'Text to Speech' },
   { key: 'sheet', label: 'Sheet Viewer' },
   { key: 'img', label: 'Studio Gambar' },
+  { key: 'pdf', label: 'PDF Tools' },
   { key: 'pup', label: 'Puppeteer Record' }
 ];
 const COLAB_SONAR_URL = 'https://colab.research.google.com/drive/1_Mx-FfnXU9aqYy6UqIzlX7myA3ysdwSt?usp=sharing';
@@ -128,6 +129,7 @@ createApp({
         rs: { pct: 100, w: 0, h: 0, lock: true, alg: 'lanczos3' },
         fx: { preset: '', denoise: 0, deconv: 'none', sigma: 1.2, len: 9, angle: 0, iters: 10, amount: 0.6, radius: 1.0, threshold: 2, auto: false },
         ai: { model: 'w2x_photo', out: 2, noise: 1, tile: 192, ep: '' }, api: { prov: 'openai', key: '', prompt: '', models: {} }, boxes: [], boxMode: 'black', crop: null, ed: { mode: 'rect', color: '#ef4444', lw: 4, size: 28, text: '' } },
+      pdf: { pages: [], busy: '', prog: 0, err: '', msg: '', over: false, drag: -1, range: '', name: 'gabungan', wm: { text: '', op: 25, color: '#808080' }, comp: { on: false, dpi: 110, q: 70 } },
       sv: { books: [], cur: null, mode: 'sheet', q: '', gbook: '', gtotal: 0, gper: [], gbusy: false, inq: '', header: true, filters: {}, sort: { c: -1, desc: false }, total: 0, busy: '', scroll: 0, scrollX: 0, rowsVer: 0, hl: -1, stats: null, colW: 160, over: false, msg: '', err: '', recent: [], showDiff: false, dcfg: { a: '', b: '', keys: [], ic: true }, diff: null, dbusy: '', donly: '', dtotal: 0 },
       shp: { list: [], q: '', kw: '', level: '', mall: false, star: false, noAd: false, minSold: 0, minRate: 0, pMin: 0, pMax: 0, sort: 'sold', desc: true, page: 300, msg: '', err: '', paste: '' },
       wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },
@@ -693,7 +695,7 @@ createApp({
         docs: r => ((r.docs || []).join(' ') + ' ' + (r.links || []).join(' ')).trim()
       });
     },
-    imTools() { return [{ k: 'compress', label: '🗜 ' + this.t('im_t_compress') }, { k: 'resize', label: '↔ ' + this.t('im_t_resize') }, { k: 'fix', label: '🔍 ' + this.t('im_t_fix') }, { k: 'ailocal', label: '✨ ' + this.t('im_t_ailocal') }, { k: 'aiapi', label: '🤖 ' + this.t('im_t_aiapi') }, { k: 'redact', label: '⬛ ' + this.t('im_t_redact') }, { k: 'edit', label: '✏ ' + this.t('im_t_edit') }]; },
+    imTools() { return [{ k: 'compress', label: '🗜 ' + this.t('im_t_compress') }, { k: 'resize', label: '↔ ' + this.t('im_t_resize') }, { k: 'fix', label: '🔍 ' + this.t('im_t_fix') }, { k: 'ailocal', label: '✨ ' + this.t('im_t_ailocal') }, { k: 'aiapi', label: '🤖 ' + this.t('im_t_aiapi') }, { k: 'edit', label: '✏ ' + this.t('im_t_edit') }]; },
     imAlgs() { return ['lanczos3', 'lanczos2', 'catmull', 'mitchell', 'bilinear', 'area', 'nearest'].map(k => ({ k, label: this.t('im_a_' + k), tip: this.t('im_a_' + k + '_tip') })); },
     imModels() { return IMG_MODELS; },
     imProviders() { return IMG_AI_PROVIDERS; },
@@ -870,6 +872,7 @@ createApp({
     this.waInit();
     this.svInit();
     this.imInit();
+    this.pdfInit();
     this.ocrLoadPrefs();
     this.ttsInit();
     document.addEventListener('paste', e => { this.onOcrPaste(e); });
@@ -972,6 +975,7 @@ createApp({
     if (this.tab === 'git' && this.gl.view === 'stats' && !this.glRaf) this.glRaf = requestAnimationFrame(() => { this.glRaf = 0; this.glDrawBars(); });
   },
   methods: {
+    ...PDF_METHODS,
     log(m) { this.logs.push(m); },
     showToast(msg, err) {
       this.toast = { msg, err: !!err };
@@ -1520,7 +1524,7 @@ createApp({
       if (m === 'rect' || m === 'arrow') this.imMark(g, this.imShape(d, m), 1);
       else { g.setLineDash([6, 4]); g.strokeRect(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0)); g.setLineDash([]); }
     },
-    imDragMode() { return this.im.tool === 'edit' ? this.im.ed.mode : this.im.boxMode; },
+    imDragMode() { return this.im.ed.mode === 'redact' ? this.im.boxMode : this.im.ed.mode; },
     imShape(d, mode) {
       const e = this.im.ed, st = { mode, color: e.color, lw: Math.max(1, e.lw || 1) };
       if (mode === 'arrow') return Object.assign(st, { x0: Math.round(d.x0), y0: Math.round(d.y0), x1: Math.round(d.x1), y1: Math.round(d.y1) });
@@ -1528,9 +1532,9 @@ createApp({
     },
     imPt(ev) { const v = this.$refs.imView, r = v.getBoundingClientRect(); return { x: Math.max(0, Math.min(v.width, (ev.clientX - r.left) * v.width / r.width)), y: Math.max(0, Math.min(v.height, (ev.clientY - r.top) * v.height / r.height)) }; },
     imDown(ev) {
-      const im = this.im; if ((im.tool !== 'redact' && im.tool !== 'edit') || !this.imCur) return;
+      const im = this.im; if (im.tool !== 'edit' || !this.imCur) return;
       const p = this.imPt(ev);
-      if (im.tool === 'edit' && im.ed.mode === 'text') {
+      if (im.ed.mode === 'text') {
         const text = im.ed.text.trim(); if (!text) { im.msg = this.t('im_e_text_empty'); return; }
         im.boxes.push({ mode: 'text', x: Math.round(p.x), y: Math.round(p.y), text, color: im.ed.color, lw: 1, size: Math.max(8, im.ed.size || 8) }); this.imDraw(); this.imEncodeSoon(); return;
       }

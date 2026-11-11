@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.17';
+    window.APP_VERSION = '2.18';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -1838,27 +1838,19 @@
             <div class="muted text-xs">{{ t('im_api_note') }}</div>
           </div>
 
-          <!-- Sensor -->
-          <div v-if="im.tool === 'redact'" class="ping-box">
-            <div class="gl-filters">
-              <span>{{ t('im_redact_how') }}</span>
-              <label><input type="radio" value="black" v-model="im.boxMode" /> ⬛ {{ t('im_r_black') }}</label>
-              <label><input type="radio" value="pixel" v-model="im.boxMode" /> ▦ {{ t('im_r_pixel') }}</label>
-              <label><input type="radio" value="blur" v-model="im.boxMode" /> 💧 {{ t('im_r_blur') }}</label>
-              <button class="btn gray" :disabled="!im.boxes.length" @click="imDropBox(false)">↶ {{ t('im_r_undo') }}</button>
-              <button class="btn gray" :disabled="!im.boxes.length" @click="imDropBox(true)">{{ t('im_r_clear') }} ({{ im.boxes.length }})</button>
-            </div>
-            <div class="muted text-xs">{{ t('im_redact_note') }}</div>
-          </div>
-
-          <!-- Edit: crop, kotak, panah, teks -->
+          <!-- Edit: kotak, panah, teks, sensor, crop -->
           <div v-if="im.tool === 'edit'" class="ping-box">
             <div class="gl-filters">
-              <button v-for="m in ['rect', 'arrow', 'text', 'crop']" :key="m" class="btn" :class="im.ed.mode === m ? 'blue' : 'gray'" style="padding:4px 12px" @click="im.ed.mode = m; imDraw()">{{ t('im_e_' + m) }}</button>
+              <button v-for="m in ['rect', 'arrow', 'text', 'redact', 'crop']" :key="m" class="btn" :class="im.ed.mode === m ? 'blue' : 'gray'" style="padding:4px 12px" @click="im.ed.mode = m; imDraw()">{{ t('im_e_' + m) }}</button>
               <template v-if="im.ed.mode !== 'crop'">
-                <label>{{ t('im_e_color') }} <input type="color" v-model="im.ed.color" /></label>
-                <label v-if="im.ed.mode !== 'text'">{{ t('im_e_lw') }} <input type="number" v-model.number="im.ed.lw" min="1" max="60" class="w-16" /> px</label>
-                <template v-else>
+                <template v-if="im.ed.mode === 'redact'">
+                  <label><input type="radio" value="black" v-model="im.boxMode" /> ⬛ {{ t('im_r_black') }}</label>
+                  <label><input type="radio" value="pixel" v-model="im.boxMode" /> ▦ {{ t('im_r_pixel') }}</label>
+                  <label><input type="radio" value="blur" v-model="im.boxMode" /> 💧 {{ t('im_r_blur') }}</label>
+                </template>
+                <label v-else>{{ t('im_e_color') }} <input type="color" v-model="im.ed.color" /></label>
+                <label v-if="im.ed.mode === 'rect' || im.ed.mode === 'arrow'">{{ t('im_e_lw') }} <input type="number" v-model.number="im.ed.lw" min="1" max="60" class="w-16" /> px</label>
+                <template v-if="im.ed.mode === 'text'">
                   <label>{{ t('im_e_size') }} <input type="number" v-model.number="im.ed.size" min="8" max="400" class="w-16" /> px</label>
                   <input type="text" v-model="im.ed.text" :placeholder="t('im_e_text_ph')" style="width:260px" />
                 </template>
@@ -1871,7 +1863,7 @@
                 <button class="btn gray" :disabled="!im.crop" @click="im.crop = null; imDraw()">{{ t('im_e_crop_cancel') }}</button>
               </template>
             </div>
-            <div class="muted text-xs">{{ t('im_e_note_' + im.ed.mode) }}</div>
+            <div class="muted text-xs">{{ t(im.ed.mode === 'redact' ? 'im_redact_note' : 'im_e_note_' + im.ed.mode) }}</div>
           </div>
 
           <div v-if="im.busy" style="margin:8px 0"><span class="muted">⏳ {{ im.busy }} {{ im.prog ? im.prog + '%' : '' }}</span><div class="gl-prog"><div :style="{ width: im.prog + '%', background: 'var(--accent)' }"></div></div></div>
@@ -1883,7 +1875,7 @@
             <label><input type="checkbox" v-model="im.actual" /> {{ t('im_actual') }}</label>
           </div>
           <div class="im-view" :class="{ actual: im.actual }">
-            <canvas ref="imView" :style="{ cursor: im.tool === 'edit' && im.ed.mode === 'text' ? 'text' : (im.tool === 'redact' || im.tool === 'edit' ? 'crosshair' : 'default') }" @pointerdown="imDown" @pointermove="imMove" @pointerup="imUp"></canvas>
+            <canvas ref="imView" :style="{ cursor: im.tool !== 'edit' ? 'default' : (im.ed.mode === 'text' ? 'text' : 'crosshair') }" @pointerdown="imDown" @pointermove="imMove" @pointerup="imUp"></canvas>
           </div>
 
           <!-- Output -->
@@ -1906,6 +1898,71 @@
           </div>
         </template>
         <div class="muted text-xs mt-25">{{ t('im_note') }}</div>
+      </section>
+
+      <!-- PDF Tools -->
+      <section v-else-if="tab === 'pdf'">
+        <h2 class="mt-0">{{ t('pdf_title') }}</h2>
+        <p class="muted">{{ t('pdf_intro') }}</p>
+        <div class="drop" :class="{ over: pdf.over }" @dragover.prevent="pdf.over = true" @dragleave.prevent="pdf.over = false" @drop.prevent="onPdfDrop" @click="$refs.pdfFile.click()">
+          <b>📄 {{ t('pdf_drop') }}</b><br /><span class="muted">{{ t('pdf_drop_sub') }}</span>
+        </div>
+        <input type="file" ref="pdfFile" accept="application/pdf,image/*" multiple class="hidden" @change="onPdfPick" />
+        <div class="bad mt-15" v-if="pdf.err">{{ pdf.err }}</div>
+        <div class="ok mt-15" v-if="pdf.msg && !pdf.busy">{{ pdf.msg }}</div>
+        <div v-if="pdf.busy" style="margin:8px 0"><span class="muted">⏳ {{ pdf.busy }}</span><div class="gl-prog"><div :style="{ width: pdf.prog + '%', background: 'var(--accent)' }"></div></div></div>
+
+        <template v-if="pdf.pages.length">
+          <div class="ping-box">
+            <div class="gl-filters">
+              <b>{{ pdf.pages.length }} {{ t('pdf_pages') }}</b><span class="muted">· {{ pdfSelN() }} {{ t('pdf_selected') }}</span>
+              <button class="btn gray" @click="pdfSelAll(true)">{{ t('pdf_sel_all') }}</button>
+              <button class="btn gray" :disabled="!pdfSelN()" @click="pdfSelAll(false)">{{ t('pdf_sel_none') }}</button>
+              <input type="text" v-model="pdf.range" :placeholder="t('pdf_range_ph')" style="width:150px" @keyup.enter="pdfSelRange" />
+              <button class="btn gray" :disabled="!pdf.range" @click="pdfSelRange">{{ t('pdf_range_go') }}</button>
+              <button class="btn gray" @click="pdfRot(pdfScope())">⟳ {{ t('pdf_rot') }}</button>
+              <button class="btn gray" :disabled="!pdfSelN()" @click="pdfDel(pdfScope())">✕ {{ t('pdf_del') }} ({{ pdfSelN() }})</button>
+              <button class="btn gray" @click="pdfClear">{{ t('pdf_clear') }}</button>
+            </div>
+            <div class="muted text-xs">{{ t('pdf_how') }}</div>
+          </div>
+
+          <div class="pdf-grid">
+            <div v-for="(pg, i) in pdf.pages" :key="pg.id" class="pdf-card" :class="{ sel: pg.sel }" draggable="true" @dragstart="pdf.drag = i" @dragend="pdf.drag = -1" @dragover.prevent @drop.prevent.stop="pdfDropOn(i, $event)" @click="pg.sel = !pg.sel">
+              <div class="pdf-thumb"><img v-if="pg.thumb.length > 1" :src="pg.thumb" :style="{ transform: 'rotate(' + pg.rot + 'deg)' }" alt="" draggable="false" /><span v-else class="muted">{{ pg.thumb ? '📄' : '…' }}</span></div>
+              <div class="pdf-cap" :title="pdfName(pg)"><b>{{ i + 1 }}</b> · {{ pdfName(pg) }}</div>
+              <div class="pdf-act" @click.stop>
+                <button class="lnk" :disabled="!i" :title="t('pdf_t_left')" @click="pdfMove(i, i - 1)">◀</button>
+                <button class="lnk" :title="t('pdf_t_rot')" @click="pdfRot([pg])">⟳</button>
+                <button class="lnk" :title="t('pdf_t_del')" @click="pdfDel([pg])">✕</button>
+                <button class="lnk" :disabled="i === pdf.pages.length - 1" :title="t('pdf_t_right')" @click="pdfMove(i, i + 1)">▶</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ping-box mt-2">
+            <div class="gl-filters">
+              <label>{{ t('pdf_out') }} <input type="text" v-model="pdf.name" style="width:180px" /> .pdf</label>
+              <label>{{ t('pdf_wm') }} <input type="text" v-model="pdf.wm.text" :placeholder="t('pdf_wm_ph')" style="width:220px" /></label>
+              <template v-if="pdf.wm.text">
+                <label>{{ t('pdf_wm_op') }} <input type="range" v-model.number="pdf.wm.op" min="5" max="100" style="width:110px" /> {{ pdf.wm.op }}%</label>
+                <label>{{ t('pdf_wm_color') }} <input type="color" v-model="pdf.wm.color" /></label>
+              </template>
+            </div>
+            <div class="gl-filters">
+              <label><input type="checkbox" v-model="pdf.comp.on" /> {{ t('pdf_comp') }}</label>
+              <template v-if="pdf.comp.on">
+                <label>{{ t('pdf_dpi') }} <select v-model.number="pdf.comp.dpi"><option :value="72">72 dpi</option><option :value="110">110 dpi</option><option :value="150">150 dpi</option><option :value="200">200 dpi</option></select></label>
+                <label>{{ t('pdf_q') }} <input type="range" v-model.number="pdf.comp.q" min="20" max="95" style="width:140px" /> {{ pdf.comp.q }}</label>
+              </template>
+            </div>
+            <div class="muted text-xs" v-if="pdf.comp.on">{{ t('pdf_comp_note') }}</div>
+            <div class="actions">
+              <button class="btn" :disabled="!!pdf.busy" @click="pdfBuild(false)">⬇ {{ t('pdf_dl_all') }} ({{ pdf.pages.length }})</button>
+              <button class="btn gray" :disabled="!!pdf.busy || !pdfSelN()" @click="pdfBuild(true)">⬇ {{ t('pdf_dl_sel') }} ({{ pdfSelN() }})</button>
+            </div>
+          </div>
+        </template>
       </section>
 
       <!-- Jam Dunia -->
@@ -2633,6 +2690,6 @@
     </div>
   </div>
 
-  <script>loadVersioned(document.body, ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/app.js']);</script>
+  <script>loadVersioned(document.body, ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/pdf.js', 'js/app.js']);</script>
 </body>
 </html>
