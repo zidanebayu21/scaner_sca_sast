@@ -1456,9 +1456,20 @@ createApp({
     },
     imSetCur(c, label) {
       this.imHist.push(this.imCur); this.imHistB.push(JSON.stringify(this.im.boxes)); if (this.imHist.length > 6) { this.imHist.shift(); this.imHistB.shift(); }
+      this.imScaleBoxes(c.width / this.imCur.width, c.height / this.imCur.height);
       this.imCur = c; this.im.cur = { w: c.width, h: c.height }; this.im.hist = this.imHist.length; this.im.msg = label || '';
       this.im.rs.w = c.width; this.im.rs.h = c.height; this.im.rs.pct = 100;
       this.$nextTick(() => { this.imDraw(); this.imEncodeSoon(); });
+    },
+    // resize/upscale mengubah ukuran gambar kerja: sensor dan anotasi ikut diskalakan agar tetap menutup bagian yang sama
+    imScaleBoxes(sx, sy) {
+      if (sx === 1 && sy === 1) return;
+      const s = (b, k, f) => { if (b[k] != null) b[k] *= f; };
+      this.im.boxes.forEach(b => {
+        ['x', 'w', 'x0', 'x1'].forEach(k => s(b, k, sx)); ['y', 'h', 'y0', 'y1'].forEach(k => s(b, k, sy));
+        if (b.mode === 'rect' || b.mode === 'arrow' || b.mode === 'text') { s(b, 'lw', sx); s(b, 'size', sx); }
+        ['x', 'y', 'w', 'h', 'x0', 'y0', 'x1', 'y1'].forEach(k => { if (b[k] != null) b[k] = Math.round(b[k]); });
+      });
     },
     imUndo() { if (!this.imHist.length) return; this.imCur = this.imHist.pop(); this.im.boxes = JSON.parse(this.imHistB.pop() || '[]'); this.im.crop = null; this.im.cur = { w: this.imCur.width, h: this.imCur.height }; this.im.hist = this.imHist.length; this.im.aiGen = false; this.imDraw(); this.imEncodeSoon(); },
     imReset() { if (!this.imOrig) return; this.imHist = []; this.imHistB = []; this.im.crop = null; this.imCur = this.imOrig; this.im.cur = { w: this.imOrig.width, h: this.imOrig.height }; this.im.hist = 0; this.im.boxes = []; this.im.aiGen = false; this.im.outScale = 1; this.imDraw(); this.imEncodeSoon(); },

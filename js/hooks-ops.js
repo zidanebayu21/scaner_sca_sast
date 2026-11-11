@@ -2738,31 +2738,30 @@ async function pingMixedTest() {
   finally { clearTimeout(tm); }
 }
 // Versi lokal satu file: index.html + seluruh CSS & JS lokal disisipkan inline, supaya bisa dibuka mandiri lewat file://.
+// Aset diambil dari daftar yang dipakai loader di index.html (APP_HEAD_ASSETS/APP_BODY_ASSETS), bukan dari tag <script src>.
+async function pingAssetText(name) {
+  const r = await fetch(new URL(name, location.href).href + '?v=' + window.APP_VERSION, { cache: 'no-store' });
+  if (!r.ok) throw new Error(name + ' HTTP ' + r.status);
+  return r.text();
+}
+async function pingInlineTags(files) {
+  const parts = [];
+  for (const f of files) {
+    const code = await pingAssetText(f);
+    parts.push(/\.css$/.test(f) ? '<style>\n' + code.split('</' + 'style').join('<\\/' + 'style') + '\n</' + 'style>' : '<script>\n' + code.split('</' + 'script').join('<\\/' + 'script') + '\n</' + 'script>');
+  }
+  return parts.join('\n');
+}
 async function pingLocalHtml() {
   const res = await fetch(location.href.split('#')[0], { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   let html = await res.text();
-  const cssLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"][href]'));
-  for (const lnk of cssLinks) {
-    const href = lnk.getAttribute('href');
-    if (!href || /^https?:\/\//i.test(href)) continue;
-    const rCss = await fetch(new URL(href, location.href).href, { cache: 'no-store' });
-    if (!rCss.ok) throw new Error(href + ' HTTP ' + rCss.status);
-    const cssText = (await rCss.text()).split('</' + 'style').join('<\\/' + 'style');
-    const escapedHref = href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    html = html.replace(new RegExp('<link[^>]+href=["\']' + escapedHref + '["\'][^>]*/?>', 'i'), () => '<style>\n' + cssText + '\n</' + 'style>');
-  }
-  const scripts = Array.from(document.querySelectorAll('script[src]'));
-  for (const sc of scripts) {
-    const src = sc.getAttribute('src');
-    if (!src || /^https?:\/\//i.test(src)) continue;
-    const rJs = await fetch(new URL(src, location.href).href, { cache: 'no-store' });
-    if (!rJs.ok) throw new Error(src + ' HTTP ' + rJs.status);
-    const code = (await rJs.text()).split('</' + 'script').join('<\\/' + 'script');
-    const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    html = html.replace(new RegExp('<script[^>]+src=["\']' + escapedSrc + '["\'][^>]*></' + 'script>', 'i'), () => '<script>\n' + code + '\n</' + 'script>');
-  }
-  return html;
+  // loader (tema awal, daftar aset, service worker) diganti versi minimal + aset head; skrip body disisipkan di tempat pemanggil loader
+  const head = await pingInlineTags(window.APP_HEAD_ASSETS), body = await pingInlineTags(window.APP_BODY_ASSETS);
+  const loader = /<script>\s*window\.APP_VERSION[\s\S]*?<\/script>/, call = /<script>loadVersioned\(document\.body, APP_BODY_ASSETS\);<\/script>/;
+  if (!loader.test(html) || !call.test(html)) throw new Error('index.html tidak dikenali');
+  html = html.replace(loader, () => '<script>window.APP_VERSION = ' + JSON.stringify(window.APP_VERSION) + '; window.bootTick = function () {};</' + 'script>\n' + head);
+  return html.replace(call, () => body);
 }
 function pingWorkerMain() { setInterval(function () { postMessage(1); }, 1000); }
 function pingTicker(cb) {
