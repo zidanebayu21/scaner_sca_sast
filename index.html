@@ -9,7 +9,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.18';
+    window.APP_VERSION = '2.19';
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
@@ -21,9 +21,17 @@
     };
     loadVersioned(document.head, ['css/app.css', 'js/vue.global.prod.js', 'i18n/i18n.js']);
   </script>
+  <!-- Selama Vue belum terpasang (internet lambat), template mentah {{ ... }} disembunyikan dan diganti tulisan memuat. -->
+  <style>
+    [v-cloak] { display: none !important; }
+    #boot { display: none; }
+    #app[v-cloak] + #boot { display: flex; position: fixed; inset: 0; align-items: center; justify-content: center; gap: 10px; background: #13100e; color: #c9b8a8; font: 14px system-ui, sans-serif; }
+    #boot::before { content: ""; width: 16px; height: 16px; border: 2px solid #c9b8a8; border-top-color: transparent; border-radius: 50%; animation: boot-spin .8s linear infinite; }
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
-  <div id="app">
+  <div id="app" v-cloak>
     <header>
       <div>
         <h1>Scanner Security <span class="ver" :title="'v' + appVersion">{{ appVersion }}</span></h1>
@@ -2689,6 +2697,7 @@
     </main>
     </div>
   </div>
+  <div id="boot">Scanner Security — memuat / loading…</div>
 
   <script>loadVersioned(document.body, ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/pdf.js', 'js/app.js']);</script>
 </body>
