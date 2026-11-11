@@ -9,25 +9,49 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '2.19';
+    window.APP_VERSION = '2.20';
+    // tema dipasang sedini mungkin agar latar tidak berkedip sebelum app.css tiba
+    try { if (localStorage.getItem('scaTheme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) { /* localStorage tidak tersedia */ }
+    window.APP_HEAD_ASSETS = ['css/app.css', 'js/vue.global.prod.js', 'i18n/i18n.js'];
+    window.APP_BODY_ASSETS = ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/pdf.js', 'js/app.js'];
+    // garis progres di atas halaman: maju tiap satu aset selesai dimuat
+    window.bootTick = function (n) {
+      window.bootDone = (window.bootDone || 0) + n;
+      const bar = document.getElementById('boot-bar');
+      if (bar) bar.style.width = Math.max(4, Math.round(window.bootDone / (APP_HEAD_ASSETS.length + APP_BODY_ASSETS.length) * 100)) + '%';
+    };
     // Aset dimuat berurutan (async=false) dengan ?v=APP_VERSION agar cache versi lama tidak terpakai.
     window.loadVersioned = function (target, files) {
       files.forEach(function (f) {
         const css = /\.css$/.test(f), el = document.createElement(css ? 'link' : 'script');
         if (css) { el.rel = 'stylesheet'; el.setAttribute('blocking', 'render'); el.href = f + '?v=' + window.APP_VERSION; }
         else { el.async = false; el.src = f + '?v=' + window.APP_VERSION; }
+        el.onload = function () { window.bootTick(1); };
+        el.onerror = function () { const lbl = document.querySelector('#boot span'); if (lbl) lbl.textContent = 'Gagal memuat ' + f + ' — muat ulang halaman / reload the page'; };
         target.appendChild(el);
       });
     };
-    loadVersioned(document.head, ['css/app.css', 'js/vue.global.prod.js', 'i18n/i18n.js']);
+    loadVersioned(document.head, APP_HEAD_ASSETS);
+    // skrip di akhir body ikut diunduh sejak awal (paralel), tidak menunggu HTML selesai dibaca
+    APP_BODY_ASSETS.forEach(function (f) {
+      const el = document.createElement('link');
+      el.rel = 'preload'; el.as = 'script'; el.href = f + '?v=' + window.APP_VERSION;
+      document.head.appendChild(el);
+    });
+    // aset disimpan service worker (sw.js): kunjungan berikutnya cepat walau internet lambat, dan bisa dibuka offline
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* tanpa cache offline */ }); });
+    }
   </script>
-  <!-- Selama Vue belum terpasang (internet lambat), template mentah {{ ... }} disembunyikan dan diganti tulisan memuat. -->
+  <!-- Selama Vue belum terpasang (internet lambat), template mentah {{ ... }} disembunyikan; yang tampil hanya garis progres tipis di atas dan label kecil, tanpa lapisan penutup. -->
   <style>
+    html { background: #13100e; }
+    html[data-theme="light"] { background: #f8f4ef; }
     [v-cloak] { display: none !important; }
     #boot { display: none; }
-    #app[v-cloak] + #boot { display: flex; position: fixed; inset: 0; align-items: center; justify-content: center; gap: 10px; background: #13100e; color: #c9b8a8; font: 14px system-ui, sans-serif; }
-    #boot::before { content: ""; width: 16px; height: 16px; border: 2px solid #c9b8a8; border-top-color: transparent; border-radius: 50%; animation: boot-spin .8s linear infinite; }
-    @keyframes boot-spin { to { transform: rotate(360deg); } }
+    #app[v-cloak] + #boot { display: block; }
+    #boot-bar { position: fixed; top: 0; left: 0; height: 3px; width: 4%; background: #c87840; transition: width .3s ease; }
+    #boot span { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border: 1px solid rgba(136, 136, 136, .35); border-radius: 999px; color: #a08d7d; font: 13px system-ui, sans-serif; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -2697,8 +2721,9 @@
     </main>
     </div>
   </div>
-  <div id="boot">Scanner Security — memuat / loading…</div>
+  <div id="boot"><div id="boot-bar"></div><span>Scanner Security — memuat / loading…</span></div>
+  <script>window.bootTick(0);</script>
 
-  <script>loadVersioned(document.body, ['js/core-pipe.js', 'js/scanners.js', 'js/apk.js', 'js/hooks-ops.js', 'js/pdf.js', 'js/app.js']);</script>
+  <script>loadVersioned(document.body, APP_BODY_ASSETS);</script>
 </body>
 </html>
