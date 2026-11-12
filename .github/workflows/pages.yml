@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # semua tag dan riwayat dibutuhkan untuk git archive per versi
-      - run: scripts/build-pages.sh _site
+      - run: bash scripts/build-pages.sh _site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
