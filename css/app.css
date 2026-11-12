@@ -278,8 +278,10 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
   white-space: nowrap;
 }
 .pipe-mini-tbl tbody tr:last-child td { border-bottom: 0; }
+/* kolom URL menyerap sisa lebar dan dipotong dengan elipsis (width:100% + max-width:0), jadi tabel tidak pernah lebih lebar dari kotak dan scrollbar horizontal kecil tidak muncul */
+.pipe-mini-tbl td:nth-child(4) { width: 100%; max-width: 0; }
 .pipe-mini-url {
-  max-width: 245px;
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
