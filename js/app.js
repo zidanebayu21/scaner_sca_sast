@@ -812,6 +812,8 @@ createApp({
     } catch (e) { /* abaikan */ }
     this.glRepos = {}; this.glLeakItems = {};
     try { document.documentElement.lang = this.lang; } catch (e) { /* abaikan */ }
+    // tinggi header lengket dipakai kepala tabel lengket (--hdr-h)
+    this.$nextTick(() => { try { const hd = document.querySelector('header'); if (hd && 'ResizeObserver' in window) new ResizeObserver(() => document.documentElement.style.setProperty('--hdr-h', (getComputedStyle(hd).position === 'sticky' ? hd.offsetHeight : 0) + 'px')).observe(hd); } catch (e) { /* abaikan */ } });
     // deskripsi (SEO/pratinjau tautan) mengikuti bahasa aktif
     try { const d = this.t('metaDesc'); document.querySelectorAll('meta[name="description"],meta[property="og:description"],meta[name="twitter:description"]').forEach(m => m.setAttribute('content', d)); } catch (e) { /* abaikan */ }
     try { const w = parseInt(localStorage.getItem(SIDE_KEY), 10); if (w) this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, w)); } catch (e) { /* abaikan */ }
@@ -3215,6 +3217,18 @@ createApp({
     t(key) { return (I18N[this.lang] && I18N[this.lang][key]) || I18N.id[key] || key; },
     // pindahkan fokus ke konten utama tanpa mengubah hash URL (hash dipakai hook, mis. #wa-hook)
     skipToMain() { const m = document.getElementById('main-content'); if (m) m.focus(); },
+    // pindah tab dengan View Transitions API bila didukung (Chrome/Edge); lainnya pindah langsung (animasi masuk lewat CSS)
+    switchTab(k) {
+      if (k === this.tab) return;
+      const go = () => { this.tab = k; return this.$nextTick(); };
+      if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(go); else go();
+    },
+    // tunda penyaringan sampai pengetikan berhenti (180 ms); flush=true (Enter/blur) menerapkan langsung
+    deb(o, k, v, flush) {
+      const m = this._debT || (this._debT = new Map()); clearTimeout(m.get(o));
+      if (flush) { o[k] = v; return; }
+      m.set(o, setTimeout(() => { o[k] = v; }, 180));
+    },
     applyTheme() {
       document.documentElement.setAttribute('data-theme', this.theme === 'light' ? 'light' : 'dark');
     },

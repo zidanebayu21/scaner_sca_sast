@@ -20,11 +20,15 @@
   <meta property="og:locale:alternate" content="en_US" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Scanner Security" />
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+  <link rel="dns-prefetch" href="https://api.github.com" />
+  <link rel="dns-prefetch" href="https://api.osv.dev" />
+  <link rel="dns-prefetch" href="https://endoflife.date" />
   <meta name="twitter:description" content="Pemeriksa keamanan proyek, jaringan, dan otomasi langsung di browser: SCA/lockfile, Dockerfile, APK/IPA, Pipa Log, dan banyak alat lain. Tanpa instal." />
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '3.2';
+    window.APP_VERSION = '3.3';
     // tema dipasang sedini mungkin agar latar tidak berkedip sebelum app.css tiba
     try { if (localStorage.getItem('scaTheme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) { /* localStorage tidak tersedia */ }
     window.APP_HEAD_ASSETS = ['css/app.css', 'js/vue.global.prod.js', 'i18n/i18n.js'];
@@ -67,6 +71,11 @@
     #app[v-cloak] + #boot { display: block; }
     #boot-bar { position: fixed; top: 0; left: 0; height: 3px; width: 4%; background: #c87840; transition: width .3s ease; }
     #boot span { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); padding: 5px 14px; border: 1px solid rgba(136, 136, 136, .35); border-radius: 999px; color: #a08d7d; font: 13px system-ui, sans-serif; white-space: nowrap; }
+    #boot .sk { position: fixed; inset: 56px 20px auto; max-width: 1500px; margin: 0 auto; display: grid; gap: 14px; }
+    #boot .sk i { display: block; border-radius: 10px; background: linear-gradient(100deg, rgba(128,128,128,.10) 30%, rgba(128,128,128,.20) 50%, rgba(128,128,128,.10) 70%) 0 0 / 220% 100%; animation: sk 1.4s linear infinite; }
+    #boot .sk .a { height: 64px; } #boot .sk .b { height: 36px; width: 70%; } #boot .sk .c { height: 260px; }
+    @keyframes sk { to { background-position: -220% 0; } }
+    @media (prefers-reduced-motion: reduce) { #boot .sk i { animation: none; } }
   </style>
 </head>
 <body>
@@ -162,12 +171,12 @@
               <button :class="{ on: pipe.filter === 'IN' }" @click="pipe.filter = 'IN'">↓ {{ t('pipeIn') }} ({{ pipe.stats.inCount || 0 }})</button>
               <button :class="{ on: pipe.filter === 'IDB' }" @click="pipe.filter = 'IDB'">💾 {{ t('pipeIdb') }} ({{ pipe.stats.idbCount || 0 }})</button>
             </span>
-            <input type="search" v-model="pipe.q" :placeholder="t('pipeSearchPh')" />
+            <input type="search" :value="pipe.q" @input="deb(pipe, 'q', $event.target.value)" @change="deb(pipe, 'q', $event.target.value, true)" :placeholder="t('pipeSearchPh')" />
             <button class="pipe-ibtn" @click="clearPipeLogs">🗑 {{ t('pipeClear') }}</button>
           </div>
           <div class="pipe-body">
             <div class="pipe-list">
-              <div v-if="!pipeFiltered.length" class="muted text-center" style="padding:20px">{{ t('pipeEmpty') }}</div>
+              <div v-if="!pipeFiltered.length" class="empty-state">{{ t('pipeEmpty') }}</div>
               <table v-else class="pipe-tbl">
                 <thead>
                   <tr>
@@ -307,7 +316,7 @@
       <div class="cmd-box">
         <input ref="cmdInput" type="text" class="cmd-in" v-model="cmdQ" :placeholder="t('cmdPh')" @keydown.down.prevent="cmdMove(1)" @keydown.up.prevent="cmdMove(-1)" @keydown.enter.prevent="runCmd(cmdFiltered[cmdIdx])" @keydown.esc.prevent="cmdOpen = false" />
         <div class="cmd-list">
-          <div v-if="!cmdFiltered.length" class="muted text-center" style="padding:12px">{{ t('cmdEmpty') }}</div>
+          <div v-if="!cmdFiltered.length" class="empty-state">{{ t('cmdEmpty') }}</div>
           <div v-for="(c, i) in cmdFiltered" :key="c.id" class="cmd-row" :class="{ on: i === cmdIdx }" @mouseenter="cmdIdx = i" @click="runCmd(c)">
             <span><b>{{ c.label }}</b> <span class="muted" v-if="c.sub">· {{ c.sub }}</span></span>
             <span class="pill">{{ c.cat }}</span>
@@ -378,7 +387,7 @@
 
     <main id="main-content" tabindex="-1">
       <div class="tabs">
-        <button v-for="tb in shownTabs" :key="tb.key" :class="{ active: tab === tb.key, pinned: isPinned(tb.key) }" @click="tab = tb.key"><span v-if="isPinned(tb.key)" class="pin-star">★</span>{{ t('tab_' + tb.key) }}</button>
+        <button v-for="tb in shownTabs" :key="tb.key" :class="{ active: tab === tb.key, pinned: isPinned(tb.key) }" @click="switchTab(tb.key)"><span v-if="isPinned(tb.key)" class="pin-star">★</span>{{ t('tab_' + tb.key) }}</button>
         <button type="button" class="sec-pin-btn" :class="{ on: isPinned(tab) }" :title="t(isPinned(tab) ? 'unpinTip' : 'pinTip')" @click="togglePinTab(tab)">{{ isPinned(tab) ? '★ ' + t('pinnedLabel') : '☆ Pin' }}</button>
       </div>
 
@@ -598,7 +607,7 @@
             </details>
             <h4>{{ t('jsr_rep_eps') }} ({{ jsrEps.length }}/{{ jsr.res.endpoints.length }})</h4>
             <div class="actions">
-              <input type="search" v-model="jsr.q" :placeholder="t('jsr_ep_filter')" style="flex:1 1 220px" />
+              <input type="search" :value="jsr.q" @input="deb(jsr, 'q', $event.target.value)" @change="deb(jsr, 'q', $event.target.value, true)" :placeholder="t('jsr_ep_filter')" style="flex:1 1 220px" />
               <label><input type="checkbox" v-model="jsr.hot" /> {{ t('jsr_only_hot') }}</label>
               <button class="btn gray" :disabled="!jsrEps.length" @click="jsrCopyEps">{{ t('jsr_copy_eps') }}</button>
               <button class="btn gray" :disabled="!jsrEps.length" @click="jsrToSwag">{{ t('jsr_to_swag') }}</button>
@@ -1094,7 +1103,7 @@
             <span class="ping-chip" v-for="s in gl.sources" :key="s.id">{{ s.kind === 'git' ? '📁' : '📋' }} <b>{{ s.name }}</b> · {{ s.count }} commit<span v-if="s.refs"> · {{ s.refs }} ref</span> <button class="lnk" @click="glRemove(s.id)">✕</button></span>
           </div>
           <div class="gl-filters">
-            <input type="text" v-model="gl.q" :placeholder="t('gl_search_ph')" style="flex:3 1 260px" />
+            <input type="text" :value="gl.q" @input="deb(gl, 'q', $event.target.value)" @change="deb(gl, 'q', $event.target.value, true)" :placeholder="t('gl_search_ph')" style="flex:3 1 260px" />
             <select v-model="gl.author" style="flex:1 1 150px"><option value="">{{ t('gl_all_authors') }}</option><option v-for="a in glAuthors" :key="a.key" :value="a.key">{{ a.name }} ({{ a.n }})</option></select>
             <select v-if="gl.sources.length > 1" v-model="gl.project" style="flex:1 1 130px"><option value="">{{ t('gl_all_projects') }}</option><option v-for="s in gl.sources" :key="s.id" :value="s.name">{{ s.name }}</option></select>
             <select v-if="glBranchOpts.length" v-model="gl.branch" style="flex:1 1 170px" :title="t('gl_tip_branch')"><option value="">{{ t('gl_all_branches') }}</option><option v-for="b in glBranchOpts" :key="b.v" :value="b.v">{{ b.label }}</option></select>
@@ -1489,7 +1498,7 @@
         <div class="bad" v-if="shp.err">{{ shp.err }}</div>
 
         <div class="gl-filters">
-          <input type="search" v-model="shp.q" :placeholder="t('shp_search_ph')" style="flex:3 1 260px" />
+          <input type="search" :value="shp.q" @input="deb(shp, 'q', $event.target.value)" @change="deb(shp, 'q', $event.target.value, true)" :placeholder="t('shp_search_ph')" style="flex:3 1 260px" />
           <select v-model="shp.kw" style="flex:1 1 150px"><option value="">{{ t('shp_all_kw') }}</option><option v-for="k in shpKeywords" :key="k" :value="k">{{ k }}</option></select>
           <select v-model="shp.level" style="flex:1 1 130px"><option value="">{{ t('shp_all_level') }}</option><option value="ok">✅ {{ t('shp_l_ok') }}</option><option value="mid">⚠️ {{ t('shp_l_mid') }}</option><option value="bad">⛔ {{ t('shp_l_bad') }}</option></select>
           <label><input type="checkbox" v-model="shp.mall" /> Mall</label>
@@ -1559,7 +1568,7 @@
         </div>
 
         <div class="gl-filters">
-          <input type="search" v-model="wa.q" :placeholder="t('wa_search_ph')" style="flex:3 1 260px" />
+          <input type="search" :value="wa.q" @input="deb(wa, 'q', $event.target.value)" @change="deb(wa, 'q', $event.target.value, true)" :placeholder="t('wa_search_ph')" style="flex:3 1 260px" />
           <select v-model="wa.chat" style="flex:1.4 1 180px">
             <option value="">{{ t('wa_all_chats') }}</option>
             <option v-for="c in waChats" :key="c.name" :value="c.name">{{ c.name }} ({{ c.n }})</option>
@@ -2115,7 +2124,7 @@
           </div>
         </div>
 
-        <input type="text" v-model="clock.q" :placeholder="t('clk_search_ph')" class="mt-3" />
+        <input type="text" :value="clock.q" @input="deb(clock, 'q', $event.target.value)" @change="deb(clock, 'q', $event.target.value, true)" :placeholder="t('clk_search_ph')" class="mt-3" />
         <div class="muted mt-15" v-if="clock.q.trim() && !clkResults.length">{{ t('clk_none') }}</div>
         <table v-if="clkResults.length" data-sort="clkRes" class="mt-2">
           <thead><tr><th>{{ t('clk_th_place') }}</th><th>{{ t('clk_th_time') }}</th><th>{{ t('clk_th_date') }}</th><th>UTC</th><th>{{ t('clk_th_diff') }}</th><th></th></tr></thead>
@@ -2240,7 +2249,7 @@
 
         <template v-if="ping.targets.length">
           <div class="actions mt-3">
-            <input type="text" v-model="ping.q" :placeholder="t('ping_search_ph')" class="mw-65" />
+            <input type="text" :value="ping.q" @input="deb(ping, 'q', $event.target.value)" @change="deb(ping, 'q', $event.target.value, true)" :placeholder="t('ping_search_ph')" class="mw-65" />
             <label class="tab-opt"><input type="radio" value="all" v-model="ping.filter" /> {{ t('ping_f_all') }}</label>
             <label class="tab-opt"><input type="radio" value="down" v-model="ping.filter" /> {{ t('ping_f_down') }}</label>
             <label class="tab-opt"><input type="radio" value="up" v-model="ping.filter" /> {{ t('ping_f_up') }}</label>
@@ -2785,7 +2794,7 @@
     </main>
     </div>
   </div>
-  <div id="boot"><div id="boot-bar"></div><span>Scanner Security — memuat / loading…</span></div>
+  <div id="boot"><div id="boot-bar"></div><div class="sk" aria-hidden="true"><i class="a"></i><i class="b"></i><i class="c"></i></div><span>Scanner Security — memuat / loading…</span></div>
   <script>window.bootTick(0);</script>
 
   <script>loadVersioned(document.body, APP_BODY_ASSETS);</script>
