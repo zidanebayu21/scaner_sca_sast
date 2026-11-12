@@ -15,9 +15,9 @@ for tag in $(git tag --list 'v[0-9]*' --sort=-version:refname); do
   mkdir -p "$out/$ver"; git archive "$tag" | tar -x -C "$out/$ver"
   # badge versi di dalam aplikasi mengikuti nama folder (mis. rilis yang dulu bernomor 3.0 kini 2.9.1)
   grep -q "APP_VERSION = '" "$out/$ver/index.html" && sed -i "s/APP_VERSION = '[^']*'/APP_VERSION = '$ver'/" "$out/$ver/index.html"
-  # penyimpanan browser tiap versi dipisah (lihat scripts/scope-shim.js)
+  # penyimpanan browser tiap versi dipisah (lihat scripts/scope-shim.js); noindex agar salinan versi lama tidak dianggap duplikat oleh mesin pencari (akar = satu-satunya yang diindeks)
   sed "s/__VER__/$ver/g" scripts/scope-shim.js > "$out/$ver/_scope.js"
-  sed -i '0,/<head[^>]*>/s//&<script src="_scope.js"><\/script>/' "$out/$ver/index.html"
+  sed -i '0,/<head[^>]*>/s//&<meta name="robots" content="noindex"><script src="_scope.js"><\/script>/' "$out/$ver/index.html"
   day=$(git log -1 --format=%ad --date=short "$tag"); note=$(git log -1 --format=%s "$tag" | cut -c1-140 | esc)
   rows+="<tr><td><a href=\"../$ver/\">$ver</a></td><td>$day</td><td>$note</td></tr>"$'\n'
 done

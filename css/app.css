@@ -893,3 +893,12 @@ details.ping-box[open] > summary::after { transform: rotate(90deg); }
 .tts-sent:hover { background: rgba(127,127,127,.18); }
 .tts-sent.done { opacity: .55; }
 .tts-sent.on { background: #fde68a; color: #111827; box-shadow: 0 0 0 2px #fde68a; }
+
+/* Aksesibilitas landing: skip link, fokus keyboard terlihat, hormati preferensi kurangi gerak (WCAG 2.4.1, 2.4.7, 2.3.3) */
+.skip-link { position: absolute; left: 8px; top: -48px; z-index: 10000; padding: 8px 14px; border-radius: 6px; background: #c87840; color: #111; font-weight: 600; text-decoration: none; }
+.skip-link:focus { top: 8px; }
+main:focus { outline: none; }
+:focus-visible { outline: 2px solid #c87840; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

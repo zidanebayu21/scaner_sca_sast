@@ -812,6 +812,8 @@ createApp({
     } catch (e) { /* abaikan */ }
     this.glRepos = {}; this.glLeakItems = {};
     try { document.documentElement.lang = this.lang; } catch (e) { /* abaikan */ }
+    // deskripsi (SEO/pratinjau tautan) mengikuti bahasa aktif
+    try { const d = this.t('metaDesc'); document.querySelectorAll('meta[name="description"],meta[property="og:description"],meta[name="twitter:description"]').forEach(m => m.setAttribute('content', d)); } catch (e) { /* abaikan */ }
     try { const w = parseInt(localStorage.getItem(SIDE_KEY), 10); if (w) this.sideW = Math.min(SIDE_MAX, Math.max(SIDE_MIN, w)); } catch (e) { /* abaikan */ }
     try { if (localStorage.getItem(SIDE_OPEN_KEY) === '0') this.sideOpen = false; } catch (e) { /* abaikan */ }
     // Setelan tab yang tampil; localStorage kosong/rusak -> semua tab tampil.
@@ -3211,6 +3213,8 @@ createApp({
     },
     // Terjemahan teks UI; fallback ke Indonesia bila key belum ada di bahasa aktif.
     t(key) { return (I18N[this.lang] && I18N[this.lang][key]) || I18N.id[key] || key; },
+    // pindahkan fokus ke konten utama tanpa mengubah hash URL (hash dipakai hook, mis. #wa-hook)
+    skipToMain() { const m = document.getElementById('main-content'); if (m) m.focus(); },
     applyTheme() {
       document.documentElement.setAttribute('data-theme', this.theme === 'light' ? 'light' : 'dark');
     },

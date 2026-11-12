@@ -3,6 +3,8 @@
 window.APP_I18N = {
       id: {
         tagline: 'Seret file, hasil dibuka sebagai laporan di tab baru. Semua diproses di browser.',
+        skipLink: 'Lewati ke konten utama',
+        metaDesc: 'Pemeriksa keamanan proyek, jaringan, dan otomasi langsung di browser: SCA/lockfile, Dockerfile, APK/IPA, Pipa Log, dan banyak alat lain. Tanpa instal.',
         themeTip: 'Ganti tema terang/gelap', langTip: 'Switch to English (/en/)',
         tab_sca: 'SCA & Dockerfile', tab_dast: 'DAST pasif (URL)', tab_sast: 'SAST (Kode)',
         tab_jwt: 'JWT Decode', tab_dbg: 'Hook Debug', tab_rate: 'Rate Limiter (dari curl)', tab_rto: 'RTO (kirim lambat)', tab_eol: 'EOL runtime/framework',
@@ -277,6 +279,8 @@ window.APP_I18N = {
       },
       en: {
         tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
+        skipLink: 'Skip to main content',
+        metaDesc: 'Security checker for projects, networks and automation, right in your browser: SCA/lockfiles, Dockerfile, APK/IPA, Log Pipe and many more tools. No install.',
         themeTip: 'Toggle light/dark theme', langTip: 'Switch to Indonesian',
         tab_sca: 'SCA & Dockerfile', tab_dast: 'Passive DAST (URL)', tab_sast: 'SAST (Code)',
         tab_jwt: 'JWT Decode', tab_dbg: 'Hook Debug', tab_rate: 'Rate Limiter (from curl)', tab_rto: 'RTO (slow send)', tab_eol: 'EOL runtime/framework',
