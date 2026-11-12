@@ -134,7 +134,7 @@ createApp({
       shp: { list: [], q: '', kw: '', level: '', mall: false, star: false, noAd: false, minSold: 0, minRate: 0, pMin: 0, pMax: 0, sort: 'sold', desc: true, page: 300, msg: '', err: '', paste: '' },
       wa: { list: [], q: '', chat: '', kind: '', dir: '', from: '', to: '', page: 300, msg: '', err: '', paste: '' },
       gl: { sources: [], commits: [], order: {}, binfo: {}, leak: {}, leakVer: 0, leakShow: false, leakSev: '', branch: '', zoom: 0, q: '', author: '', project: '', merge: 'all', from: '', to: '', heat: null, dateKind: 'a', view: 'list', page: 300, sel: null, files: null, filesBusy: false, busy: false, prog: '', err: '', msg: '', paste: '', pasteName: '', over: false, max: 20000, repNoMerge: true, copied: false },
-      clock: { q: '', pins: [], now: Date.now(), live: true, fixedMs: null, base: 'mine', ts: '', copied: false },
+      clock: { q: '', pins: [], now: Date.now(), live: true, fixedMs: null, base: 'mine', ts: '', copied: false, mini: false, mnow: Date.now() },
       colab: { sonarUrl: COLAB_SONAR_URL, paste: '', url: '', token: '', key: '', copied: '', aiNotebook: COLAB_AI_URL, web: { db: { nb: COLAB_DBEAVER_URL, url: '' }, zap: { nb: COLAB_ZAP_URL, url: '' } },
         ai: { url: '', key: '', model: '', msg: '', err: '', q: '', msgs: [], busy: false } },
       ping: { targets: [], collapsed: {}, form: { name: '', url: '', group: '', interval: 10, timeout: 5000, expect: 'any', method: 'GET' }, editId: null, bulk: '', bulkGroup: '', bulkInterval: 10, filter: 'all', q: '', selId: null, sound: true, alarmDown: false, notif: false, running: true, tick: 0, now: Date.now(), alarm: null, err: '', msg: '', mixedOk: location.protocol !== 'https:', mixedTesting: false, mixedAt: 0, dlBusy: false },
@@ -475,6 +475,16 @@ createApp({
       return clkSearch(this.clock.q, this.clkMs).map((it, i) => Object.assign(this.clkView(it), { id: 'r' + i + it.label, item: it, pinned: this.clock.pins.some(p => p.label === it.label && p.tz === it.tz && p.fixed === it.fixed) }));
     },
     clkPinsView() { return this.clock.pins.map((p, i) => Object.assign(this.clkView(p), { id: 'p' + i + p.label })); },
+    // jam mini (pojok kiri bawah): selalu live, terlepas dari waktu tetap di tab Jam Dunia; jam lokal + 3 kota sematan pertama
+    clkMiniRows() {
+      if (!this.clock.mini) return [];
+      const ms = this.clock.mnow, z = x => String(x).padStart(2, '0'), me = clkWall({ tz: this.clkMineTz }, ms);
+      const row = (it, label) => {
+        const w = clkWall(it, ms), dd = Math.round((Date.UTC(w.y, w.mo, w.d) - Date.UTC(me.y, me.mo, me.d)) / 86400000);
+        return { label, time: z(w.h) + ':' + z(w.mi), sec: z(w.s), day: dd ? (dd > 0 ? '+' : '') + dd : '', icon: w.h >= 6 && w.h < 18 ? '\u2600\uFE0F' : w.h >= 18 && w.h < 21 ? '\uD83C\uDF06' : '\uD83C\uDF19' };
+      };
+      return [row({ tz: this.clkMineTz }, tr('clk_mine'))].concat(this.clock.pins.slice(0, 3).map(p => row(p, p.label)));
+    },
     clkDayStart() {
       const mine = { tz: this.clkMineTz }, w = clkWall(mine, this.clkMs), z = n => String(n).padStart(2, '0');
       return clkFromWall(mine, w.y + '-' + z(w.mo + 1) + '-' + z(w.d) + 'T00:00');
@@ -2076,8 +2086,8 @@ createApp({
     },
     // ---- Jam Dunia
     clkInit() {
-      try { const j = JSON.parse(localStorage.getItem(CLK_KEY) || 'null'); if (j && Array.isArray(j.pins)) this.clock.pins = j.pins.filter(p => p && (p.fixed != null || (p.tz && clkValid(p.tz)))).slice(0, 40); } catch (e) { /* abaikan */ }
-      if (!this.clkTimer) this.clkTimer = setInterval(() => { if (this.tab === 'clock' && this.clock.live) this.clock.now = Date.now(); }, 1000);
+      try { const j = JSON.parse(localStorage.getItem(CLK_KEY) || 'null'); if (j && Array.isArray(j.pins)) this.clock.pins = j.pins.filter(p => p && (p.fixed != null || (p.tz && clkValid(p.tz)))).slice(0, 40); if (j && j.mini === true) this.clock.mini = true; } catch (e) { /* abaikan */ }
+      if (!this.clkTimer) this.clkTimer = setInterval(() => { if (this.tab === 'clock' && this.clock.live) this.clock.now = Date.now(); if (this.clock.mini && !document.hidden) this.clock.mnow = Date.now(); }, 1000);
     },
     clkDrawSoon() {
       if (this.clkRaf) return;
@@ -2097,7 +2107,8 @@ createApp({
       else marks.push({ lon: Math.max(-179, Math.min(179, clkWall(mine, ms).off / 4)), line: true, me: true, color: '#38bdf8', text: tr('clk_map_me') + ' ' + hm(mine) });
       clkDrawMap(c, ms, marks);
     },
-    clkSave() { try { localStorage.setItem(CLK_KEY, JSON.stringify({ pins: this.clock.pins })); } catch (e) { /* abaikan */ } },
+    clkSave() { try { localStorage.setItem(CLK_KEY, JSON.stringify({ pins: this.clock.pins, mini: this.clock.mini })); } catch (e) { /* abaikan */ } },
+    clkMiniToggle(on) { this.clock.mini = !!on; this.clock.mnow = Date.now(); this.clkSave(); },
     clkDur(min) {
       const a = Math.abs(min), h = Math.floor(a / 60), m = a % 60;
       return [h ? tr('clk_h').replace('{n}', h) : '', m ? tr('clk_m').replace('{n}', m) : ''].filter(Boolean).join(' ');

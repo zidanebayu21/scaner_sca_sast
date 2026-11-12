@@ -28,7 +28,7 @@
   <!-- Satu-satunya sumber versi: saat rilis cukup ubah APP_VERSION di sini.
        Dipakai badge, laporan/SBOM, dan cache-buster ?v= semua aset. -->
   <script>
-    window.APP_VERSION = '3.3';
+    window.APP_VERSION = '3.4';
     // tema dipasang sedini mungkin agar latar tidak berkedip sebelum app.css tiba
     try { if (localStorage.getItem('scaTheme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (e) { /* localStorage tidak tersedia */ }
     window.APP_HEAD_ASSETS = ['css/app.css', 'js/vue.global.prod.js', 'i18n/i18n.js'];
@@ -2074,6 +2074,8 @@
       <section v-else-if="tab === 'clock'">
         <h2 class="mt-0">{{ t('clk_title') }}</h2>
         <p class="muted">{{ t('clk_intro') }}</p>
+        <label class="clk-mini-set"><input type="checkbox" :checked="clock.mini" @change="clkMiniToggle($event.target.checked)" /> {{ t('clk_mini_set') }}</label>
+        <div class="muted text-xs">{{ t('clk_mini_hint') }}</div>
 
         <div class="clk-mine">
           <div>
@@ -2793,6 +2795,18 @@
       </section>
     </main>
     </div>
+    <aside class="clk-mini" v-if="clock.mini && clkMiniRows.length" :aria-label="t('clk_mini_aria')">
+      <div class="clk-mini-bar">
+        <button type="button" @click="switchTab('clock')" :title="t('clk_mini_open')" :aria-label="t('clk_mini_open')">⤢</button>
+        <button type="button" @click="clkMiniToggle(false)" :title="t('clk_mini_close')" :aria-label="t('clk_mini_close')">×</button>
+      </div>
+      <div v-for="(r, i) in clkMiniRows" :key="i" class="clk-mini-row" :class="{ me: i === 0 }">
+        <span class="clk-mini-ic" aria-hidden="true">{{ r.icon }}</span>
+        <span class="clk-mini-lb">{{ r.label }}</span>
+        <b class="clk-mini-t">{{ r.time }}<small v-if="i === 0">:{{ r.sec }}</small></b>
+        <em v-if="r.day" class="clk-mini-d">{{ r.day }}</em>
+      </div>
+    </aside>
   </div>
   <div id="boot"><div id="boot-bar"></div><div class="sk" aria-hidden="true"><i class="a"></i><i class="b"></i><i class="c"></i></div><span>Scanner Security — memuat / loading…</span></div>
   <script>window.bootTick(0);</script>

@@ -970,3 +970,20 @@ main > section { container-type: inline-size; container-name: panel; }
   .tabs button { flex: 0 0 auto; white-space: nowrap; }
   main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 }
+
+/* jam mini (Jam Dunia): pojok kiri bawah, mengisi ruang kosong di bawah sidebar dan terlihat di semua tab */
+.clk-mini-set { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; cursor: pointer; font-weight: 600; }
+.clk-mini-set input { accent-color: var(--accent); cursor: pointer; }
+.clk-mini { position: fixed; left: 16px; bottom: 16px; z-index: 55; min-width: 176px; max-width: 280px; padding: 8px 12px; background-color: var(--panel-bg); background-image: var(--card-grad); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); font-size: var(--fs-sm); }
+.clk-mini-bar { position: absolute; top: 3px; right: 5px; display: flex; gap: 2px; }
+.clk-mini-bar button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 15px; line-height: 1.4; border-radius: var(--radius-sm); }
+.clk-mini-bar button:hover { color: var(--text); background: var(--accent-soft); }
+.clk-mini-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: baseline; gap: 6px; padding: 2px 0; }
+.clk-mini-row.me { padding-right: 44px; }
+.clk-mini-lb { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clk-mini-t { font-family: Consolas, monospace; font-size: var(--fs-lg); letter-spacing: .5px; }
+.clk-mini-row.me .clk-mini-t { font-size: 1.1rem; }
+.clk-mini-t small { font-size: .7em; color: var(--muted); }
+.clk-mini-d { font-style: normal; color: var(--warn); font-size: var(--fs-2xs); }
+@media (max-width: 760px) { .clk-mini { left: 8px; bottom: calc(72px + env(safe-area-inset-bottom)); } }
+@media print { .clk-mini { display: none; } }

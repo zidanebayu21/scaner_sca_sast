@@ -4,6 +4,9 @@ window.APP_I18N = {
       id: {
         tagline: 'Seret file, hasil dibuka sebagai laporan di tab baru. Semua diproses di browser.',
         skipLink: 'Lewati ke konten utama',
+        clk_mini_set: 'Tampilkan jam mini di pojok kiri bawah (tetap terlihat di semua tab)',
+        clk_mini_hint: 'Menampilkan jam Anda dan sampai 3 kota pertama dari daftar sematan di bawah. Pilihan ini diingat di browser.',
+        clk_mini_aria: 'Jam mini', clk_mini_open: 'Buka Jam Dunia', clk_mini_close: 'Tutup jam mini',
         metaDesc: 'Pemeriksa keamanan proyek, jaringan, dan otomasi langsung di browser: SCA/lockfile, Dockerfile, APK/IPA, Pipa Log, dan banyak alat lain. Tanpa instal.',
         themeTip: 'Ganti tema terang/gelap', langTip: 'Switch to English (/en/)',
         tab_sca: 'SCA & Dockerfile', tab_dast: 'DAST pasif (URL)', tab_sast: 'SAST (Kode)',
@@ -280,6 +283,9 @@ window.APP_I18N = {
       en: {
         tagline: 'Drop a lockfile or Dockerfile; the scan opens as an HTML report in a new tab. Everything runs in your browser.',
         skipLink: 'Skip to main content',
+        clk_mini_set: 'Show a mini clock in the bottom-left corner (visible on every tab)',
+        clk_mini_hint: 'Shows your clock and up to the first 3 cities from the pinned list below. This choice is remembered in the browser.',
+        clk_mini_aria: 'Mini clock', clk_mini_open: 'Open World Clock', clk_mini_close: 'Close mini clock',
         metaDesc: 'Security checker for projects, networks and automation, right in your browser: SCA/lockfiles, Dockerfile, APK/IPA, Log Pipe and many more tools. No install.',
         themeTip: 'Toggle light/dark theme', langTip: 'Switch to Indonesian',
         tab_sca: 'SCA & Dockerfile', tab_dast: 'Passive DAST (URL)', tab_sast: 'SAST (Code)',
