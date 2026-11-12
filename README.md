@@ -109,7 +109,7 @@ Aplikasi ini terbit berkali-kali, dan **setiap rilis lama tetap bisa dibuka dan 
 
 | Alamat | Isi |
 |---|---|
-| `https://zidanebayu21.github.io/scaner_sca_sast/` | versi terbaru (3.0) |
+| `https://zidanebayu21.github.io/scaner_sca_sast/` | versi terbaru (3.1) |
 | `https://zidanebayu21.github.io/scaner_sca_sast/<versi>/` | kode persis rilis itu, mis. `/2.23/`, `/1.53/`, `/2.9.3/` |
 | `https://zidanebayu21.github.io/scaner_sca_sast/versions/` | daftar semua versi beserta tanggal dan ringkasan perubahannya |
 
@@ -121,12 +121,17 @@ Cara kerjanya: tiap rilis diberi tag Git `vX.Y`, lalu GitHub Actions (`.github/w
 |---|---|---|
 | `1.0` - `1.53` | satu file `index.html` | era awal; semua kode, gaya, dan teks di satu file. Nomor yang tidak ada di daftar (mis. 1.1, 1.10) memang tidak pernah dirilis sebagai commit tersendiri |
 | `2.0` - `2.28` | modular (`js/`, `css/`, `i18n/`) | arsitektur modular, Pipa Log IndexedDB, Vue offline. Nomor `2.10` dan `2.22` terlewat (tidak pernah dirilis) |
-| `2.9.1`, `2.9.2`, `2.9.3` | modular | rilis yang dulu sempat bernomor **3.0, 3.1, 3.2** (VPN Docker grid, OCR otomatis, Text to Speech). Nomornya dikoreksi ke seri 2.x agar `3.0` bisa dipakai sebagai rilis bersih; badge versi di dalam aplikasi pada tiga folder ini tetap menampilkan nomor lamanya |
+| `2.9.1`, `2.9.2`, `2.9.3` | modular | rilis yang dulu sempat bernomor **3.0, 3.1, 3.2** (VPN Docker grid, OCR otomatis, Text to Speech). Nomornya dikoreksi ke seri 2.x agar `3.0` bisa dipakai sebagai rilis bersih; badge versi di dalam aplikasi disesuaikan saat build agar sama dengan nama folder |
 | `3.0` | modular | rilis bersih: isi sama dengan 2.28, ditambah nomor versi baru dan hosting multi-versi ini |
+| `3.1` | modular | versi terbaru: penyimpanan browser dipisah per versi dan badge versi lama disamakan dengan nama folder (hanya pada hasil build) |
 
 **Membaca dokumentasi versi lama.** README yang Anda baca ini menjelaskan versi terbaru. Setiap folder versi memuat `README.md`-nya sendiri sebagaimana adanya pada rilis itu (mis. `/2.23/README.md`). Penanda seperti "(v1.25)" pada daftar fitur di bawah berarti fitur itu **pertama kali hadir di versi tersebut**, jadi buka folder versi itu atau yang sesudahnya untuk mencobanya. Fitur yang diubah atau dihapus di versi baru tetap bisa dilihat di folder lama.
 
-**Catatan.** Semua versi satu origin (`zidanebayu21.github.io`), jadi data di browser (localStorage/IndexedDB, mis. arsip WA Hook) dipakai bersama antar versi. Untuk data penting, ekspor dulu sebelum berpindah-pindah versi, dan jangan membuka versi lama dan baru bersamaan dengan data yang sama.
+**Penyimpanan browser dipisah per versi.** Semua versi satu origin (`zidanebayu21.github.io`), jadi tanpa pemisahan localStorage/IndexedDB akan dipakai bersama dan skema antar versi bisa bentrok. Karena itu saat build, tiap folder `/<versi>/` diberi `_scope.js` (sumber: `scripts/scope-shim.js`) yang menambahkan awalan `v<versi>:` pada localStorage, sessionStorage, IndexedDB, Cache API, dan BroadcastChannel. Hasilnya:
+
+- **Akar (versi terbaru) tidak diberi awalan**, jadi data yang sudah ada di akar tidak berubah dan tetap terbaca.
+- **Folder versi lama mulai dengan penyimpanan kosong** dan tidak melihat maupun menimpa data akar atau versi lain. Kalau ingin memindahkan data antar versi, ekspor dari satu dan impor di yang lain.
+- Kode versi tidak diubah di Git; hanya hasil build yang disisipi `_scope.js`.
 
 ## Stages
 

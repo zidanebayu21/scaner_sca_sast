@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Menyusun situs GitHub Pages: akar = isi HEAD (versi terbaru), /<X.Y>/ = isi tag v<X.Y> (git archive), /versions/ = daftar versi.
+# Menyusun situs GitHub Pages: akar = isi HEAD (versi terbaru), /<X.Y>/ = isi tag v<X.Y> (git archive, dengan badge versi disamakan dan penyimpanan browser dipisah), /versions/ = daftar versi.
 # Pakai: scripts/build-pages.sh [folder_keluaran]   (perlu riwayat git + tag lengkap)
 # Semua tag vX.Y (v1.0 sampai terbaru) diterbitkan; v1.x berupa satu file index.html, v2.0+ modular (js/, css/, i18n/).
 set -euo pipefail
@@ -13,6 +13,11 @@ for tag in $(git tag --list 'v[0-9]*' --sort=-version:refname); do
   ver="${tag#v}"
   [[ "$ver" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || continue
   mkdir -p "$out/$ver"; git archive "$tag" | tar -x -C "$out/$ver"
+  # badge versi di dalam aplikasi mengikuti nama folder (mis. rilis yang dulu bernomor 3.0 kini 2.9.1)
+  grep -q "APP_VERSION = '" "$out/$ver/index.html" && sed -i "s/APP_VERSION = '[^']*'/APP_VERSION = '$ver'/" "$out/$ver/index.html"
+  # penyimpanan browser tiap versi dipisah (lihat scripts/scope-shim.js)
+  sed "s/__VER__/$ver/g" scripts/scope-shim.js > "$out/$ver/_scope.js"
+  sed -i '0,/<head[^>]*>/s//&<script src="_scope.js"><\/script>/' "$out/$ver/index.html"
   day=$(git log -1 --format=%ad --date=short "$tag"); note=$(git log -1 --format=%s "$tag" | cut -c1-140 | esc)
   rows+="<tr><td><a href=\"../$ver/\">$ver</a></td><td>$day</td><td>$note</td></tr>"$'\n'
 done
