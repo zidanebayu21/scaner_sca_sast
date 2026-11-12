@@ -103,6 +103,10 @@ Tab **Cek Basic Middleware**: menguji apakah security-middleware sebuah endpoint
 
 > Express your idea and build something different.
 
+## Versi lama
+
+Setiap rilis ber-tag `vX.Y` (mulai v2.0) bisa dibuka dari foldernya: `https://zidanebayu21.github.io/scaner_sca_sast/2.23/` menampilkan kode commit v2.23, dan daftar semua versi ada di `/versions/`. Akar situs tetap versi terbaru. GitHub Actions (`.github/workflows/pages.yml` + `scripts/build-pages.sh`) menyusun semuanya dengan `git archive` per tag, jadi tidak ada salinan folder di repo; rilis baru cukup diberi tag `vX.Y`. Syarat: Settings > Pages > Source = *GitHub Actions*. Catatan: semua versi satu origin, sehingga localStorage/IndexedDB dipakai bersama. Rilis 3.0 nanti memakai tag `v3.0`; tag `v2.9.1`-`v2.9.3` adalah rilis yang dulu bernomor 3.0-3.2.
+
 ## Stages
 
 | Stage | Date |
