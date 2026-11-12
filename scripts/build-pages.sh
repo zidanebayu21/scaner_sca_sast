@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Menyusun situs GitHub Pages: akar = isi HEAD (versi terbaru), /<X.Y>/ = isi tag v<X.Y> (git archive), /versions/ = daftar versi.
 # Pakai: scripts/build-pages.sh [folder_keluaran]   (perlu riwayat git + tag lengkap)
-# Hanya tag v2.0 ke atas yang diterbitkan; v1.x dilewati.
+# Semua tag vX.Y (v1.0 sampai terbaru) diterbitkan; v1.x berupa satu file index.html, v2.0+ modular (js/, css/, i18n/).
 set -euo pipefail
 out="${1:-_site}"
 rm -rf "$out"; mkdir -p "$out/versions"
@@ -11,7 +11,7 @@ esc() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 rows=""
 for tag in $(git tag --list 'v[0-9]*' --sort=-version:refname); do
   ver="${tag#v}"
-  [[ "$ver" =~ ^([2-9]|[1-9][0-9])\.[0-9]+(\.[0-9]+)?$ ]] || continue
+  [[ "$ver" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || continue
   mkdir -p "$out/$ver"; git archive "$tag" | tar -x -C "$out/$ver"
   day=$(git log -1 --format=%ad --date=short "$tag"); note=$(git log -1 --format=%s "$tag" | cut -c1-140 | esc)
   rows+="<tr><td><a href=\"../$ver/\">$ver</a></td><td>$day</td><td>$note</td></tr>"$'\n'

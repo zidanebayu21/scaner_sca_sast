@@ -103,9 +103,30 @@ Tab **Cek Basic Middleware**: menguji apakah security-middleware sebuah endpoint
 
 > Express your idea and build something different.
 
-## Versi lama
+## Versi (rilis lama tetap bisa dibuka)
 
-Setiap rilis ber-tag `vX.Y` (mulai v2.0) bisa dibuka dari foldernya: `https://zidanebayu21.github.io/scaner_sca_sast/2.23/` menampilkan kode commit v2.23, dan daftar semua versi ada di `/versions/`. Akar situs tetap versi terbaru. GitHub Actions (`.github/workflows/pages.yml` + `scripts/build-pages.sh`) menyusun semuanya dengan `git archive` per tag, jadi tidak ada salinan folder di repo; rilis baru cukup diberi tag `vX.Y`. Syarat: Settings > Pages > Source = *GitHub Actions*. Catatan: semua versi satu origin, sehingga localStorage/IndexedDB dipakai bersama. Rilis 3.0 nanti memakai tag `v3.0`; tag `v2.9.1`-`v2.9.3` adalah rilis yang dulu bernomor 3.0-3.2.
+Aplikasi ini terbit berkali-kali, dan **setiap rilis lama tetap bisa dibuka dan dibaca** lewat alamat foldernya. Alamat versi terbaru tidak berubah:
+
+| Alamat | Isi |
+|---|---|
+| `https://zidanebayu21.github.io/scaner_sca_sast/` | versi terbaru (3.0) |
+| `https://zidanebayu21.github.io/scaner_sca_sast/<versi>/` | kode persis rilis itu, mis. `/2.23/`, `/1.53/`, `/2.9.3/` |
+| `https://zidanebayu21.github.io/scaner_sca_sast/versions/` | daftar semua versi beserta tanggal dan ringkasan perubahannya |
+
+Cara kerjanya: tiap rilis diberi tag Git `vX.Y`, lalu GitHub Actions (`.github/workflows/pages.yml` + `scripts/build-pages.sh`) menyusun situs dengan `git archive` per tag. Tidak ada salinan folder versi di repo, jadi ukuran repo tetap kecil. Rilis baru cukup menaikkan `APP_VERSION` di `index.html`, commit, memberi tag `vX.Y`, dan push. Syarat sekali saja: Settings > Pages > Source = *GitHub Actions*.
+
+**Kelompok versi**
+
+| Versi | Bentuk | Keterangan |
+|---|---|---|
+| `1.0` - `1.53` | satu file `index.html` | era awal; semua kode, gaya, dan teks di satu file. Nomor yang tidak ada di daftar (mis. 1.1, 1.10) memang tidak pernah dirilis sebagai commit tersendiri |
+| `2.0` - `2.28` | modular (`js/`, `css/`, `i18n/`) | arsitektur modular, Pipa Log IndexedDB, Vue offline. Nomor `2.10` dan `2.22` terlewat (tidak pernah dirilis) |
+| `2.9.1`, `2.9.2`, `2.9.3` | modular | rilis yang dulu sempat bernomor **3.0, 3.1, 3.2** (VPN Docker grid, OCR otomatis, Text to Speech). Nomornya dikoreksi ke seri 2.x agar `3.0` bisa dipakai sebagai rilis bersih; badge versi di dalam aplikasi pada tiga folder ini tetap menampilkan nomor lamanya |
+| `3.0` | modular | rilis bersih: isi sama dengan 2.28, ditambah nomor versi baru dan hosting multi-versi ini |
+
+**Membaca dokumentasi versi lama.** README yang Anda baca ini menjelaskan versi terbaru. Setiap folder versi memuat `README.md`-nya sendiri sebagaimana adanya pada rilis itu (mis. `/2.23/README.md`). Penanda seperti "(v1.25)" pada daftar fitur di bawah berarti fitur itu **pertama kali hadir di versi tersebut**, jadi buka folder versi itu atau yang sesudahnya untuk mencobanya. Fitur yang diubah atau dihapus di versi baru tetap bisa dilihat di folder lama.
+
+**Catatan.** Semua versi satu origin (`zidanebayu21.github.io`), jadi data di browser (localStorage/IndexedDB, mis. arsip WA Hook) dipakai bersama antar versi. Untuk data penting, ekspor dulu sebelum berpindah-pindah versi, dan jangan membuka versi lama dan baru bersamaan dengan data yang sama.
 
 ## Stages
 
