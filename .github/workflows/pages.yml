@@ -3,9 +3,8 @@
 name: Pages
 on:
   push:
-    branches: [main]
-    tags: ['v*']
-  workflow_dispatch:
+    branches: [main]   # tag TIDAK memicu deploy: environment github-pages hanya mengizinkan main, dan run tag membatalkan run main lewat concurrency
+  workflow_dispatch:   # tag yang didorong sendirian (tanpa commit baru): jalankan manual dari tab Actions
 permissions:
   contents: read
   pages: write
